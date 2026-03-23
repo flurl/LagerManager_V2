@@ -19,7 +19,7 @@ Web-based rewrite of the LagerManager desktop application. Manages warehouse inv
 ### 1. Start the database and backend
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts:
@@ -29,8 +29,8 @@ This starts:
 First run — apply migrations and create an admin user:
 
 ```bash
-docker-compose exec backend python manage.py migrate
-docker-compose exec backend python manage.py createsuperuser
+docker compose exec backend python manage.py migrate
+docker compose exec backend python manage.py createsuperuser
 ```
 
 ### 2. Start the frontend
