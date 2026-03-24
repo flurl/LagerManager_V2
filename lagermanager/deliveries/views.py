@@ -1,7 +1,10 @@
+from django.db.models import QuerySet
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from .models import (
     Delivery,
@@ -52,12 +55,12 @@ class DocumentTypeViewSet(viewsets.ModelViewSet):
 class DeliveryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == 'list':
             return DeliveryListSerializer
         return DeliverySerializer
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = Delivery.objects.select_related('supplier', 'period').prefetch_related('details__tax_rate')
         period_id = self.request.query_params.get('period_id')
         is_consumption = self.request.query_params.get('is_consumption')
@@ -67,7 +70,7 @@ class DeliveryViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_consumption=is_consumption == '1')
         return qs
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer) -> None:
         delivery = serializer.save()
         # Auto-assign period from date if not provided
         if not delivery.period_id:
@@ -80,7 +83,7 @@ class DeliveryViewSet(viewsets.ModelViewSet):
                 delivery.save(update_fields=['period'])
 
     @action(detail=True, methods=['post'])
-    def apply_discount(self, request, pk=None):
+    def apply_discount(self, request: Request, pk: int | None = None) -> Response:
         delivery = self.get_object()
         percent = request.data.get('percent')
         if percent is None:
@@ -93,7 +96,7 @@ class DeliveryDetailViewSet(viewsets.ModelViewSet):
     serializer_class = DeliveryDetailSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         delivery_pk = self.kwargs.get('delivery_pk')
         return DeliveryDetail.objects.filter(delivery_id=delivery_pk).select_related('article', 'tax_rate')
 
@@ -102,7 +105,7 @@ class EkModifierViewSet(viewsets.ModelViewSet):
     serializer_class = EkModifierSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = EkModifier.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:

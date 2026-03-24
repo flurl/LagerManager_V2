@@ -1,8 +1,14 @@
 """Skonto (cash discount) application service."""
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from deliveries.models import Delivery
 
 
-def apply_skonto(delivery, percent: float) -> None:
+def apply_skonto(delivery: Delivery, percent: float) -> None:
     """
     Apply a percentage discount to all detail line prices of a delivery.
     Modifies unit_price in place (saves each detail).

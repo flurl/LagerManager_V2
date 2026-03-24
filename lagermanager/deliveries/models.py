@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 from core.models import Period
-from pos_import.models import Article
 from django.db import models
 from django.db.models import DecimalField, ExpressionWrapper, F, Sum
+from pos_import.models import Article
 
 
 class Supplier(models.Model):
@@ -13,7 +15,7 @@ class Supplier(models.Model):
         db_table = 'lieferanten'
         ordering = ['name']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -26,7 +28,7 @@ class TaxRate(models.Model):
         db_table = 'steuersaetze'
         ordering = ['percent']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.percent}%)"
 
 
@@ -39,7 +41,7 @@ class DeliveryUnit(models.Model):
         db_table = 'liefereinheiten'
         ordering = ['name']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.quantity})"
 
 
@@ -50,7 +52,7 @@ class DocumentType(models.Model):
     class Meta:
         db_table = 'dokumenttypen'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -80,11 +82,11 @@ class Delivery(models.Model):
         db_table = 'lieferungen'
         ordering = ['-date']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{'Verbrauch' if self.is_consumption else 'Lieferung'} {self.id} – {self.date:%Y-%m-%d}"
 
     @property
-    def total_net(self):
+    def total_net(self) -> Decimal:
         result = self.details.aggregate(
             total=Sum(
                 ExpressionWrapper(
@@ -96,7 +98,7 @@ class Delivery(models.Model):
         return result['total'] or 0
 
     @property
-    def total_gross(self):
+    def total_gross(self) -> Decimal:
         result = self.details.aggregate(
             total=Sum(
                 ExpressionWrapper(
@@ -141,15 +143,15 @@ class DeliveryDetail(models.Model):
     class Meta:
         db_table = 'lieferungen_details'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.delivery_id} – {self.article_id}"
 
     @property
-    def line_net(self):
+    def line_net(self) -> Decimal:
         return self.quantity * self.unit_price
 
     @property
-    def line_gross(self):
+    def line_gross(self) -> Decimal:
         if self.tax_rate:
             return self.line_net * (1 + self.tax_rate.percent / 100)
         return self.line_net
@@ -178,7 +180,7 @@ class Document(models.Model):
     class Meta:
         db_table = 'dokumente'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 

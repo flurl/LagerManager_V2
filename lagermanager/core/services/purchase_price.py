@@ -8,6 +8,7 @@ EK modifiers (+, -, *, /) from ek_modifikatoren are applied afterwards.
 NOTE: All FKs in the new schema use Django auto-id (not MSSQL source_id).
 The article argument is the Django PK.
 """
+from datetime import date
 from decimal import Decimal
 
 from django.db import connection
@@ -15,7 +16,7 @@ from django.db import connection
 from core.models import Period
 
 
-def get_purchase_price(article_pk: int, period_id: int, max_date=None) -> Decimal:
+def get_purchase_price(article_pk: int, period_id: int, max_date: date | None = None) -> Decimal:
     """
     Return weighted-average purchase price for article (Django PK) in period_id.
 

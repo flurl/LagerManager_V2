@@ -1,6 +1,7 @@
 from core.services.purchase_price import get_purchase_price
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,7 +14,7 @@ from .services.total_deliveries_report import get_total_deliveries_report
 class StockLevelReportView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -24,7 +25,7 @@ class StockLevelReportView(APIView):
 class InventoryReportView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -35,7 +36,7 @@ class InventoryReportView(APIView):
 class ConsumptionReportView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -46,7 +47,7 @@ class ConsumptionReportView(APIView):
 class TotalDeliveriesReportView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -57,7 +58,7 @@ class TotalDeliveriesReportView(APIView):
 class PurchasePriceView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         article_id = request.query_params.get('article')
         period_id = request.query_params.get('period_id')
         if not article_id or not period_id:

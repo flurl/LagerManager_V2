@@ -23,7 +23,7 @@ class JournalCheckpoint(models.Model):
         db_table = 'journal_checkpoints'
         unique_together = [('source_id', 'period')]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"CP {self.source_id}"
 
 
@@ -270,7 +270,7 @@ class MwstGruppe(models.Model):
         db_table = 'meta_mwstgruppen'
         unique_together = [('source_id', 'period')]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.bezeichnung} ({self.satz}%)"
 
 

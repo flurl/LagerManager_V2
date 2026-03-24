@@ -1,10 +1,13 @@
 import csv
 
+from django.db.models import QuerySet
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from .models import InitialInventory, PhysicalCount, StockLevel
 from .serializers import (
@@ -23,7 +26,7 @@ class StockLevelViewSet(viewsets.ModelViewSet):
     serializer_class = StockLevelSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = StockLevel.objects.select_related('article', 'period')
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -31,7 +34,7 @@ class StockLevelViewSet(viewsets.ModelViewSet):
         return qs
 
     @action(detail=False, methods=['post'])
-    def init_period(self, request):
+    def init_period(self, request: Request) -> Response:
         period_id = request.data.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -43,7 +46,7 @@ class InitialInventoryViewSet(viewsets.ModelViewSet):
     serializer_class = InitialInventorySerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = InitialInventory.objects.select_related('article', 'workplace', 'period')
         period_id = self.request.query_params.get('period_id')
         workplace_id = self.request.query_params.get('workplace_id')
@@ -54,7 +57,7 @@ class InitialInventoryViewSet(viewsets.ModelViewSet):
         return qs
 
     @action(detail=False, methods=['post'])
-    def init_period(self, request):
+    def init_period(self, request: Request) -> Response:
         period_id = request.data.get('period_id')
         source_period_id = request.data.get('source_period_id')
         if not period_id:
@@ -63,7 +66,7 @@ class InitialInventoryViewSet(viewsets.ModelViewSet):
         return Response({'created': count})
 
     @action(detail=False, methods=['get'])
-    def export(self, request):
+    def export(self, request: Request) -> HttpResponse:
         period_id = request.query_params.get('period_id')
         qs = self.get_queryset()
         if period_id:
@@ -82,7 +85,7 @@ class PhysicalCountViewSet(viewsets.ModelViewSet):
     serializer_class = PhysicalCountSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = PhysicalCount.objects.select_related('article', 'period')
         period_id = self.request.query_params.get('period_id')
         date = self.request.query_params.get('date')
@@ -92,7 +95,7 @@ class PhysicalCountViewSet(viewsets.ModelViewSet):
             qs = qs.filter(date__date=date)
         return qs
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer) -> None:
         obj = serializer.save()
         # Auto-assign period from date
         if not obj.period_id:
@@ -105,7 +108,7 @@ class PhysicalCountViewSet(viewsets.ModelViewSet):
                 obj.save(update_fields=['period'])
 
     @action(detail=False, methods=['post'])
-    def init_date(self, request):
+    def init_date(self, request: Request) -> Response:
         period_id = request.data.get('period_id')
         date = request.data.get('date')
         if not period_id or not date:

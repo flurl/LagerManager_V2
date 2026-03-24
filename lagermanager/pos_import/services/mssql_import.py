@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 1000
 
 
-def connect_mssql(host: str, database: str, user: str, password: str):
+def connect_mssql(host: str, database: str, user: str, password: str) -> pymssql.Connection:
     return pymssql.connect(
         host=host,
         user=user,
@@ -530,7 +530,7 @@ def run_import(period_id: int, host: str, database: str, user: str, password: st
     return summary
 
 
-def _query(conn, sql: str) -> list:
+def _query(conn: pymssql.Connection, sql: str) -> list:
     cur = conn.cursor()
     cur.execute(sql)
     return cur.fetchall()

@@ -12,7 +12,7 @@ class Period(models.Model):
         db_table = 'perioden'
         ordering = ['-start']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -25,7 +25,7 @@ class Workplace(models.Model):
         db_table = 'arbeitsplaetze'
         ordering = ['name']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -41,5 +41,5 @@ class Config(models.Model):
         db_table = 'config'
         unique_together = [('key', 'valid_till')]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.key

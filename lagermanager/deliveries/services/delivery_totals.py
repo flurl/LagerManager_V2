@@ -1,5 +1,11 @@
 """Delivery net/gross total calculations."""
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from deliveries.models import Delivery
 
 
 def compute_detail_net(quantity: Decimal, unit_price: Decimal) -> Decimal:
@@ -11,7 +17,7 @@ def compute_detail_gross(quantity: Decimal, unit_price: Decimal, tax_percent: De
     return net * (1 + tax_percent / 100)
 
 
-def compute_delivery_totals(delivery) -> dict:
+def compute_delivery_totals(delivery: Delivery) -> dict:
     """Return net and gross totals for a delivery."""
     net = Decimal('0.00')
     gross = Decimal('0.00')

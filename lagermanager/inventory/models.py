@@ -26,7 +26,7 @@ class StockLevel(models.Model):
         db_table = 'lagerstand'
         unique_together = [('article', 'period')]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.article_id} @ {self.period_id}: {self.quantity}"
 
 
@@ -56,7 +56,7 @@ class InitialInventory(models.Model):
         db_table = 'initialer_stand'
         unique_together = [('article', 'workplace', 'period')]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"IS {self.article_id}/{self.workplace_id}/{self.period_id}"
 
 
@@ -84,5 +84,5 @@ class PhysicalCount(models.Model):
         db_table = 'gezaehlter_stand'
         indexes = [models.Index(fields=['date'], name='gezaehlter_stand_datum_idx')]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"PC {self.article_id} @ {self.date:%Y-%m-%d}: {self.quantity}"

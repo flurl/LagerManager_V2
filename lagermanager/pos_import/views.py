@@ -1,5 +1,7 @@
+from django.db.models import QuerySet
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -18,7 +20,7 @@ class ArticleGroupViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ArticleGroupSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = ArticleGroup.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -30,7 +32,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ArticleSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = Article.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -42,7 +44,7 @@ class RecipeViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RecipeSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = Recipe.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -54,7 +56,7 @@ class WarehouseUnitViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = WarehouseUnitSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = WarehouseUnit.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -66,7 +68,7 @@ class WarehouseArticleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = WarehouseArticleSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         qs = WarehouseArticle.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -82,7 +84,7 @@ class ImportRunView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         period_id = request.data.get('period_id')
         host = request.data.get('host', '')
         database = request.data.get('database', '')
