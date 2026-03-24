@@ -1,16 +1,18 @@
+from datetime import timedelta
 from pathlib import Path
+from typing import Any, cast
 
 import dj_database_url
 from decouple import config
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('DJANGO_SECRET_KEY', default='dev-secret-key-change-in-production')
-DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
+SECRET_KEY: str = config('DJANGO_SECRET_KEY', default='dev-secret-key-change-in-production')
+DEBUG: bool = config('DJANGO_DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS: list[str] = ['*']
 
-INSTALLED_APPS = [
+INSTALLED_APPS: list[str] = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -27,7 +29,7 @@ INSTALLED_APPS = [
     'reports',
 ]
 
-MIDDLEWARE = [
+MIDDLEWARE: list[str] = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -38,9 +40,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'lagermanager.urls'
+ROOT_URLCONF: str = 'lagermanager.urls'
 
-TEMPLATES = [
+TEMPLATES: list[dict[str, Any]] = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [],
@@ -56,38 +58,36 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'lagermanager.wsgi.application'
+WSGI_APPLICATION: str = 'lagermanager.wsgi.application'
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL', default='postgres://lagermanager:lagermanager@localhost:5432/lagermanager'),
+DATABASES: dict[str, Any] = {
+    'default': dj_database_url.config(  # type: ignore[reportUnknownMemberType]
+        default=cast(str, config('DATABASE_URL', default='postgres://lagermanager:lagermanager@localhost:5432/lagermanager')),
         conn_max_age=600,
     )
 }
 
-AUTH_PASSWORD_VALIDATORS = [
+AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-LANGUAGE_CODE = 'de-at'
-TIME_ZONE = 'Europe/Vienna'
-USE_I18N = True
-USE_TZ = True
+LANGUAGE_CODE: str = 'de-at'
+TIME_ZONE: str = 'Europe/Vienna'
+USE_I18N: bool = True
+USE_TZ: bool = True
 
-STATIC_URL = 'static/'
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+STATIC_URL: str = 'static/'
+DEFAULT_AUTO_FIELD: str = 'django.db.models.BigAutoField'
 
-from datetime import timedelta
-
-SIMPLE_JWT = {
+SIMPLE_JWT: dict[str, timedelta] = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
-REST_FRAMEWORK = {
+REST_FRAMEWORK: dict[str, Any] = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
@@ -98,7 +98,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 200,
 }
 
-LOGGING = {
+LOGGING: dict[str, Any] = {
     'version': 1,
     'disable_existing_loggers': False,
     'handlers': {
@@ -114,9 +114,12 @@ LOGGING = {
     },
 }
 
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173',
-    cast=lambda v: [s.strip() for s in v.split(',')]
+def _parse_origins(v: str) -> list[str]:
+    return [s.strip() for s in v.split(',')]
+
+
+CORS_ALLOWED_ORIGINS: list[str] = cast(
+    list[str],
+    config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=_parse_origins),
 )
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_CREDENTIALS: bool = True
