@@ -8,6 +8,7 @@ from .models import (
     DeliveryDetail,
     DeliveryUnit,
     DocumentType,
+    EkModifier,
     Supplier,
     TaxRate,
 )
@@ -17,6 +18,7 @@ from .serializers import (
     DeliverySerializer,
     DeliveryUnitSerializer,
     DocumentTypeSerializer,
+    EkModifierSerializer,
     SupplierSerializer,
     TaxRateSerializer,
 )
@@ -94,3 +96,15 @@ class DeliveryDetailViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         delivery_pk = self.kwargs.get('delivery_pk')
         return DeliveryDetail.objects.filter(delivery_id=delivery_pk).select_related('article', 'tax_rate')
+
+
+class EkModifierViewSet(viewsets.ModelViewSet):
+    serializer_class = EkModifierSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = EkModifier.objects.all()
+        period_id = self.request.query_params.get('period_id')
+        if period_id:
+            qs = qs.filter(period_id=period_id)
+        return qs

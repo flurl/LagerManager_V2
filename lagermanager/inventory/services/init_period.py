@@ -1,7 +1,7 @@
 """
 Init period services — bulk-create zero entries for warehouse articles.
 """
-from articles.models import WarehouseArticle
+from pos_import.models import WarehouseArticle
 from core.models import Period, Workplace
 from django.db import transaction
 

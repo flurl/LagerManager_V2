@@ -6,6 +6,7 @@ from .views import (
     DeliveryUnitViewSet,
     DeliveryViewSet,
     DocumentTypeViewSet,
+    EkModifierViewSet,
     SupplierViewSet,
     TaxRateViewSet,
 )
@@ -16,6 +17,7 @@ router.register(r'tax-rates', TaxRateViewSet)
 router.register(r'delivery-units', DeliveryUnitViewSet)
 router.register(r'deliveries', DeliveryViewSet, basename='delivery')
 router.register(r'document-types', DocumentTypeViewSet)
+router.register(r'ek-modifiers', EkModifierViewSet, basename='ekmodifier')
 
 # Nested: /api/deliveries/{delivery_pk}/details/
 delivery_detail_list = DeliveryDetailViewSet.as_view({'get': 'list', 'post': 'create'})

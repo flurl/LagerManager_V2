@@ -7,7 +7,11 @@ The consumption query is the UNION of:
   1. Recipe-based consumption: bondetail_amount * recipe_qty / unit_multiplier
   2. Direct consumption: bondetail_amount (articles with no recipe)
 """
+import logging
+
 from django.db import connection
+
+logger = logging.getLogger(__name__)
 
 CONSUMPTION_QUERY = """
     SELECT
@@ -24,7 +28,7 @@ CONSUMPTION_QUERY = """
     JOIN lager_artikel la ON la.lager_artikel_artikel = art2.artikel_id
     JOIN lager_einheiten le ON la.lager_artikel_einheit = le.lager_einheit_id
     WHERE az."zutate_istRezept" = TRUE
-      AND jc.checkpoint_typ = '1'
+      AND TRIM(jc.checkpoint_typ) = '1'
       AND ta.tisch_periode = %(period_id)s
       AND tb.tisch_bon_periode = %(period_id)s
       AND tbd.tisch_bondetail_periode = %(period_id)s
@@ -49,7 +53,7 @@ CONSUMPTION_QUERY = """
     JOIN tische_aktiv ta ON tb.tisch_bon_tisch = ta.tisch_id
     JOIN journal_checkpoints jc ON jc.checkpoint_id = ta.checkpoint_tag
     WHERE az."zutate_istRezept" IS NULL
-      AND jc.checkpoint_typ = '1'
+      AND TRIM(jc.checkpoint_typ) = '1'
       AND ta.tisch_periode = %(period_id)s
       AND tb.tisch_bon_periode = %(period_id)s
       AND tbd.tisch_bondetail_periode = %(period_id)s
@@ -66,10 +70,16 @@ def get_daily_consumption(period_id: int) -> dict:
     """
     result = {}
     with connection.cursor() as cur:
-        cur.execute(CONSUMPTION_QUERY, {'period_id': period_id})
-        for row in cur.fetchall():
+        params = {'period_id': period_id}
+        logger.debug("CONSUMPTION_QUERY (period_id=%s):\n%s",
+                     period_id, cur.mogrify(CONSUMPTION_QUERY, params).decode())
+        cur.execute(CONSUMPTION_QUERY, params)
+        rows = cur.fetchall()
+        logger.debug("CONSUMPTION_QUERY returned %d rows", len(rows))
+        for row in rows:
             day, article, amount = row
-            result.setdefault(day, {})[article] = result.get(day, {}).get(article, 0) + float(amount)
+            result.setdefault(day, {})[article] = result.get(
+                day, {}).get(article, 0) + float(amount)
     return result
 
 
@@ -90,7 +100,8 @@ def get_daily_deliveries(period_id: int) -> dict:
         day = delivery.date.date()
         for detail in delivery.details.all():
             name = detail.article.name
-            result.setdefault(day, {})[name] = result.get(day, {}).get(name, 0) + float(detail.quantity)
+            result.setdefault(day, {})[name] = result.get(
+                day, {}).get(name, 0) + float(detail.quantity)
     return result
 
 

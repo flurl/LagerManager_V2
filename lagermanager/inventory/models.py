@@ -1,4 +1,4 @@
-from articles.models import Article
+from pos_import.models import Article
 from core.models import Period, Workplace
 from django.db import models
 

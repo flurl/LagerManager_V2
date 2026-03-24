@@ -1,13 +1,6 @@
 from rest_framework import serializers
 
-from .models import (
-    Article,
-    ArticleGroup,
-    EkModifier,
-    Recipe,
-    WarehouseArticle,
-    WarehouseUnit,
-)
+from .models import Article, ArticleGroup, Recipe, WarehouseArticle, WarehouseUnit
 
 
 class ArticleGroupSerializer(serializers.ModelSerializer):
@@ -44,9 +37,3 @@ class WarehouseArticleSerializer(serializers.ModelSerializer):
             'supplier_article_number', 'priority', 'unit', 'warehouse',
             'min_stock', 'max_stock', 'period',
         ]
-
-
-class EkModifierSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EkModifier
-        fields = ['id', 'article', 'operator', 'modifier', 'period']

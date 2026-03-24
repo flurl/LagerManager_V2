@@ -21,7 +21,6 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'core',
-    'articles',
     'inventory',
     'deliveries',
     'pos_import',
@@ -97,6 +96,22 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 200,
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'inventory.services.stock_calculation': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+    },
 }
 
 CORS_ALLOWED_ORIGINS = config(

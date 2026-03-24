@@ -57,6 +57,24 @@ Vite proxies all `/api/*` requests to the Django backend.
 
 ---
 
+## Accessing the database
+
+Connect via the running Docker container:
+
+```bash
+docker compose exec db psql -U lagermanager
+```
+
+Or connect directly from the host (requires `psql` installed locally):
+
+```bash
+psql -h localhost -p 5432 -U lagermanager -d lagermanager
+```
+
+Password: `lagermanager`
+
+---
+
 ## Running the backend without Docker
 
 Requires a local PostgreSQL instance with a `lagermanager` database.

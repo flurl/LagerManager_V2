@@ -6,6 +6,7 @@ from .models import (
     DeliveryUnit,
     Document,
     DocumentType,
+    EkModifier,
     Supplier,
     TaxRate,
 )
@@ -17,3 +18,4 @@ admin.site.register(Delivery)
 admin.site.register(DeliveryDetail)
 admin.site.register(Document)
 admin.site.register(DocumentType)
+admin.site.register(EkModifier)

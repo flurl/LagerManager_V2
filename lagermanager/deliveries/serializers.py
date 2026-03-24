@@ -5,6 +5,7 @@ from .models import (
     DeliveryDetail,
     DeliveryUnit,
     DocumentType,
+    EkModifier,
     Supplier,
     TaxRate,
 )
@@ -64,6 +65,12 @@ class DeliverySerializer(serializers.ModelSerializer):
             'comment', 'period', 'total_net', 'total_gross', 'details',
             'created_at', 'updated_at',
         ]
+
+
+class EkModifierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EkModifier
+        fields = ['id', 'article', 'operator', 'modifier', 'period']
 
 
 class DeliveryListSerializer(serializers.ModelSerializer):
