@@ -22,6 +22,8 @@ INSTALLED_APPS: list[str] = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'constance',
+    'constance.backends.database',
     'core',
     'inventory',
     'deliveries',
@@ -123,3 +125,9 @@ CORS_ALLOWED_ORIGINS: list[str] = cast(
     config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=_parse_origins),
 )
 CORS_ALLOW_CREDENTIALS: bool = True
+
+CONSTANCE_BACKEND: str = 'constance.backends.database.DatabaseBackend'
+CONSTANCE_CONFIG: dict[str, tuple] = {
+    # 'KEY': (default_value, 'Beschreibung', type)
+    # Beispiel: 'MWST_SATZ': (0.20, 'Mehrwertsteuersatz (Normal)', float),
+}
