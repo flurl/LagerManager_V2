@@ -102,7 +102,7 @@ class Delivery(models.Model):
                 )
             )
         )
-        return result['total'] or 0
+        return result['total'] or Decimal(0)
 
     @property
     def total_gross(self) -> Decimal:
@@ -114,7 +114,7 @@ class Delivery(models.Model):
                 )
             )
         )
-        return result['total'] or 0
+        return result['total'] or Decimal(0)
 
 
 class DeliveryDetail(models.Model):
