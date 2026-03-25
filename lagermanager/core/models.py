@@ -13,8 +13,8 @@ class Period(models.Model):
         db_column='periode_ende')
 
     class Meta:
-        db_table: str = 'perioden'
-        ordering: list[str] = ['-start']
+        db_table = 'perioden'
+        ordering = ['-start']
 
     def __str__(self) -> str:
         return self.name
@@ -26,8 +26,8 @@ class Workplace(models.Model):
         max_length=255, db_column='arp_bezeichnung')
 
     class Meta:
-        db_table: str = 'arbeitsplaetze'
-        ordering: list[str] = ['name']
+        db_table = 'arbeitsplaetze'
+        ordering = ['name']
 
     def __str__(self) -> str:
         return self.name

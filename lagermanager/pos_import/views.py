@@ -16,11 +16,11 @@ from .serializers import (
 from .services.mssql_import import run_import
 
 
-class ArticleGroupViewSet(viewsets.ReadOnlyModelViewSet):
+class ArticleGroupViewSet(viewsets.ReadOnlyModelViewSet[ArticleGroup]):
     serializer_class = ArticleGroupSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[ArticleGroup]:
         qs = ArticleGroup.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -28,11 +28,11 @@ class ArticleGroupViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
-class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
+class ArticleViewSet(viewsets.ReadOnlyModelViewSet[Article]):
     serializer_class = ArticleSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[Article]:
         qs = Article.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -40,11 +40,11 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
         return qs.select_related('period')
 
 
-class RecipeViewSet(viewsets.ReadOnlyModelViewSet):
+class RecipeViewSet(viewsets.ReadOnlyModelViewSet[Recipe]):
     serializer_class = RecipeSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[Recipe]:
         qs = Recipe.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -52,11 +52,11 @@ class RecipeViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
-class WarehouseUnitViewSet(viewsets.ReadOnlyModelViewSet):
+class WarehouseUnitViewSet(viewsets.ReadOnlyModelViewSet[WarehouseUnit]):
     serializer_class = WarehouseUnitSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[WarehouseUnit]:
         qs = WarehouseUnit.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -64,11 +64,11 @@ class WarehouseUnitViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
-class WarehouseArticleViewSet(viewsets.ReadOnlyModelViewSet):
+class WarehouseArticleViewSet(viewsets.ReadOnlyModelViewSet[WarehouseArticle]):
     serializer_class = WarehouseArticleSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[WarehouseArticle]:
         qs = WarehouseArticle.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -91,7 +91,7 @@ class ImportRunView(APIView):
         user = request.data.get('user', '')
         password = request.data.get('password', '')
 
-        if not all([period_id, host, database, user]):
+        if period_id is None or not host or not database or not user:
             return Response(
                 {'error': 'period_id, host, database, user are required'},
                 status=status.HTTP_400_BAD_REQUEST,

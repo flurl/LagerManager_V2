@@ -28,7 +28,7 @@ import pymssql
 
 from core.models import Period
 from django.db import transaction
-from django.db.models import ProtectedError
+from django.db.models import Model, ProtectedError
 
 from pos_import.models import (
     JournalCheckpoint,
@@ -64,9 +64,9 @@ def connect_mssql(host: str, database: str, user: str, password: str) -> pymssql
 
 
 def _upsert_and_cleanup(
-    model: type,
+    model: type[Model],
     period: Period,
-    objs: list,
+    objs: list[Any],
     update_fields: list[str],
 ) -> int:
     """
@@ -75,7 +75,7 @@ def _upsert_and_cleanup(
     Returns count of imported objects.
     """
     if objs:
-        model.objects.bulk_create(
+        model.objects.bulk_create(  # type: ignore[attr-defined]
             objs,
             batch_size=BATCH_SIZE,
             update_conflicts=True,
@@ -83,7 +83,7 @@ def _upsert_and_cleanup(
             update_fields=update_fields,
         )
     imported_ids = {o.source_id for o in objs}
-    model.objects.filter(period=period).exclude(
+    model.objects.filter(period=period).exclude(  # type: ignore[attr-defined]
         source_id__in=imported_ids).delete()
     return len(objs)
 
@@ -108,7 +108,7 @@ def _cleanup_stale_articles(period: Period, imported_source_ids: set[int]) -> in
     return count
 
 
-def run_import(period_id: int, host: str, database: str, user: str, password: str) -> dict:
+def run_import(period_id: int, host: str, database: str, user: str, password: str) -> dict[str, Any]:
     """
     Run the full MSSQL import for the given period.
     Returns a summary dict with counts per table.
@@ -123,7 +123,7 @@ def run_import(period_id: int, host: str, database: str, user: str, password: st
         logger.info("Importing journal_checkpoints")
         rows = _query(
             conn, "SELECT * FROM journal_checkpoints ORDER BY checkpoint_id")
-        objs = [
+        objs: list[Any] = [
             JournalCheckpoint(
                 source_id=r[0], typ=r[1], datum=r[2], anmerkung=r[3],
                 info=r[4], num=r[5], kassenbuch_verarbeitet=bool(r[6]),
@@ -530,7 +530,7 @@ def run_import(period_id: int, host: str, database: str, user: str, password: st
     return summary
 
 
-def _query(conn: pymssql.Connection, sql: str) -> list:
+def _query(conn: pymssql.Connection, sql: str) -> list[Any]:
     cur = conn.cursor()
     cur.execute(sql)
-    return cur.fetchall()
+    return list(cur.fetchall())
