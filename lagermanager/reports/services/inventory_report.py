@@ -3,7 +3,7 @@ Inventory report service (Inventur).
 Returns {article_name, quantity, purchase_price, total_value} per article.
 """
 from core.services.purchase_price import get_purchase_price
-from inventory.models import StockLevel
+from inventory.models import PeriodStartStockLevel
 
 
 def get_inventory_report(period_id: int) -> list:
@@ -12,7 +12,7 @@ def get_inventory_report(period_id: int) -> list:
     quantity * purchase_price and return a list of dicts.
     """
     rows = []
-    stock_levels = StockLevel.objects.filter(
+    stock_levels = PeriodStartStockLevel.objects.filter(
         period_id=period_id
     ).select_related('article').order_by('article__name')
 

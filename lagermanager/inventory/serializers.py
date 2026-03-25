@@ -1,13 +1,13 @@
 from rest_framework import serializers
 
-from .models import InitialInventory, PhysicalCount, StockLevel
+from .models import InitialInventory, PhysicalCount, PeriodStartStockLevel
 
 
-class StockLevelSerializer(serializers.ModelSerializer):
+class PeriodStartStockLevelSerializer(serializers.ModelSerializer):
     article_name = serializers.CharField(source='article.name', read_only=True)
 
     class Meta:
-        model = StockLevel
+        model = PeriodStartStockLevel
         fields = ['id', 'article', 'article_name', 'quantity', 'period', 'updated_at']
 
 

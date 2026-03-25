@@ -9,11 +9,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from .models import InitialInventory, PhysicalCount, StockLevel
+from .models import InitialInventory, PhysicalCount, PeriodStartStockLevel
 from .serializers import (
     InitialInventorySerializer,
     PhysicalCountSerializer,
-    StockLevelSerializer,
+    PeriodStartStockLevelSerializer,
 )
 from .services.init_period import (
     init_initial_inventory,
@@ -22,12 +22,12 @@ from .services.init_period import (
 )
 
 
-class StockLevelViewSet(viewsets.ModelViewSet):
-    serializer_class = StockLevelSerializer
+class PeriodStartStockLevelViewSet(viewsets.ModelViewSet):
+    serializer_class = PeriodStartStockLevelSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> QuerySet:
-        qs = StockLevel.objects.select_related('article', 'period')
+        qs = PeriodStartStockLevel.objects.select_related('article', 'period')
         period_id = self.request.query_params.get('period_id')
         if period_id:
             qs = qs.filter(period_id=period_id)

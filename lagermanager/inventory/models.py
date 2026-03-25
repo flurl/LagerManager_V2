@@ -3,8 +3,8 @@ from core.models import Period, Workplace
 from django.db import models
 
 
-class StockLevel(models.Model):
-    """lagerstand — initial stock level per article per period."""
+class PeriodStartStockLevel(models.Model):
+    """periode_start_lagerstand — initial stock level per article per period."""
     article = models.ForeignKey(
         Article,
         on_delete=models.CASCADE,
@@ -23,7 +23,7 @@ class StockLevel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'lagerstand'
+        db_table = 'periode_start_lagerstand'
         unique_together = [('article', 'period')]
 
     def __str__(self) -> str:

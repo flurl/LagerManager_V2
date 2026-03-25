@@ -8,15 +8,15 @@ from django.db import transaction
 
 def init_stock_levels(period_id: int) -> int:
     """
-    Create StockLevel entries (quantity=0) for all warehouse articles
+    Create PeriodStartStockLevel entries (quantity=0) for all warehouse articles
     in the given period that don't already have an entry.
     Returns the number of entries created.
     """
-    from inventory.models import StockLevel
+    from inventory.models import PeriodStartStockLevel
 
     period = Period.objects.get(pk=period_id)
     existing = set(
-        StockLevel.objects.filter(period=period).values_list('article__source_id', flat=True)
+        PeriodStartStockLevel.objects.filter(period=period).values_list('article__source_id', flat=True)
     )
     warehouse_articles = WarehouseArticle.objects.filter(
         period=period
@@ -28,14 +28,14 @@ def init_stock_levels(period_id: int) -> int:
         art_source_id = wa.article.source_id
         if art_source_id not in existing and art_source_id not in seen:
             seen.add(art_source_id)
-            to_create.append(StockLevel(
+            to_create.append(PeriodStartStockLevel(
                 article=wa.article,
                 quantity=0,
                 period=period,
             ))
 
     with transaction.atomic():
-        StockLevel.objects.bulk_create(to_create, ignore_conflicts=True)
+        PeriodStartStockLevel.objects.bulk_create(to_create, ignore_conflicts=True)
     return len(to_create)
 
 

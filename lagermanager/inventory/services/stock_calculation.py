@@ -115,13 +115,13 @@ def compute_running_stock(period_id: int) -> list:
 
     from core.models import Period
 
-    from inventory.models import PhysicalCount, StockLevel
+    from inventory.models import PhysicalCount, PeriodStartStockLevel
 
     period = Period.objects.get(pk=period_id)
 
     # Initial stock (day 0)
     initial = {}
-    for sl in StockLevel.objects.filter(period=period).select_related('article'):
+    for sl in PeriodStartStockLevel.objects.filter(period=period).select_related('article'):
         initial[sl.article.name] = float(sl.quantity)
 
     daily_deliveries = get_daily_deliveries(period_id)
