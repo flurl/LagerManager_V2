@@ -85,6 +85,13 @@ class Delivery(models.Model):
     def __str__(self) -> str:
         return f"{'Verbrauch' if self.is_consumption else 'Lieferung'} {self.id} – {self.date:%Y-%m-%d}"
 
+    def apply_skonto(self, percent: float) -> None:
+        """Apply a percentage discount to all detail line prices. Modifies unit_price in place."""
+        factor = Decimal(str(1 - percent / 100))
+        for detail in self.details.all():
+            detail.unit_price = (detail.unit_price * factor).quantize(Decimal('0.0001'))
+            detail.save(update_fields=['unit_price'])
+
     @property
     def total_net(self) -> Decimal:
         result = self.details.aggregate(

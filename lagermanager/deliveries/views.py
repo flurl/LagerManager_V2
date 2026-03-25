@@ -25,7 +25,6 @@ from .serializers import (
     SupplierSerializer,
     TaxRateSerializer,
 )
-from .services.discount import apply_skonto
 
 
 class SupplierViewSet(viewsets.ModelViewSet):
@@ -88,7 +87,7 @@ class DeliveryViewSet(viewsets.ModelViewSet):
         percent = request.data.get('percent')
         if percent is None:
             return Response({'error': 'percent required'}, status=status.HTTP_400_BAD_REQUEST)
-        apply_skonto(delivery, float(percent))
+        delivery.apply_skonto(float(percent))
         return Response(DeliverySerializer(delivery, context={'request': request}).data)
 
 
