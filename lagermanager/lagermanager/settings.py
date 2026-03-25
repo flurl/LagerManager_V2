@@ -7,7 +7,8 @@ from decouple import config
 
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
-SECRET_KEY: str = config('DJANGO_SECRET_KEY', default='dev-secret-key-change-in-production')
+SECRET_KEY: str = config(
+    'DJANGO_SECRET_KEY', default='dev-secret-key-change-in-production')
 DEBUG: bool = config('DJANGO_DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS: list[str] = ['*']
@@ -63,8 +64,9 @@ TEMPLATES: list[dict[str, Any]] = [
 WSGI_APPLICATION: str = 'lagermanager.wsgi.application'
 
 DATABASES: dict[str, Any] = {
-    'default': dj_database_url.config(  # type: ignore[reportUnknownMemberType]
-        default=cast(str, config('DATABASE_URL', default='postgres://lagermanager:lagermanager@localhost:5432/lagermanager')),
+    'default': dj_database_url.config(
+        default=cast(str, config(
+            'DATABASE_URL', default='postgres://lagermanager:lagermanager@localhost:5432/lagermanager')),
         conn_max_age=600,
     )
 }
@@ -116,18 +118,20 @@ LOGGING: dict[str, Any] = {
     },
 }
 
+
 def _parse_origins(v: str) -> list[str]:
     return [s.strip() for s in v.split(',')]
 
 
 CORS_ALLOWED_ORIGINS: list[str] = cast(
     list[str],
-    config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=_parse_origins),
+    config('CORS_ALLOWED_ORIGINS',
+           default='http://localhost:5173', cast=_parse_origins),
 )
 CORS_ALLOW_CREDENTIALS: bool = True
 
 CONSTANCE_BACKEND: str = 'constance.backends.database.DatabaseBackend'
-CONSTANCE_CONFIG: dict[str, tuple] = {
+CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     # 'KEY': (default_value, 'Beschreibung', type)
     # Beispiel: 'MWST_SATZ': (0.20, 'Mehrwertsteuersatz (Normal)', float),
 }
