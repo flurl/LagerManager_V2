@@ -58,7 +58,7 @@ npm run build  # production build
 | `core` | `Period` (accounting periods), `Workplace` (bars/warehouses), `Config` |
 | `articles` | Product catalog: `Article`, `ArticleGroup`, `Recipe`, `WarehouseArticle`, `WarehouseUnit`, `EkModifier` |
 | `inventory` | Stock tracking: `StockLevel`, `InitialInventory`, `PhysicalCount` |
-| `deliveries` | `Supplier`, `Delivery`, `DeliveryDetail`, `TaxRate`, `DeliveryUnit`, `Document` |
+| `deliveries` | `Partner`, `StockMovement`, `StockMovementDetail`, `TaxRate`, `Document` |
 | `pos_import` | Read-only POS mirror from MSSQL: `TischBon`, `TischBonDetail`, `RechnungBasis`, etc. |
 | `reports` | Aggregated analytics, CSV exports, chart data endpoints |
 
@@ -68,7 +68,7 @@ Every major entity links to a `Period` — this is the fundamental multi-period 
 - `core/services/purchase_price.py` — Weighted average cost (EK) calculation
 - `inventory/services/stock_calculation.py` — Complex UNION query: Initial + Deliveries − Consumption
 - `pos_import/services/mssql_import.py` — Synchronous blocking POS sync (1000-item bulk_create batches, 10-min Axios timeout on frontend)
-- `deliveries/services/discount.py` — Skonto (percentage discount) application
+- `StockMovement.apply_skonto()` — Skonto (percentage discount) applied directly as a model method
 
 **Stock formula:** `Current Stock = InitialInventory + Deliveries − Consumption`
 Consumption uses recipe decomposition: a sold "beer" decomposes into its ingredient articles via the `Recipe` model.
@@ -76,11 +76,11 @@ Consumption uses recipe decomposition: a sold "beer" decomposes into its ingredi
 ### Frontend (`lager-frontend/src/`)
 
 - `main.js` — Vue app bootstrap (Vuetify, Pinia, Router)
-- `router.js` — 13 routes (German labels), all guarded by JWT auth
+- `router.js` — 11 routes (German labels), all guarded by JWT auth
 - `api.js` — Axios instance with Bearer token interceptor
 - `stores/auth.js` — JWT tokens in localStorage, login/logout
 - `stores/period.js` — Currently selected accounting period (shared state)
-- `views/` — One component per route (DeliveryList, StockLevelTable, etc.)
+- `views/` — One component per route (StockMovementList, StockLevelTable, PartnerCrud, etc.)
 - `components/AppShell.vue` — Main layout with navigation drawer
 
 ### `null=True` on String Fields
