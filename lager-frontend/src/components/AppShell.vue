@@ -1,18 +1,12 @@
 <template>
   <v-navigation-drawer v-model="drawer" permanent width="240">
-    <v-list-item
-      title="LagerManager"
-      subtitle="Lagerverwaltung"
-      prepend-icon="mdi-warehouse"
-      nav
-    />
+    <v-list-item title="LagerManager" subtitle="Lagerverwaltung" prepend-icon="mdi-warehouse" nav />
     <v-divider />
 
     <v-list density="compact" nav>
       <v-list-subheader>STAMMDATEN</v-list-subheader>
       <v-list-item to="/partners" prepend-icon="mdi-truck" title="Partner" />
       <v-list-item to="/tax-rates" prepend-icon="mdi-percent" title="Steuersätze" />
-      <v-list-item to="/delivery-units" prepend-icon="mdi-package-variant" title="Liefereinheiten" />
 
       <v-list-subheader>LAGER</v-list-subheader>
       <v-list-item to="/stock-movements" prepend-icon="mdi-receipt-text" title="Lagerbewegungen" />
@@ -32,11 +26,7 @@
 
     <template #append>
       <v-list density="compact">
-        <v-list-item
-          prepend-icon="mdi-logout"
-          title="Abmelden"
-          @click="auth.logout()"
-        />
+        <v-list-item prepend-icon="mdi-logout" title="Abmelden" @click="auth.logout()" />
       </v-list>
     </template>
   </v-navigation-drawer>
@@ -44,15 +34,8 @@
   <v-app-bar elevation="1">
     <v-app-bar-title>{{ currentRoute }}</v-app-bar-title>
     <v-spacer />
-    <v-select
-      v-model="periodStore.currentPeriodId"
-      :items="periodStore.periods"
-      item-title="name"
-      item-value="id"
-      label="Periode"
-      hide-details
-      style="max-width: 220px"
-    />
+    <v-select v-model="periodStore.currentPeriodId" :items="periodStore.periods" item-title="name" item-value="id"
+      label="Periode" hide-details style="max-width: 220px" />
     <v-btn icon class="ml-1 mr-3" title="Neue Periode" @click="newPeriodDialog = true">
       <v-icon>mdi-plus-circle-outline</v-icon>
     </v-btn>
@@ -66,13 +49,8 @@
         <v-text-field v-model="newPeriod.name" label="Bezeichnung" placeholder="z.B. 2025" class="mb-2" />
         <v-text-field v-model="newPeriod.start" label="Von" type="datetime-local" class="mb-2" />
         <v-text-field v-model="newPeriod.end" label="Bis" type="datetime-local" class="mb-2" />
-        <v-text-field
-          v-model.number="newPeriod.checkpoint_year"
-          label="Checkpoint-Jahr (optional)"
-          type="number"
-          hint="Wiffzack checkpoint_jahr Wert für diesen Zeitraum"
-          persistent-hint
-        />
+        <v-text-field v-model.number="newPeriod.checkpoint_year" label="Checkpoint-Jahr (optional)" type="number"
+          hint="Wiffzack checkpoint_jahr Wert für diesen Zeitraum" persistent-hint />
         <v-alert v-if="newPeriodError" type="error" class="mt-3" density="compact">{{ newPeriodError }}</v-alert>
       </v-card-text>
       <v-card-actions>

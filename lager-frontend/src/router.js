@@ -57,11 +57,6 @@ const routes = [
     component: () => import('./views/TaxRateCrud.vue'),
     meta: { title: 'Steuersätze' },
   },
-  {
-    path: '/delivery-units',
-    component: () => import('./views/DeliveryUnitCrud.vue'),
-    meta: { title: 'Liefereinheiten' },
-  },
 ]
 
 export default createRouter({

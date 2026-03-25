@@ -1,7 +1,6 @@
 from rest_framework import serializers
 
 from .models import (
-    DeliveryUnit,
     DocumentType,
     EkModifier,
     Partner,
@@ -23,12 +22,6 @@ class TaxRateSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'percent']
 
 
-class DeliveryUnitSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DeliveryUnit
-        fields = ['id', 'name', 'quantity']
-
-
 class DocumentTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocumentType
@@ -40,8 +33,10 @@ class StockMovementDetailSerializer(serializers.ModelSerializer):
     tax_rate_percent = serializers.DecimalField(
         source='tax_rate.percent', max_digits=5, decimal_places=2, read_only=True
     )
-    line_net = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
-    line_gross = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
+    line_net = serializers.DecimalField(
+        max_digits=18, decimal_places=4, read_only=True)
+    line_gross = serializers.DecimalField(
+        max_digits=18, decimal_places=4, read_only=True)
 
     class Meta:
         model = StockMovementDetail
@@ -54,8 +49,10 @@ class StockMovementDetailSerializer(serializers.ModelSerializer):
 
 class StockMovementSerializer(serializers.ModelSerializer):
     partner_name = serializers.CharField(source='partner.name', read_only=True)
-    total_net = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
-    total_gross = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
+    total_net = serializers.DecimalField(
+        max_digits=18, decimal_places=4, read_only=True)
+    total_gross = serializers.DecimalField(
+        max_digits=18, decimal_places=4, read_only=True)
     details = StockMovementDetailSerializer(many=True, read_only=True)
 
     class Meta:
@@ -76,8 +73,10 @@ class EkModifierSerializer(serializers.ModelSerializer):
 class StockMovementListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views (no nested details)."""
     partner_name = serializers.CharField(source='partner.name', read_only=True)
-    total_net = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
-    total_gross = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
+    total_net = serializers.DecimalField(
+        max_digits=18, decimal_places=4, read_only=True)
+    total_gross = serializers.DecimalField(
+        max_digits=18, decimal_places=4, read_only=True)
 
     class Meta:
         model = StockMovement

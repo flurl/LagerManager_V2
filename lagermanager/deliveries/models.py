@@ -42,20 +42,6 @@ class TaxRate(models.Model):
         return f"{self.name} ({self.percent}%)"
 
 
-class DeliveryUnit(models.Model):
-    """liefereinheiten — packaging units for deliveries (e.g. Kiste 20x)"""
-    name = models.CharField(max_length=255, db_column='lei_bezeichnung')
-    quantity = models.DecimalField(
-        max_digits=10, decimal_places=3, db_column='lei_menge')
-
-    class Meta:
-        db_table = 'liefereinheiten'
-        ordering = ['name']
-
-    def __str__(self) -> str:
-        return f"{self.name} ({self.quantity})"
-
-
 class DocumentType(models.Model):
     """dokumenttypen"""
     name = models.CharField(max_length=255, db_column='dot_bezeichnung')
@@ -104,7 +90,8 @@ class StockMovement(models.Model):
         ordering = ['-date']
 
     def __str__(self) -> str:
-        label = self.Type(self.movement_type).label if self.movement_type else 'Bewegung'
+        label = self.Type(
+            self.movement_type).label if self.movement_type else 'Bewegung'
         return f"{label} {self.id} – {self.date:%Y-%m-%d}"
 
     def apply_skonto(self, percent: float) -> None:
@@ -164,13 +151,6 @@ class StockMovementDetail(models.Model):
         null=True,
         blank=True,
         db_column='lde_stsid',
-    )
-    delivery_unit = models.ForeignKey(
-        DeliveryUnit,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        db_column='lde_lei_id',
     )
 
     class Meta:

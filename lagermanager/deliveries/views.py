@@ -7,7 +7,6 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from .models import (
-    DeliveryUnit,
     DocumentType,
     EkModifier,
     Partner,
@@ -16,7 +15,6 @@ from .models import (
     TaxRate,
 )
 from .serializers import (
-    DeliveryUnitSerializer,
     DocumentTypeSerializer,
     EkModifierSerializer,
     PartnerSerializer,
@@ -39,12 +37,6 @@ class TaxRateViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
-class DeliveryUnitViewSet(viewsets.ModelViewSet):
-    queryset = DeliveryUnit.objects.all()
-    serializer_class = DeliveryUnitSerializer
-    permission_classes = [IsAuthenticated]
-
-
 class DocumentTypeViewSet(viewsets.ModelViewSet):
     queryset = DocumentType.objects.all()
     serializer_class = DocumentTypeSerializer
@@ -60,7 +52,8 @@ class StockMovementViewSet(viewsets.ModelViewSet):
         return StockMovementSerializer
 
     def get_queryset(self) -> QuerySet:
-        qs = StockMovement.objects.select_related('partner', 'period').prefetch_related('details__tax_rate')
+        qs = StockMovement.objects.select_related(
+            'partner', 'period').prefetch_related('details__tax_rate')
         period_id = self.request.query_params.get('period_id')
         movement_type = self.request.query_params.get('movement_type')
         if period_id:
