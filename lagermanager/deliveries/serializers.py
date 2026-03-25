@@ -1,20 +1,20 @@
 from rest_framework import serializers
 
 from .models import (
-    Delivery,
-    DeliveryDetail,
     DeliveryUnit,
     DocumentType,
     EkModifier,
-    Supplier,
+    Partner,
+    StockMovement,
+    StockMovementDetail,
     TaxRate,
 )
 
 
-class SupplierSerializer(serializers.ModelSerializer):
+class PartnerSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Supplier
-        fields = ['id', 'name', 'is_consumer']
+        model = Partner
+        fields = ['id', 'name', 'partner_type']
 
 
 class TaxRateSerializer(serializers.ModelSerializer):
@@ -35,7 +35,7 @@ class DocumentTypeSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 
-class DeliveryDetailSerializer(serializers.ModelSerializer):
+class StockMovementDetailSerializer(serializers.ModelSerializer):
     article_name = serializers.CharField(source='article.name', read_only=True)
     tax_rate_percent = serializers.DecimalField(
         source='tax_rate.percent', max_digits=5, decimal_places=2, read_only=True
@@ -44,24 +44,24 @@ class DeliveryDetailSerializer(serializers.ModelSerializer):
     line_gross = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
 
     class Meta:
-        model = DeliveryDetail
+        model = StockMovementDetail
         fields = [
-            'id', 'delivery', 'article', 'article_name', 'quantity',
+            'id', 'stock_movement', 'article', 'article_name', 'quantity',
             'unit_price', 'tax_rate', 'tax_rate_percent', 'delivery_unit',
             'line_net', 'line_gross',
         ]
 
 
-class DeliverySerializer(serializers.ModelSerializer):
-    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+class StockMovementSerializer(serializers.ModelSerializer):
+    partner_name = serializers.CharField(source='partner.name', read_only=True)
     total_net = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
     total_gross = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
-    details = DeliveryDetailSerializer(many=True, read_only=True)
+    details = StockMovementDetailSerializer(many=True, read_only=True)
 
     class Meta:
-        model = Delivery
+        model = StockMovement
         fields = [
-            'id', 'supplier', 'supplier_name', 'date', 'is_consumption',
+            'id', 'partner', 'partner_name', 'date', 'movement_type',
             'comment', 'period', 'total_net', 'total_gross', 'details',
             'created_at', 'updated_at',
         ]
@@ -73,16 +73,16 @@ class EkModifierSerializer(serializers.ModelSerializer):
         fields = ['id', 'article', 'operator', 'modifier', 'period']
 
 
-class DeliveryListSerializer(serializers.ModelSerializer):
+class StockMovementListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views (no nested details)."""
-    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    partner_name = serializers.CharField(source='partner.name', read_only=True)
     total_net = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
     total_gross = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
 
     class Meta:
-        model = Delivery
+        model = StockMovement
         fields = [
-            'id', 'supplier', 'supplier_name', 'date', 'is_consumption',
+            'id', 'partner', 'partner_name', 'date', 'movement_type',
             'comment', 'period', 'total_net', 'total_gross',
             'created_at', 'updated_at',
         ]

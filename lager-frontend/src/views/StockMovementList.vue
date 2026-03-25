@@ -2,9 +2,9 @@
   <div>
     <v-row class="mb-2" align="center">
       <v-col>
-        <v-btn-toggle v-model="isConsumption" mandatory>
-          <v-btn :value="false">Lieferungen</v-btn>
-          <v-btn :value="true">Verbräuche</v-btn>
+        <v-btn-toggle v-model="movementType" mandatory>
+          <v-btn value="delivery">Lieferungen</v-btn>
+          <v-btn value="consumption">Verbräuche</v-btn>
         </v-btn-toggle>
       </v-col>
       <v-col cols="auto">
@@ -15,7 +15,7 @@
 
     <v-data-table
       :headers="headers"
-      :items="deliveries"
+      :items="movements"
       :loading="loading"
       density="compact"
       @click:row="(_, { item }) => openDetail(item)"
@@ -28,14 +28,13 @@
       </template>
       <template #item.actions="{ item }">
         <v-icon size="small" @click.stop="openDetail(item)">mdi-pencil</v-icon>
-        <v-icon size="small" class="ml-1" color="error" @click.stop="deleteDelivery(item)">mdi-delete</v-icon>
+        <v-icon size="small" class="ml-1" color="error" @click.stop="deleteMovement(item)">mdi-delete</v-icon>
       </template>
     </v-data-table>
 
-    <!-- Delivery detail dialog -->
     <v-dialog v-model="dialog" max-width="900" persistent>
-      <DeliveryDetailDialog
-        :delivery="selectedDelivery"
+      <StockMovementDialog
+        :movement="selectedMovement"
         @saved="onSaved"
         @close="dialog = false"
       />
@@ -48,67 +47,67 @@ import { ref, watch, onMounted } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import { useCsvExport } from '../composables/useCsvExport'
 import api from '../api'
-import DeliveryDetailDialog from '../components/DeliveryDetailDialog.vue'
+import StockMovementDialog from '../components/StockMovementDialog.vue'
 
 const periodStore = usePeriodStore()
 const { exportCsv } = useCsvExport()
 
-const deliveries = ref([])
+const movements = ref([])
 const loading = ref(false)
-const isConsumption = ref(false)
+const movementType = ref('delivery')
 const dialog = ref(false)
-const selectedDelivery = ref(null)
+const selectedMovement = ref(null)
 
 const headers = [
   { title: 'Datum', key: 'date' },
-  { title: 'Lieferant', key: 'supplier_name' },
+  { title: 'Partner', key: 'partner_name' },
   { title: 'Kommentar', key: 'comment' },
   { title: 'Brutto', key: 'total_gross', align: 'end' },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
 
-async function fetchDeliveries() {
+async function fetchMovements() {
   if (!periodStore.currentPeriodId) return
   loading.value = true
   try {
-    const res = await api.get('/deliveries/', {
+    const res = await api.get('/stock-movements/', {
       params: {
         period_id: periodStore.currentPeriodId,
-        is_consumption: isConsumption.value ? 1 : 0,
+        movement_type: movementType.value,
       },
     })
-    deliveries.value = res.data.results || res.data
+    movements.value = res.data.results || res.data
   } finally {
     loading.value = false
   }
 }
 
 function openNew() {
-  selectedDelivery.value = null
+  selectedMovement.value = null
   dialog.value = true
 }
 
 function openDetail(item) {
-  selectedDelivery.value = item
+  selectedMovement.value = item
   dialog.value = true
 }
 
-async function deleteDelivery(item) {
-  if (!confirm(`Lieferung #${item.id} wirklich löschen?`)) return
-  await api.delete(`/deliveries/${item.id}/`)
-  await fetchDeliveries()
+async function deleteMovement(item) {
+  if (!confirm(`Lagerbewegung #${item.id} wirklich löschen?`)) return
+  await api.delete(`/stock-movements/${item.id}/`)
+  await fetchMovements()
 }
 
 function onSaved() {
   dialog.value = false
-  fetchDeliveries()
+  fetchMovements()
 }
 
 function exportCsvAction() {
   exportCsv(
-    ['date', 'supplier_name', 'comment', 'total_gross'],
-    deliveries.value,
-    'lieferungen.csv'
+    ['date', 'partner_name', 'comment', 'total_gross'],
+    movements.value,
+    'lagerbewegungen.csv'
   )
 }
 
@@ -120,7 +119,7 @@ function formatCurrency(val) {
   return val != null ? Number(val).toFixed(2) + ' €' : ''
 }
 
-watch(() => periodStore.currentPeriodId, fetchDeliveries)
-watch(isConsumption, fetchDeliveries)
-onMounted(fetchDeliveries)
+watch(() => periodStore.currentPeriodId, fetchMovements)
+watch(movementType, fetchMovements)
+onMounted(fetchMovements)
 </script>

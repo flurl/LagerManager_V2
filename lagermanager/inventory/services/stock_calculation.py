@@ -88,12 +88,12 @@ def get_daily_deliveries(period_id: int) -> dict:
     Returns {date: {article_name: amount}} for all deliveries in the period.
     """
     from core.models import Period
-    from deliveries.models import Delivery
+    from deliveries.models import StockMovement
 
     period = Period.objects.get(pk=period_id)
     result = {}
-    deliveries = Delivery.objects.filter(
-        period=period, is_consumption=False
+    deliveries = StockMovement.objects.filter(
+        period=period, movement_type=StockMovement.Type.DELIVERY
     ).prefetch_related('details__article')
 
     for delivery in deliveries:

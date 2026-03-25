@@ -6,14 +6,22 @@ from django.db.models import DecimalField, ExpressionWrapper, F, Sum
 from pos_import.models import Article
 
 
-class Supplier(models.Model):
-    """lieferanten"""
+class Partner(models.Model):
+    """partner — suppliers and consumers."""
+
+    class Type(models.TextChoices):
+        SUPPLIER = 'supplier', 'Lieferant'
+        CONSUMER = 'consumer', 'Verbraucher'
+
     name = models.CharField(max_length=255, db_column='lieferant_name')
-    is_consumer = models.BooleanField(
-        default=False, db_column='lft_ist_verbraucher')
+    partner_type = models.CharField(
+        max_length=20,
+        choices=Type.choices,
+        default=Type.SUPPLIER,
+    )
 
     class Meta:
-        db_table = 'lieferanten'
+        db_table = 'partner'
         ordering = ['name']
 
     def __str__(self) -> str:
@@ -59,17 +67,25 @@ class DocumentType(models.Model):
         return self.name
 
 
-class Delivery(models.Model):
-    """lieferungen — a delivery or consumption record."""
-    supplier = models.ForeignKey(
-        Supplier,
+class StockMovement(models.Model):
+    """lagerbewegungen — a delivery or consumption record."""
+
+    class Type(models.TextChoices):
+        DELIVERY = 'delivery', 'Lieferung'
+        CONSUMPTION = 'consumption', 'Verbrauch'
+
+    partner = models.ForeignKey(
+        Partner,
         on_delete=models.PROTECT,
-        related_name='deliveries',
-        db_column='lieferant_id',
+        related_name='stock_movements',
+        db_column='partner_id',
     )
     date = models.DateTimeField(db_column='datum')
-    is_consumption = models.BooleanField(
-        default=False, db_column='lie_ist_verbrauch')
+    movement_type = models.CharField(
+        max_length=20,
+        choices=Type.choices,
+        default=Type.DELIVERY,
+    )
     comment = models.TextField(
         null=True, blank=True, db_column='lie_kommentar')
     period = models.ForeignKey(
@@ -77,18 +93,19 @@ class Delivery(models.Model):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name='deliveries',
+        related_name='stock_movements',
         db_column='lie_periode_id',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'lieferungen'
+        db_table = 'lagerbewegungen'
         ordering = ['-date']
 
     def __str__(self) -> str:
-        return f"{'Verbrauch' if self.is_consumption else 'Lieferung'} {self.id} – {self.date:%Y-%m-%d}"
+        label = self.Type(self.movement_type).label if self.movement_type else 'Bewegung'
+        return f"{label} {self.id} – {self.date:%Y-%m-%d}"
 
     def apply_skonto(self, percent: float) -> None:
         """Apply a percentage discount to all detail line prices. Modifies unit_price in place."""
@@ -124,13 +141,13 @@ class Delivery(models.Model):
         return result['total'] or Decimal(0)
 
 
-class DeliveryDetail(models.Model):
-    """lieferungen_details"""
-    delivery = models.ForeignKey(
-        Delivery,
+class StockMovementDetail(models.Model):
+    """lagerbewegungen_details"""
+    stock_movement = models.ForeignKey(
+        StockMovement,
         on_delete=models.CASCADE,
         related_name='details',
-        db_column='lieferung_id',
+        db_column='lagerbewegung_id',
     )
     article = models.ForeignKey(
         Article,
@@ -157,10 +174,10 @@ class DeliveryDetail(models.Model):
     )
 
     class Meta:
-        db_table = 'lieferungen_details'
+        db_table = 'lagerbewegungen_details'
 
     def __str__(self) -> str:
-        return f"{self.delivery_id} – {self.article_id}"
+        return f"{self.stock_movement_id} – {self.article_id}"
 
     @property
     def line_net(self) -> Decimal:
@@ -184,13 +201,13 @@ class Document(models.Model):
     ocr_text = models.TextField(null=True, blank=True, db_column='dok_ocr')
     data = models.BinaryField(db_column='dok_data')
     date = models.DateTimeField(db_column='dok_datum')
-    delivery = models.ForeignKey(
-        Delivery,
+    stock_movement = models.ForeignKey(
+        StockMovement,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='documents',
-        db_column='dok_lieferung_id',
+        db_column='dok_lagerbewegung_id',
     )
 
     class Meta:

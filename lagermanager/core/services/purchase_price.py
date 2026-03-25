@@ -81,8 +81,8 @@ def get_purchase_price(article_pk: int, period_id: int, max_date: date | None = 
             cur.execute(
                 f"""
                 SELECT SUM(ld.anzahl * ld.einkaufspreis) / NULLIF(SUM(ld.anzahl), 0)
-                FROM lieferungen_details ld
-                JOIN lieferungen l ON l.lieferung_id = ld.lieferung_id
+                FROM lagerbewegungen_details ld
+                JOIN lagerbewegungen l ON l.id = ld.lagerbewegung_id
                 WHERE ld.artikel_id = %s
                   AND l.datum BETWEEN %s AND %s
                   AND ld.anzahl > 0

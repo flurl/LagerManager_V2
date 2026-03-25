@@ -45,7 +45,7 @@ const loading = ref(false)
 
 const headers = [
   { title: 'Datum', key: 'date' },
-  { title: 'Lieferant', key: 'supplier' },
+  { title: 'Partner', key: 'partner' },
   { title: 'Kommentar', key: 'comment' },
   { title: 'Netto', key: 'net', align: 'end' },
   { title: 'Brutto', key: 'gross', align: 'end' },
@@ -81,7 +81,7 @@ async function fetchData() {
 
 function exportCsvAction() {
   if (!data.value) return
-  exportCsv(['date', 'supplier', 'comment', 'net', 'gross'], data.value.deliveries, 'gesamte_lieferungen.csv')
+  exportCsv(['date', 'partner', 'comment', 'net', 'gross'], data.value.deliveries, 'gesamte_lieferungen.csv')
 }
 
 watch(() => periodStore.currentPeriodId, fetchData)

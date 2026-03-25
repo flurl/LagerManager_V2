@@ -1,21 +1,21 @@
 from django.contrib import admin
 
 from .models import (
-    Delivery,
-    DeliveryDetail,
     DeliveryUnit,
     Document,
     DocumentType,
     EkModifier,
-    Supplier,
+    Partner,
+    StockMovement,
+    StockMovementDetail,
     TaxRate,
 )
 
-admin.site.register(Supplier)
+admin.site.register(Partner)
 admin.site.register(TaxRate)
 admin.site.register(DeliveryUnit)
-admin.site.register(Delivery)
-admin.site.register(DeliveryDetail)
+admin.site.register(StockMovement)
+admin.site.register(StockMovementDetail)
 admin.site.register(Document)
 admin.site.register(DocumentType)
 admin.site.register(EkModifier)

@@ -1,11 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
-  { path: '/', redirect: '/deliveries' },
+  { path: '/', redirect: '/stock-movements' },
   {
-    path: '/deliveries',
-    component: () => import('./views/DeliveryList.vue'),
-    meta: { title: 'Lieferungen' },
+    path: '/stock-movements',
+    component: () => import('./views/StockMovementList.vue'),
+    meta: { title: 'Lagerbewegungen' },
   },
   {
     path: '/stock-levels',
@@ -48,9 +48,9 @@ const routes = [
     meta: { title: 'Daten importieren' },
   },
   {
-    path: '/suppliers',
-    component: () => import('./views/SupplierCrud.vue'),
-    meta: { title: 'Lieferanten' },
+    path: '/partners',
+    component: () => import('./views/PartnerCrud.vue'),
+    meta: { title: 'Partner' },
   },
   {
     path: '/tax-rates',

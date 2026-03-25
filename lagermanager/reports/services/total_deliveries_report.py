@@ -4,7 +4,7 @@ Total deliveries report — grouped delivery listing with monthly/yearly totals.
 from decimal import Decimal
 
 from core.models import Period
-from deliveries.models import Delivery
+from deliveries.models import StockMovement
 
 
 def get_total_deliveries_report(period_id: int) -> dict:
@@ -12,9 +12,9 @@ def get_total_deliveries_report(period_id: int) -> dict:
     Returns deliveries grouped by month with totals.
     """
     period = Period.objects.get(pk=period_id)
-    deliveries = Delivery.objects.filter(
-        period=period, is_consumption=False
-    ).select_related('supplier').prefetch_related('details__tax_rate').order_by('date')
+    deliveries = StockMovement.objects.filter(
+        period=period, movement_type=StockMovement.Type.DELIVERY
+    ).select_related('partner').prefetch_related('details__tax_rate').order_by('date')
 
     rows = []
     monthly_totals = {}
@@ -37,7 +37,7 @@ def get_total_deliveries_report(period_id: int) -> dict:
         rows.append({
             'id': delivery.id,
             'date': delivery.date.date().isoformat(),
-            'supplier': delivery.supplier.name,
+            'partner': delivery.partner.name,
             'comment': delivery.comment or '',
             'net': float(net),
             'gross': float(gross),

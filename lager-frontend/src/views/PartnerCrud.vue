@@ -1,15 +1,15 @@
 <template>
   <div>
     <v-row class="mb-2" align="center">
-      <v-col><h2>Lieferanten</h2></v-col>
+      <v-col><h2>Partner</h2></v-col>
       <v-col cols="auto">
         <v-btn color="primary" prepend-icon="mdi-plus" @click="openNew">Neu</v-btn>
       </v-col>
     </v-row>
 
     <v-data-table :headers="headers" :items="items" :loading="loading" density="compact">
-      <template #item.is_consumer="{ item }">
-        <v-icon>{{ item.is_consumer ? 'mdi-check' : 'mdi-minus' }}</v-icon>
+      <template #item.partner_type="{ item }">
+        {{ partnerTypeLabel(item.partner_type) }}
       </template>
       <template #item.actions="{ item }">
         <v-icon size="small" @click="openEdit(item)">mdi-pencil</v-icon>
@@ -22,7 +22,13 @@
         <v-card-title>{{ form.id ? 'Bearbeiten' : 'Neu' }}</v-card-title>
         <v-card-text>
           <v-text-field v-model="form.name" label="Name" />
-          <v-checkbox v-model="form.is_consumer" label="Ist Verbraucher" />
+          <v-select
+            v-model="form.partner_type"
+            :items="partnerTypeOptions"
+            item-title="label"
+            item-value="value"
+            label="Typ"
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -41,18 +47,27 @@ import api from '../api'
 const items = ref([])
 const loading = ref(false)
 const dialog = ref(false)
-const form = ref({ name: '', is_consumer: false })
+const form = ref({ name: '', partner_type: 'supplier' })
+
+const partnerTypeOptions = [
+  { value: 'supplier', label: 'Lieferant' },
+  { value: 'consumer', label: 'Verbraucher' },
+]
 
 const headers = [
   { title: 'Name', key: 'name' },
-  { title: 'Verbraucher', key: 'is_consumer' },
+  { title: 'Typ', key: 'partner_type' },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
+
+function partnerTypeLabel(type) {
+  return partnerTypeOptions.find((o) => o.value === type)?.label ?? type
+}
 
 async function fetchItems() {
   loading.value = true
   try {
-    const res = await api.get('/suppliers/')
+    const res = await api.get('/partners/')
     items.value = res.data.results || res.data
   } finally {
     loading.value = false
@@ -60,7 +75,7 @@ async function fetchItems() {
 }
 
 function openNew() {
-  form.value = { name: '', is_consumer: false }
+  form.value = { name: '', partner_type: 'supplier' }
   dialog.value = true
 }
 
@@ -71,9 +86,9 @@ function openEdit(item) {
 
 async function save() {
   if (form.value.id) {
-    await api.put(`/suppliers/${form.value.id}/`, form.value)
+    await api.put(`/partners/${form.value.id}/`, form.value)
   } else {
-    await api.post('/suppliers/', form.value)
+    await api.post('/partners/', form.value)
   }
   dialog.value = false
   await fetchItems()
@@ -81,7 +96,7 @@ async function save() {
 
 async function deleteItem(item) {
   if (!confirm(`"${item.name}" wirklich löschen?`)) return
-  await api.delete(`/suppliers/${item.id}/`)
+  await api.delete(`/partners/${item.id}/`)
   await fetchItems()
 }
 

@@ -1,7 +1,7 @@
 <template>
   <v-card>
     <v-card-title class="d-flex align-center pa-4">
-      <span>{{ isNew ? 'Neue Lieferung' : `Lieferung #${form.id}` }}</span>
+      <span>{{ isNew ? 'Neue Lagerbewegung' : `Lagerbewegung #${form.id}` }}</span>
       <v-spacer />
       <v-btn icon @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
     </v-card-title>
@@ -10,11 +10,11 @@
       <v-row dense>
         <v-col cols="4">
           <v-select
-            v-model="form.supplier"
-            :items="suppliers"
+            v-model="form.partner"
+            :items="partners"
             item-title="name"
             item-value="id"
-            label="Lieferant"
+            label="Partner"
             :rules="[v => !!v || 'Pflichtfeld']"
           />
         </v-col>
@@ -137,31 +137,31 @@ import { usePeriodStore } from '../stores/period'
 import api from '../api'
 
 const props = defineProps({
-  delivery: { type: Object, default: null },
+  movement: { type: Object, default: null },
 })
 const emit = defineEmits(['saved', 'close'])
 
 const periodStore = usePeriodStore()
 const saving = ref(false)
-const suppliers = ref([])
+const partners = ref([])
 const taxRates = ref([])
 const warehouseArticles = ref([])
 const skontoPercent = ref(0)
 
-const isNew = computed(() => !props.delivery?.id)
-const form = ref({ supplier: null, date: null, comment: '', period: null })
+const isNew = computed(() => !props.movement?.id)
+const form = ref({ partner: null, date: null, comment: '', period: null })
 const lines = ref([])
 
 function initForm() {
-  if (props.delivery) {
-    form.value = { ...props.delivery }
-    lines.value = (props.delivery.details || []).map((d) => ({ ...d }))
+  if (props.movement) {
+    form.value = { ...props.movement }
+    lines.value = (props.movement.details || []).map((d) => ({ ...d }))
   } else {
     form.value = {
-      supplier: null,
+      partner: null,
       date: new Date().toISOString().slice(0, 16),
       comment: '',
-      is_consumption: false,
+      movement_type: 'delivery',
       period: periodStore.currentPeriodId,
     }
     lines.value = []
@@ -201,25 +201,25 @@ const totalGross = computed(() =>
 async function save() {
   saving.value = true
   try {
-    let deliveryId = form.value.id
+    let movementId = form.value.id
     if (isNew.value) {
-      const res = await api.post('/deliveries/', {
+      const res = await api.post('/stock-movements/', {
         ...form.value,
         period: periodStore.currentPeriodId,
       })
-      deliveryId = res.data.id
+      movementId = res.data.id
     } else {
-      await api.put(`/deliveries/${deliveryId}/`, form.value)
+      await api.put(`/stock-movements/${movementId}/`, form.value)
       // Delete all existing details and re-create
-      const existing = props.delivery?.details || []
+      const existing = props.movement?.details || []
       await Promise.all(
-        existing.map((d) => api.delete(`/deliveries/${deliveryId}/details/${d.id}/`))
+        existing.map((d) => api.delete(`/stock-movements/${movementId}/details/${d.id}/`))
       )
     }
     // Create detail lines
     await Promise.all(
       lines.value.map((l) =>
-        api.post(`/deliveries/${deliveryId}/details/`, { ...l, delivery: deliveryId })
+        api.post(`/stock-movements/${movementId}/details/`, { ...l, stock_movement: movementId })
       )
     )
     emit('saved')
@@ -230,23 +230,22 @@ async function save() {
 
 async function applySkonto() {
   if (!form.value.id) return
-  await api.post(`/deliveries/${form.value.id}/apply_discount/`, { percent: skontoPercent.value })
-  // Reload details
-  const res = await api.get(`/deliveries/${form.value.id}/`)
+  await api.post(`/stock-movements/${form.value.id}/apply_discount/`, { percent: skontoPercent.value })
+  const res = await api.get(`/stock-movements/${form.value.id}/`)
   lines.value = res.data.details || []
 }
 
 onMounted(async () => {
   const [s, t, wa] = await Promise.all([
-    api.get('/suppliers/'),
+    api.get('/partners/'),
     api.get('/tax-rates/'),
     api.get('/warehouse-articles/', { params: { period_id: periodStore.currentPeriodId } }),
   ])
-  suppliers.value = s.data.results || s.data
+  partners.value = s.data.results || s.data
   taxRates.value = t.data.results || t.data
   warehouseArticles.value = wa.data.results || wa.data
   initForm()
 })
 
-watch(() => props.delivery, initForm)
+watch(() => props.movement, initForm)
 </script>

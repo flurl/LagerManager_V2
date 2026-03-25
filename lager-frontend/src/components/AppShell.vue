@@ -10,12 +10,12 @@
 
     <v-list density="compact" nav>
       <v-list-subheader>STAMMDATEN</v-list-subheader>
-      <v-list-item to="/suppliers" prepend-icon="mdi-truck" title="Lieferanten" />
+      <v-list-item to="/partners" prepend-icon="mdi-truck" title="Partner" />
       <v-list-item to="/tax-rates" prepend-icon="mdi-percent" title="Steuersätze" />
       <v-list-item to="/delivery-units" prepend-icon="mdi-package-variant" title="Liefereinheiten" />
 
       <v-list-subheader>LAGER</v-list-subheader>
-      <v-list-item to="/deliveries" prepend-icon="mdi-receipt-text" title="Lieferungen" />
+      <v-list-item to="/stock-movements" prepend-icon="mdi-receipt-text" title="Lagerbewegungen" />
       <v-list-item to="/stock-levels" prepend-icon="mdi-format-list-numbered" title="Lagerstand" />
       <v-list-item to="/initial-inventory" prepend-icon="mdi-clipboard-list" title="Initialer Stand" />
       <v-list-item to="/physical-counts" prepend-icon="mdi-counter" title="Gezählter Stand" />
