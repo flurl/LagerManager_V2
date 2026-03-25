@@ -12,4 +12,4 @@ class PeriodSerializer(serializers.ModelSerializer):
 class WorkplaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workplace
-        fields: list[str] = ['id', 'name', 'default_shift_duration']
+        fields: list[str] = ['id', 'name']
