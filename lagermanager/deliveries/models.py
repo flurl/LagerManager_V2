@@ -9,7 +9,8 @@ from pos_import.models import Article
 class Supplier(models.Model):
     """lieferanten"""
     name = models.CharField(max_length=255, db_column='lieferant_name')
-    is_consumer = models.BooleanField(default=False, db_column='lft_ist_verbraucher')
+    is_consumer = models.BooleanField(
+        default=False, db_column='lft_ist_verbraucher')
 
     class Meta:
         db_table = 'lieferanten'
@@ -22,7 +23,8 @@ class Supplier(models.Model):
 class TaxRate(models.Model):
     """steuersaetze"""
     name = models.CharField(max_length=255, db_column='sts_bezeichnung')
-    percent = models.DecimalField(max_digits=5, decimal_places=2, db_column='sts_prozent')
+    percent = models.DecimalField(
+        max_digits=5, decimal_places=2, db_column='sts_prozent')
 
     class Meta:
         db_table = 'steuersaetze'
@@ -35,7 +37,8 @@ class TaxRate(models.Model):
 class DeliveryUnit(models.Model):
     """liefereinheiten — packaging units for deliveries (e.g. Kiste 20x)"""
     name = models.CharField(max_length=255, db_column='lei_bezeichnung')
-    quantity = models.DecimalField(max_digits=10, decimal_places=3, db_column='lei_menge')
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=3, db_column='lei_menge')
 
     class Meta:
         db_table = 'liefereinheiten'
@@ -65,8 +68,10 @@ class Delivery(models.Model):
         db_column='lieferant_id',
     )
     date = models.DateTimeField(db_column='datum')
-    is_consumption = models.BooleanField(default=False, db_column='lie_ist_verbrauch')
-    comment = models.TextField(null=True, blank=True, db_column='lie_kommentar')
+    is_consumption = models.BooleanField(
+        default=False, db_column='lie_ist_verbrauch')
+    comment = models.TextField(
+        null=True, blank=True, db_column='lie_kommentar')
     period = models.ForeignKey(
         Period,
         on_delete=models.PROTECT,
@@ -89,7 +94,8 @@ class Delivery(models.Model):
         """Apply a percentage discount to all detail line prices. Modifies unit_price in place."""
         factor = Decimal(str(1 - percent / 100))
         for detail in self.details.all():
-            detail.unit_price = (detail.unit_price * factor).quantize(Decimal('0.0001'))
+            detail.unit_price = (detail.unit_price *
+                                 factor).quantize(Decimal('0.0001'))
             detail.save(update_fields=['unit_price'])
 
     @property
@@ -109,7 +115,8 @@ class Delivery(models.Model):
         result = self.details.aggregate(
             total=Sum(
                 ExpressionWrapper(
-                    F('quantity') * F('unit_price') * (1 + F('tax_rate__percent') / 100),
+                    F('quantity') * F('unit_price') *
+                    (1 + F('tax_rate__percent') / 100),
                     output_field=DecimalField(max_digits=18, decimal_places=4),
                 )
             )
@@ -130,8 +137,10 @@ class DeliveryDetail(models.Model):
         on_delete=models.PROTECT,
         db_column='artikel_id',
     )
-    quantity = models.DecimalField(max_digits=10, decimal_places=3, db_column='anzahl')
-    unit_price = models.DecimalField(max_digits=10, decimal_places=4, db_column='einkaufspreis')
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=3, db_column='anzahl')
+    unit_price = models.DecimalField(
+        max_digits=10, decimal_places=4, db_column='einkaufspreis')
     tax_rate = models.ForeignKey(
         TaxRate,
         on_delete=models.SET_NULL,
@@ -201,9 +210,12 @@ class EkModifier(models.Model):
         related_name='ek_modifiers',
         db_column='emo_artikel_id',
     )
-    operator = models.CharField(max_length=1, choices=OPERATOR_CHOICES, db_column='emo_operator')
-    modifier = models.DecimalField(max_digits=10, decimal_places=4, db_column='emo_modifikator')
-    period = models.ForeignKey(Period, on_delete=models.CASCADE, db_column='emo_periode_id')
+    operator = models.CharField(
+        max_length=1, choices=OPERATOR_CHOICES, db_column='emo_operator')
+    modifier = models.DecimalField(
+        max_digits=10, decimal_places=4, db_column='emo_modifikator')
+    period = models.ForeignKey(
+        Period, on_delete=models.CASCADE, db_column='emo_periode_id')
 
     class Meta:
         db_table = 'ek_modifikatoren'
