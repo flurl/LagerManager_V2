@@ -7,7 +7,7 @@ from core.models import Period
 from deliveries.models import StockMovement
 
 
-def get_total_deliveries_report(period_id: int) -> dict:
+def get_total_deliveries_report(period_id: int) -> dict[str, object]:
     """
     Returns deliveries grouped by month with totals.
     """
