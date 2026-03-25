@@ -2,10 +2,12 @@
 Stock level report — wraps inventory.services.stock_calculation.compute_running_stock
 into Chart.js-compatible format.
 """
+from typing import Any
+
 from inventory.services.stock_calculation import compute_running_stock
 
 
-def get_stock_level_chart_data(period_id: int) -> dict:
+def get_stock_level_chart_data(period_id: int) -> dict[str, Any]:
     """
     Returns Chart.js dataset structure:
     {
@@ -14,14 +16,14 @@ def get_stock_level_chart_data(period_id: int) -> dict:
         counted_datasets: [{label: article_name + '-gezaehlt', data: [...]}]
     }
     """
-    records = compute_running_stock(period_id)
+    records: list[dict[str, Any]] = compute_running_stock(period_id)
 
     # Collect unique dates and articles
-    dates = sorted(set(r['date'] for r in records))
-    articles = sorted(set(r['article'] for r in records))
+    dates: list[str] = sorted(set(r['date'] for r in records))
+    articles: list[str] = sorted(set(r['article'] for r in records))
 
     # Build lookup {date: {article: record}}
-    lookup = {}
+    lookup: dict[str, dict[str, dict[str, Any]]] = {}
     for r in records:
         lookup.setdefault(r['date'], {})[r['article']] = r
 

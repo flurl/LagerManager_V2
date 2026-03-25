@@ -2,12 +2,13 @@
 Consumption report — cumulative daily consumption per article.
 """
 import datetime
+from typing import Any
 
 from core.models import Period
 from inventory.services.stock_calculation import get_daily_consumption
 
 
-def get_consumption_chart_data(period_id: int) -> dict:
+def get_consumption_chart_data(period_id: int) -> dict[str, Any]:
     """
     Returns cumulative Chart.js dataset for consumption over the period.
     """
@@ -15,10 +16,10 @@ def get_consumption_chart_data(period_id: int) -> dict:
     daily = get_daily_consumption(period_id)
 
     # Collect all articles and dates
-    all_articles = set()
+    articles_set: set[str] = set()
     for day_data in daily.values():
-        all_articles.update(day_data.keys())
-    all_articles = sorted(all_articles)
+        articles_set.update(day_data.keys())
+    all_articles: list[str] = sorted(articles_set)
 
     current_date = period.start.date()
     end_date = period.end.date()

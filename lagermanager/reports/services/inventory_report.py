@@ -6,7 +6,7 @@ from core.services.purchase_price import get_purchase_price
 from inventory.models import PeriodStartStockLevel
 
 
-def get_inventory_report(period_id: int) -> list:
+def get_inventory_report(period_id: int) -> list[dict[str, object]]:
     """
     For each article with a stock level in the period, compute
     quantity * purchase_price and return a list of dicts.
