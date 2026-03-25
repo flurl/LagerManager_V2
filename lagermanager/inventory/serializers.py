@@ -3,7 +3,7 @@ from rest_framework import serializers
 from .models import InitialInventory, PhysicalCount, PeriodStartStockLevel
 
 
-class PeriodStartStockLevelSerializer(serializers.ModelSerializer):
+class PeriodStartStockLevelSerializer(serializers.ModelSerializer[PeriodStartStockLevel]):
     article_name = serializers.CharField(source='article.name', read_only=True)
 
     class Meta:
@@ -11,7 +11,7 @@ class PeriodStartStockLevelSerializer(serializers.ModelSerializer):
         fields = ['id', 'article', 'article_name', 'quantity', 'period', 'updated_at']
 
 
-class InitialInventorySerializer(serializers.ModelSerializer):
+class InitialInventorySerializer(serializers.ModelSerializer[InitialInventory]):
     article_name = serializers.CharField(source='article.name', read_only=True)
     workplace_name = serializers.CharField(source='workplace.name', read_only=True)
 
@@ -23,7 +23,7 @@ class InitialInventorySerializer(serializers.ModelSerializer):
         ]
 
 
-class PhysicalCountSerializer(serializers.ModelSerializer):
+class PhysicalCountSerializer(serializers.ModelSerializer[PhysicalCount]):
     article_name = serializers.CharField(source='article.name', read_only=True)
 
     class Meta:

@@ -7,6 +7,7 @@ The consumption query is the UNION of:
   1. Recipe-based consumption: bondetail_amount * recipe_qty / unit_multiplier
   2. Direct consumption: bondetail_amount (articles with no recipe)
 """
+import datetime
 import logging
 
 from django.db import connection
@@ -64,11 +65,11 @@ CONSUMPTION_QUERY = """
 """
 
 
-def get_daily_consumption(period_id: int) -> dict:
+def get_daily_consumption(period_id: int) -> dict[datetime.date, dict[str, float]]:
     """
     Returns {date: {article_name: amount}} for all consumption in the period.
     """
-    result = {}
+    result: dict[datetime.date, dict[str, float]] = {}
     with connection.cursor() as cur:
         params = {'period_id': period_id}
         logger.debug("CONSUMPTION_QUERY (period_id=%s):\n%s",
@@ -78,12 +79,12 @@ def get_daily_consumption(period_id: int) -> dict:
         logger.debug("CONSUMPTION_QUERY returned %d rows", len(rows))
         for row in rows:
             day, article, amount = row
-            result.setdefault(day, {})[article] = result.get(
-                day, {}).get(article, 0) + float(amount)
+            day_data = result.setdefault(day, {})
+            day_data[article] = day_data.get(article, 0) + float(amount)
     return result
 
 
-def get_daily_deliveries(period_id: int) -> dict:
+def get_daily_deliveries(period_id: int) -> dict[datetime.date, dict[str, float]]:
     """
     Returns {date: {article_name: amount}} for all deliveries in the period.
     """
@@ -91,7 +92,7 @@ def get_daily_deliveries(period_id: int) -> dict:
     from deliveries.models import StockMovement
 
     period = Period.objects.get(pk=period_id)
-    result = {}
+    result: dict[datetime.date, dict[str, float]] = {}
     deliveries = StockMovement.objects.filter(
         period=period, movement_type=StockMovement.Type.DELIVERY
     ).prefetch_related('details__article')
@@ -100,19 +101,17 @@ def get_daily_deliveries(period_id: int) -> dict:
         day = delivery.date.date()
         for detail in delivery.details.all():
             name = detail.article.name
-            result.setdefault(day, {})[name] = result.get(
-                day, {}).get(name, 0) + float(detail.quantity)
+            day_data = result.setdefault(day, {})
+            day_data[name] = day_data.get(name, 0) + float(detail.quantity)
     return result
 
 
-def compute_running_stock(period_id: int) -> list:
+def compute_running_stock(period_id: int) -> list[dict[str, object]]:
     """
     Compute day-by-day running stock for all articles in the period.
 
     Returns list of {date, article_name, stock, counted, diff} records.
     """
-    import datetime
-
     from core.models import Period
 
     from inventory.models import PhysicalCount, PeriodStartStockLevel
@@ -120,15 +119,17 @@ def compute_running_stock(period_id: int) -> list:
     period = Period.objects.get(pk=period_id)
 
     # Initial stock (day 0)
-    initial = {}
+    initial: dict[str, float] = {}
     for sl in PeriodStartStockLevel.objects.filter(period=period).select_related('article'):
         initial[sl.article.name] = float(sl.quantity)
 
-    daily_deliveries = get_daily_deliveries(period_id)
-    daily_consumption = get_daily_consumption(period_id)
+    daily_deliveries: dict[datetime.date,
+                           dict[str, float]] = get_daily_deliveries(period_id)
+    daily_consumption: dict[datetime.date,
+                            dict[str, float]] = get_daily_consumption(period_id)
 
     # Physical counts keyed by (date, article_name)
-    counts = {}
+    counts: dict[tuple[datetime.date, str], float] = {}
     for pc in PhysicalCount.objects.filter(period=period).select_related('article'):
         counts[(pc.date.date(), pc.article.name)] = float(pc.quantity)
 
@@ -142,7 +143,7 @@ def compute_running_stock(period_id: int) -> list:
     # Iterate day by day
     current_date = period.start.date()
     end_date = period.end.date()
-    running = {a: initial.get(a, 0.0) for a in all_articles}
+    running: dict[str, float] = {a: initial.get(a, 0.0) for a in all_articles}
     result = []
 
     while current_date <= end_date:

@@ -1,6 +1,9 @@
 """
 Init period services — bulk-create zero entries for warehouse articles.
 """
+import datetime as dt
+from decimal import Decimal
+
 from pos_import.models import WarehouseArticle
 from core.models import Period, Workplace
 from django.db import transaction
@@ -16,18 +19,16 @@ def init_stock_levels(period_id: int) -> int:
 
     period = Period.objects.get(pk=period_id)
     existing = set(
-        PeriodStartStockLevel.objects.filter(period=period).values_list('article__source_id', flat=True)
+        PeriodStartStockLevel.objects.filter(
+            period=period).values_list('article__source_id', flat=True)
     )
     warehouse_articles = WarehouseArticle.objects.filter(
         period=period
-    ).select_related('article').distinct('article__source_id')
+    ).select_related('article')
 
     to_create = []
-    seen = set()
     for wa in warehouse_articles:
-        art_source_id = wa.article.source_id
-        if art_source_id not in existing and art_source_id not in seen:
-            seen.add(art_source_id)
+        if wa.article.source_id not in existing:
             to_create.append(PeriodStartStockLevel(
                 article=wa.article,
                 quantity=0,
@@ -35,11 +36,12 @@ def init_stock_levels(period_id: int) -> int:
             ))
 
     with transaction.atomic():
-        PeriodStartStockLevel.objects.bulk_create(to_create, ignore_conflicts=True)
+        PeriodStartStockLevel.objects.bulk_create(
+            to_create, ignore_conflicts=True)
     return len(to_create)
 
 
-def init_initial_inventory(period_id: int, source_period_id: int = None) -> int:
+def init_initial_inventory(period_id: int, source_period_id: int | None = None) -> int:
     """
     Create InitialInventory entries for the given period.
     If source_period_id is provided, copies quantities from that period.
@@ -50,58 +52,52 @@ def init_initial_inventory(period_id: int, source_period_id: int = None) -> int:
 
     period = Period.objects.get(pk=period_id)
 
-    if source_period_id:
-        source_entries = InitialInventory.objects.filter(period_id=source_period_id)
-        to_create = []
-        for entry in source_entries:
-            to_create.append(InitialInventory(
-                article=entry.article,
-                quantity=entry.quantity,
-                workplace=entry.workplace,
-                period=period,
-            ))
-    else:
-        warehouse_articles = WarehouseArticle.objects.filter(
-            period=period
-        ).select_related('article')
-        workplaces = list(Workplace.objects.all())
-        existing = set(
-            InitialInventory.objects.filter(period=period).values_list(
-                'article__source_id', 'workplace_id'
-            )
+    warehouse_articles = WarehouseArticle.objects.filter(
+        period=period
+    ).select_related('article')
+    workplaces = list(Workplace.objects.all())
+    existing = set(
+        InitialInventory.objects.filter(period=period).values_list(
+            'article__source_id', 'workplace_id'
         )
-        to_create = []
-        for wa in warehouse_articles:
-            for wp in workplaces:
-                key = (wa.article.source_id, wp.pk)
-                if key not in existing:
-                    to_create.append(InitialInventory(
-                        article=wa.article,
-                        quantity=0,
-                        workplace=wp,
-                        period=period,
-                    ))
+    )
+
+    source_quantities: dict[tuple[int, int], Decimal] = {}
+    if source_period_id:
+        for entry in InitialInventory.objects.filter(period_id=source_period_id).select_related('article'):
+            source_quantities[(entry.article.source_id,
+                               entry.workplace_id)] = entry.quantity
+
+    to_create = []
+    for wa in warehouse_articles:
+        for wp in workplaces:
+            key = (wa.article.source_id, wp.pk)
+            if key not in existing:
+                quantity: Decimal = source_quantities.get(key, Decimal(0))
+                to_create.append(InitialInventory(
+                    article=wa.article,
+                    quantity=quantity,
+                    workplace=wp,
+                    period=period,
+                ))
 
     with transaction.atomic():
         InitialInventory.objects.bulk_create(to_create, ignore_conflicts=True)
     return len(to_create)
 
 
-def init_physical_count_date(period_id: int, date: str) -> int:
+def init_physical_count_date(period_id: int, count_date: dt.datetime) -> int:
     """
     Create PhysicalCount entries (quantity=0) for all warehouse articles
     for the given date, if they don't already exist.
     """
-    import datetime as dt
-
     from inventory.models import PhysicalCount
 
     period = Period.objects.get(pk=period_id)
-    count_date = dt.datetime.fromisoformat(date)
 
     warehouse_articles = WarehouseArticle.objects.filter(
         period=period
-    ).select_related('article').distinct('article__source_id')
+    ).select_related('article')
 
     existing = set(
         PhysicalCount.objects.filter(
@@ -110,11 +106,8 @@ def init_physical_count_date(period_id: int, date: str) -> int:
     )
 
     to_create = []
-    seen = set()
     for wa in warehouse_articles:
-        art_source_id = wa.article.source_id
-        if art_source_id not in existing and art_source_id not in seen:
-            seen.add(art_source_id)
+        if wa.article.source_id not in existing:
             to_create.append(PhysicalCount(
                 date=count_date,
                 article=wa.article,

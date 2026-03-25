@@ -22,11 +22,11 @@ from .services.init_period import (
 )
 
 
-class PeriodStartStockLevelViewSet(viewsets.ModelViewSet):
+class PeriodStartStockLevelViewSet(viewsets.ModelViewSet[PeriodStartStockLevel]):
     serializer_class = PeriodStartStockLevelSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[PeriodStartStockLevel]:
         qs = PeriodStartStockLevel.objects.select_related('article', 'period')
         period_id = self.request.query_params.get('period_id')
         if period_id:
@@ -42,12 +42,13 @@ class PeriodStartStockLevelViewSet(viewsets.ModelViewSet):
         return Response({'created': count})
 
 
-class InitialInventoryViewSet(viewsets.ModelViewSet):
+class InitialInventoryViewSet(viewsets.ModelViewSet[InitialInventory]):
     serializer_class = InitialInventorySerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
-        qs = InitialInventory.objects.select_related('article', 'workplace', 'period')
+    def get_queryset(self) -> QuerySet[InitialInventory]:
+        qs = InitialInventory.objects.select_related(
+            'article', 'workplace', 'period')
         period_id = self.request.query_params.get('period_id')
         workplace_id = self.request.query_params.get('workplace_id')
         if period_id:
@@ -62,7 +63,8 @@ class InitialInventoryViewSet(viewsets.ModelViewSet):
         source_period_id = request.data.get('source_period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        count = init_initial_inventory(int(period_id), int(source_period_id) if source_period_id else None)
+        count = init_initial_inventory(int(period_id), int(
+            source_period_id) if source_period_id else None)
         return Response({'created': count})
 
     @action(detail=False, methods=['get'])
@@ -77,15 +79,16 @@ class InitialInventoryViewSet(viewsets.ModelViewSet):
         writer = csv.writer(response)
         writer.writerow(['Artikel', 'Arbeitsplatz', 'Menge', 'Periode'])
         for obj in qs:
-            writer.writerow([obj.article.name, obj.workplace.name, obj.quantity, obj.period.name])
+            writer.writerow(
+                [obj.article.name, obj.workplace.name, obj.quantity, obj.period.name])
         return response
 
 
-class PhysicalCountViewSet(viewsets.ModelViewSet):
+class PhysicalCountViewSet(viewsets.ModelViewSet[PhysicalCount]):
     serializer_class = PhysicalCountSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[PhysicalCount]:
         qs = PhysicalCount.objects.select_related('article', 'period')
         period_id = self.request.query_params.get('period_id')
         date = self.request.query_params.get('date')
@@ -95,7 +98,7 @@ class PhysicalCountViewSet(viewsets.ModelViewSet):
             qs = qs.filter(date__date=date)
         return qs
 
-    def perform_create(self, serializer: BaseSerializer) -> None:
+    def perform_create(self, serializer: BaseSerializer[PhysicalCount]) -> None:
         obj = serializer.save()
         # Auto-assign period from date
         if not obj.period_id:
@@ -109,9 +112,10 @@ class PhysicalCountViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def init_date(self, request: Request) -> Response:
+        import datetime as dt
         period_id = request.data.get('period_id')
         date = request.data.get('date')
         if not period_id or not date:
             return Response({'error': 'period_id and date required'}, status=status.HTTP_400_BAD_REQUEST)
-        count = init_physical_count_date(int(period_id), date)
+        count = init_physical_count_date(int(period_id), dt.datetime.fromisoformat(date))
         return Response({'created': count})

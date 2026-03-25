@@ -459,7 +459,7 @@ class WarehouseArticle(models.Model):
 
     class Meta:
         db_table = 'lager_artikel'
-        unique_together = [('source_id', 'period')]
+        unique_together = [('source_id', 'period'), ('article', 'period')]
 
     def __str__(self) -> str:
         return f"LA {self.source_id}"
