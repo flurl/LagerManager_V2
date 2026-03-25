@@ -25,33 +25,33 @@ from .serializers import (
 )
 
 
-class PartnerViewSet(viewsets.ModelViewSet):
+class PartnerViewSet(viewsets.ModelViewSet[Partner]):
     queryset = Partner.objects.all()
     serializer_class = PartnerSerializer
     permission_classes = [IsAuthenticated]
 
 
-class TaxRateViewSet(viewsets.ModelViewSet):
+class TaxRateViewSet(viewsets.ModelViewSet[TaxRate]):
     queryset = TaxRate.objects.all()
     serializer_class = TaxRateSerializer
     permission_classes = [IsAuthenticated]
 
 
-class DocumentTypeViewSet(viewsets.ModelViewSet):
+class DocumentTypeViewSet(viewsets.ModelViewSet[DocumentType]):
     queryset = DocumentType.objects.all()
     serializer_class = DocumentTypeSerializer
     permission_classes = [IsAuthenticated]
 
 
-class StockMovementViewSet(viewsets.ModelViewSet):
+class StockMovementViewSet(viewsets.ModelViewSet[StockMovement]):
     permission_classes = [IsAuthenticated]
 
-    def get_serializer_class(self) -> type[BaseSerializer]:
+    def get_serializer_class(self) -> type[BaseSerializer[StockMovement]]:
         if self.action == 'list':
             return StockMovementListSerializer
         return StockMovementSerializer
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[StockMovement]:
         qs = StockMovement.objects.select_related(
             'partner', 'period').prefetch_related('details__tax_rate')
         period_id = self.request.query_params.get('period_id')
@@ -62,7 +62,7 @@ class StockMovementViewSet(viewsets.ModelViewSet):
             qs = qs.filter(movement_type=movement_type)
         return qs
 
-    def perform_create(self, serializer: BaseSerializer) -> None:
+    def perform_create(self, serializer: BaseSerializer[StockMovement]) -> None:
         movement = serializer.save()
         # Auto-assign period from date if not provided
         if not movement.period_id:
@@ -84,22 +84,22 @@ class StockMovementViewSet(viewsets.ModelViewSet):
         return Response(StockMovementSerializer(movement, context={'request': request}).data)
 
 
-class StockMovementDetailViewSet(viewsets.ModelViewSet):
+class StockMovementDetailViewSet(viewsets.ModelViewSet[StockMovementDetail]):
     serializer_class = StockMovementDetailSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[StockMovementDetail]:
         movement_pk = self.kwargs.get('movement_pk')
         return StockMovementDetail.objects.filter(
             stock_movement_id=movement_pk
         ).select_related('article', 'tax_rate')
 
 
-class EkModifierViewSet(viewsets.ModelViewSet):
+class EkModifierViewSet(viewsets.ModelViewSet[EkModifier]):
     serializer_class = EkModifierSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> QuerySet[EkModifier]:
         qs = EkModifier.objects.all()
         period_id = self.request.query_params.get('period_id')
         if period_id:
