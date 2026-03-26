@@ -1,32 +1,24 @@
 <template>
   <div>
     <v-row class="mb-2" align="center">
-      <v-col><h2>Verbrauch (kumulativ)</h2></v-col>
+      <v-col>
+        <h2>Verbrauch (kumulativ)</h2>
+      </v-col>
       <v-col cols="auto">
+        <v-btn variant="text" @click="chartRef?.chart.resetZoom()">Zoom zurücksetzen</v-btn>
         <v-btn :loading="loading" @click="fetchData">Aktualisieren</v-btn>
       </v-col>
     </v-row>
 
     <v-row class="mb-2">
       <v-col>
-        <v-select
-          v-model="activeArticles"
-          :items="allArticles"
-          label="Artikel"
-          multiple
-          chips
-          closable-chips
-          clearable
-          density="compact"
-          hide-details
-        >
+        <v-select v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips clearable
+          density="compact" hide-details>
           <template #prepend-item>
             <v-list-item title="Alle" @click="toggleAll">
               <template #prepend>
-                <v-checkbox-btn
-                  :model-value="activeArticles.length === allArticles.length"
-                  :indeterminate="activeArticles.length > 0 && activeArticles.length < allArticles.length"
-                />
+                <v-checkbox-btn :model-value="activeArticles.length === allArticles.length"
+                  :indeterminate="activeArticles.length > 0 && activeArticles.length < allArticles.length" />
               </template>
             </v-list-item>
             <v-divider />
@@ -36,7 +28,7 @@
     </v-row>
     <v-row>
       <v-col cols="12">
-        <Line v-if="chartData" :data="chartData" :options="chartOptions" style="height: 450px" />
+        <Line v-if="chartData" ref="chartRef" :data="chartData" :options="chartOptions" style="height: 450px" />
         <v-progress-circular v-else-if="loading" indeterminate />
       </v-col>
     </v-row>
@@ -50,12 +42,14 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
   Title, Tooltip, Legend,
 } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, zoomPlugin)
 
 const periodStore = usePeriodStore()
+const chartRef = ref(null)
 const loading = ref(false)
 const rawData = ref(null)
 const activeArticles = ref([])
@@ -89,7 +83,13 @@ const chartData = computed(() => {
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { position: 'top' } },
+  plugins: {
+    legend: { position: 'top' },
+    zoom: {
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' },
+      pan: { enabled: true, mode: 'xy' },
+    },
+  },
 }
 
 async function fetchData() {
