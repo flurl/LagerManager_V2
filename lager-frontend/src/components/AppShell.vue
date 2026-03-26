@@ -1,43 +1,45 @@
 <template>
-  <v-navigation-drawer v-model="drawer" permanent width="240">
-    <v-list-item title="LagerManager" subtitle="Lagerverwaltung" prepend-icon="mdi-warehouse" nav />
-    <v-divider />
-
-    <v-list density="compact" nav>
-      <v-list-subheader>STAMMDATEN</v-list-subheader>
-      <v-list-item to="/partners" prepend-icon="mdi-truck" title="Partner" />
-      <v-list-item to="/tax-rates" prepend-icon="mdi-percent" title="Steuersätze" />
-
-      <v-list-subheader>LAGER</v-list-subheader>
-      <v-list-item to="/stock-movements" prepend-icon="mdi-receipt-text" title="Lagerbewegungen" />
-      <v-list-item to="/stock-levels" prepend-icon="mdi-format-list-numbered" title="Lagerstand" />
-      <v-list-item to="/initial-inventory" prepend-icon="mdi-clipboard-list" title="Initialer Stand" />
-      <v-list-item to="/physical-counts" prepend-icon="mdi-counter" title="Gezählter Stand" />
-
-      <v-list-subheader>BERICHTE</v-list-subheader>
-      <v-list-item to="/reports/stock-level" prepend-icon="mdi-chart-line" title="Lagerstand" />
-      <v-list-item to="/reports/inventory" prepend-icon="mdi-clipboard-text" title="Inventur" />
-      <v-list-item to="/reports/consumption" prepend-icon="mdi-chart-area" title="Verbrauch" />
-      <v-list-item to="/reports/total-deliveries" prepend-icon="mdi-table" title="Gesamte Lieferungen" />
-
-      <v-list-subheader>SYSTEM</v-list-subheader>
-      <v-list-item to="/import" prepend-icon="mdi-database-import" title="Daten importieren" />
-    </v-list>
-
-    <template #append>
-      <v-list density="compact">
-        <v-list-item prepend-icon="mdi-logout" title="Abmelden" @click="auth.logout()" />
-      </v-list>
-    </template>
-  </v-navigation-drawer>
-
   <v-app-bar elevation="1">
-    <v-app-bar-title>{{ currentRoute }}</v-app-bar-title>
+    <v-app-bar-title class="mr-4">
+      <v-icon class="mr-1">mdi-warehouse</v-icon>
+      LagerManager
+    </v-app-bar-title>
+
+    <!-- Nav groups -->
+    <v-menu v-for="group in navGroups" :key="group.label" open-on-hover>
+      <template #activator="{ props }">
+        <v-btn v-bind="props" :prepend-icon="group.icon" variant="text" class="text-none">
+          {{ group.label }}
+          <v-icon end>mdi-chevron-down</v-icon>
+        </v-btn>
+      </template>
+      <v-list density="compact" nav min-width="200">
+        <v-list-item
+          v-for="item in group.items"
+          :key="item.to"
+          :to="item.to"
+          :prepend-icon="item.icon"
+          :title="item.title"
+        />
+      </v-list>
+    </v-menu>
+
     <v-spacer />
-    <v-select v-model="periodStore.currentPeriodId" :items="periodStore.periods" item-title="name" item-value="id"
-      label="Periode" hide-details style="max-width: 220px" />
-    <v-btn icon class="ml-1 mr-3" title="Neue Periode" @click="newPeriodDialog = true">
+
+    <v-select
+      v-model="periodStore.currentPeriodId"
+      :items="periodStore.periods"
+      item-title="name"
+      item-value="id"
+      label="Periode"
+      hide-details
+      style="max-width: 220px"
+    />
+    <v-btn icon class="ml-1 mr-1" title="Neue Periode" @click="newPeriodDialog = true">
       <v-icon>mdi-plus-circle-outline</v-icon>
+    </v-btn>
+    <v-btn icon title="Abmelden" @click="auth.logout()">
+      <v-icon>mdi-logout</v-icon>
     </v-btn>
   </v-app-bar>
 
@@ -49,8 +51,13 @@
         <v-text-field v-model="newPeriod.name" label="Bezeichnung" placeholder="z.B. 2025" class="mb-2" />
         <v-text-field v-model="newPeriod.start" label="Von" type="datetime-local" class="mb-2" />
         <v-text-field v-model="newPeriod.end" label="Bis" type="datetime-local" class="mb-2" />
-        <v-text-field v-model.number="newPeriod.checkpoint_year" label="Checkpoint-Jahr (optional)" type="number"
-          hint="Wiffzack checkpoint_jahr Wert für diesen Zeitraum" persistent-hint />
+        <v-text-field
+          v-model.number="newPeriod.checkpoint_year"
+          label="Checkpoint-Jahr (optional)"
+          type="number"
+          hint="Wiffzack checkpoint_jahr Wert für diesen Zeitraum"
+          persistent-hint
+        />
         <v-alert v-if="newPeriodError" type="error" class="mt-3" density="compact">{{ newPeriodError }}</v-alert>
       </v-card-text>
       <v-card-actions>
@@ -69,17 +76,50 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { onMounted, reactive, ref } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import { useAuthStore } from '../stores/auth'
 
-const drawer = ref(true)
-const route = useRoute()
 const periodStore = usePeriodStore()
 const auth = useAuthStore()
 
-const currentRoute = computed(() => route.meta?.title || 'LagerManager')
+const navGroups = [
+  {
+    label: 'Stammdaten',
+    icon: 'mdi-database',
+    items: [
+      { to: '/partners', icon: 'mdi-truck', title: 'Partner' },
+      { to: '/tax-rates', icon: 'mdi-percent', title: 'Steuersätze' },
+    ],
+  },
+  {
+    label: 'Lager',
+    icon: 'mdi-warehouse',
+    items: [
+      { to: '/stock-movements', icon: 'mdi-receipt-text', title: 'Lagerbewegungen' },
+      { to: '/stock-levels', icon: 'mdi-format-list-numbered', title: 'Lagerstand' },
+      { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand' },
+      { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand' },
+    ],
+  },
+  {
+    label: 'Berichte',
+    icon: 'mdi-chart-bar',
+    items: [
+      { to: '/reports/stock-level', icon: 'mdi-chart-line', title: 'Lagerstand' },
+      { to: '/reports/inventory', icon: 'mdi-clipboard-text', title: 'Inventur' },
+      { to: '/reports/consumption', icon: 'mdi-chart-area', title: 'Verbrauch' },
+      { to: '/reports/total-deliveries', icon: 'mdi-table', title: 'Gesamte Lieferungen' },
+    ],
+  },
+  {
+    label: 'System',
+    icon: 'mdi-cog',
+    items: [
+      { to: '/import', icon: 'mdi-database-import', title: 'Daten importieren' },
+    ],
+  },
+]
 
 // New period dialog
 const newPeriodDialog = ref(false)
