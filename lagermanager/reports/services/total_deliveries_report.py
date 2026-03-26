@@ -36,7 +36,7 @@ def get_total_deliveries_report(period_id: int) -> dict[str, object]:
 
         rows.append({
             'id': delivery.id,
-            'date': delivery.date.date().isoformat(),
+            'date': delivery.date.isoformat(),
             'partner': delivery.partner.name,
             'comment': delivery.comment or '',
             'net': float(net),

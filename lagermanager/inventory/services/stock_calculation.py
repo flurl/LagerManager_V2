@@ -98,7 +98,7 @@ def get_daily_deliveries(period_id: int) -> dict[datetime.date, dict[str, float]
     ).prefetch_related('details__article')
 
     for delivery in deliveries:
-        day = delivery.date.date()
+        day = delivery.date
         for detail in delivery.details.all():
             name = detail.article.name
             day_data = result.setdefault(day, {})
