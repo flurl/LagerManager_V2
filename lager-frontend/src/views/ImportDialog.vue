@@ -42,7 +42,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
 
@@ -51,12 +51,28 @@ const loading = ref(false)
 const error = ref('')
 const summary = ref(null)
 
+const STORAGE_KEY = 'importFormDefaults'
+
+function loadSavedForm() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+const saved = loadSavedForm()
 const form = reactive({
-  host: '',
-  database: '',
-  user: '',
+  host: saved.host ?? '',
+  database: saved.database ?? '',
+  user: saved.user ?? '',
   password: '',
 })
+
+watch(
+  () => ({ host: form.host, database: form.database, user: form.user }),
+  (vals) => localStorage.setItem(STORAGE_KEY, JSON.stringify(vals)),
+)
 
 async function runImport() {
   error.value = ''
