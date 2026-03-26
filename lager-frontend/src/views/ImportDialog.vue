@@ -3,7 +3,7 @@
     <h2 class="mb-4">Daten importieren (Wiffzack)</h2>
     <v-card max-width="500">
       <v-card-text>
-        <v-form @submit.prevent="runImport">
+        <v-form @submit.prevent="runImport" @keyup.enter="runImport">
           <v-text-field v-model="form.host" label="Host" />
           <v-text-field v-model="form.database" label="Datenbank" />
           <v-text-field v-model="form.user" label="Benutzer" />
