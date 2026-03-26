@@ -6,6 +6,8 @@ from typing import Any
 
 from inventory.services.stock_calculation import compute_running_stock
 
+# TODO: this report is just plain wrong, must be fixed
+
 
 def get_stock_level_chart_data(period_id: int) -> dict[str, Any]:
     """
@@ -31,11 +33,14 @@ def get_stock_level_chart_data(period_id: int) -> dict[str, Any]:
     counted_datasets = []
 
     for article in articles:
-        stock_data = [lookup.get(d, {}).get(article, {}).get('stock') for d in dates]
-        counted_data = [lookup.get(d, {}).get(article, {}).get('counted') for d in dates]
+        stock_data = [lookup.get(d, {}).get(
+            article, {}).get('stock') for d in dates]
+        counted_data = [lookup.get(d, {}).get(
+            article, {}).get('counted') for d in dates]
 
         datasets.append({'label': article, 'data': stock_data})
-        counted_datasets.append({'label': f"{article}-gezaehlt", 'data': counted_data})
+        counted_datasets.append(
+            {'label': f"{article}-gezaehlt", 'data': counted_data})
 
     return {
         'labels': dates,

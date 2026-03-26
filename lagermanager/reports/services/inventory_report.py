@@ -2,8 +2,12 @@
 Inventory report service (Inventur).
 Returns {article_name, quantity, purchase_price, total_value} per article.
 """
+from decimal import Decimal
+
 from core.services.purchase_price import get_purchase_price
 from inventory.models import PeriodStartStockLevel
+
+# TODO: this report is just plain wrong, must be fixed
 
 
 def get_inventory_report(period_id: int) -> list[dict[str, object]]:
@@ -17,7 +21,7 @@ def get_inventory_report(period_id: int) -> list[dict[str, object]]:
     ).select_related('article').order_by('article__name')
 
     for sl in stock_levels:
-        price = get_purchase_price(sl.article.source_id, period_id)
+        price: Decimal = get_purchase_price(sl.article.source_id, period_id)
         rows.append({
             'article_id': sl.article.source_id,
             'article_name': sl.article.name,

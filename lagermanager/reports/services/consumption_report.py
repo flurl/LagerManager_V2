@@ -13,7 +13,8 @@ def get_consumption_chart_data(period_id: int) -> dict[str, Any]:
     Returns cumulative Chart.js dataset for consumption over the period.
     """
     period = Period.objects.get(pk=period_id)
-    daily = get_daily_consumption(period_id)
+    daily: dict[datetime.date, dict[str, float]
+                ] = get_daily_consumption(period_id)
 
     # Collect all articles and dates
     articles_set: set[str] = set()
@@ -31,11 +32,12 @@ def get_consumption_chart_data(period_id: int) -> dict[str, Any]:
     while current_date <= end_date:
         dates.append(current_date.isoformat())
         for article in all_articles:
-            cumulative[article] += daily.get(current_date, {}).get(article, 0.0)
+            cumulative[article] += daily.get(current_date,
+                                             {}).get(article, 0.0)
         rows.append({a: round(cumulative[a], 3) for a in all_articles})
         current_date += datetime.timedelta(days=1)
 
-    datasets = [
+    datasets: list[dict[str, Any]] = [
         {'label': a, 'data': [row[a] for row in rows]}
         for a in all_articles
     ]
