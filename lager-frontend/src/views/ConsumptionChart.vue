@@ -7,22 +7,35 @@
       </v-col>
     </v-row>
 
-    <v-row>
-      <v-col cols="3">
-        <v-card height="500" class="overflow-y-auto">
-          <v-card-title class="text-body-2">Artikel</v-card-title>
-          <div v-for="article in allArticles" :key="article" class="px-4">
-            <v-checkbox
-              v-model="activeArticles"
-              :label="article"
-              :value="article"
-              density="compact"
-              hide-details
-            />
-          </div>
-        </v-card>
+    <v-row class="mb-2">
+      <v-col>
+        <v-select
+          v-model="activeArticles"
+          :items="allArticles"
+          label="Artikel"
+          multiple
+          chips
+          closable-chips
+          clearable
+          density="compact"
+          hide-details
+        >
+          <template #prepend-item>
+            <v-list-item title="Alle" @click="toggleAll">
+              <template #prepend>
+                <v-checkbox-btn
+                  :model-value="activeArticles.length === allArticles.length"
+                  :indeterminate="activeArticles.length > 0 && activeArticles.length < allArticles.length"
+                />
+              </template>
+            </v-list-item>
+            <v-divider />
+          </template>
+        </v-select>
       </v-col>
-      <v-col cols="9">
+    </v-row>
+    <v-row>
+      <v-col cols="12">
         <Line v-if="chartData" :data="chartData" :options="chartOptions" style="height: 450px" />
         <v-progress-circular v-else-if="loading" indeterminate />
       </v-col>
@@ -48,6 +61,10 @@ const rawData = ref(null)
 const activeArticles = ref([])
 
 const allArticles = computed(() => (rawData.value?.datasets || []).map((d) => d.label))
+
+function toggleAll() {
+  activeArticles.value = activeArticles.value.length === allArticles.value.length ? [] : [...allArticles.value]
+}
 
 const COLORS = [
   '#1565C0', '#E53935', '#43A047', '#FB8C00', '#8E24AA',
