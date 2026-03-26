@@ -12,7 +12,7 @@
 
     <v-row class="mb-2">
       <v-col>
-        <v-select v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips clearable
+        <v-autocomplete v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips clearable
           density="compact" hide-details>
           <template #prepend-item>
             <v-list-item title="Alle" @click="toggleAll">
@@ -23,7 +23,7 @@
             </v-list-item>
             <v-divider />
           </template>
-        </v-select>
+        </v-autocomplete>
       </v-col>
     </v-row>
     <v-row>

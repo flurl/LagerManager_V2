@@ -1,38 +1,34 @@
 <template>
   <div>
     <v-row class="mb-2" align="center">
-      <v-col><h2>Lagerstand Verlauf</h2></v-col>
+      <v-col>
+        <h2>Lagerstand Verlauf</h2>
+      </v-col>
       <v-col cols="auto">
+        <v-btn variant="text" @click="chartRef?.chart.resetZoom()">Zoom zurücksetzen</v-btn>
         <v-btn :loading="loading" @click="fetchData">Aktualisieren</v-btn>
       </v-col>
     </v-row>
 
-    <v-row>
-      <v-col cols="3">
-        <v-card height="600" class="overflow-y-auto">
-          <v-card-title class="text-body-2">Artikel</v-card-title>
-          <v-checkbox
-            v-model="showAll"
-            label="Alle"
-            density="compact"
-            hide-details
-            class="px-4"
-            @change="toggleAll"
-          />
-          <v-divider />
-          <div v-for="article in allArticles" :key="article" class="px-4">
-            <v-checkbox
-              v-model="activeArticles"
-              :label="article"
-              :value="article"
-              density="compact"
-              hide-details
-            />
-          </div>
-        </v-card>
+    <v-row class="mb-2">
+      <v-col>
+        <v-autocomplete v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips clearable
+          density="compact" hide-details>
+          <template #prepend-item>
+            <v-list-item title="Alle" @click="toggleAll">
+              <template #prepend>
+                <v-checkbox-btn :model-value="activeArticles.length === allArticles.length"
+                  :indeterminate="activeArticles.length > 0 && activeArticles.length < allArticles.length" />
+              </template>
+            </v-list-item>
+            <v-divider />
+          </template>
+        </v-autocomplete>
       </v-col>
-      <v-col cols="9">
-        <Line v-if="chartData" :data="chartData" :options="chartOptions" style="height: 500px" />
+    </v-row>
+    <v-row>
+      <v-col cols="12">
+        <Line v-if="chartData" ref="chartRef" :data="chartData" :options="chartOptions" style="height: 500px" />
         <v-progress-circular v-else-if="loading" indeterminate />
       </v-col>
     </v-row>
@@ -46,16 +42,17 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
   Title, Tooltip, Legend,
 } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, zoomPlugin)
 
 const periodStore = usePeriodStore()
+const chartRef = ref(null)
 const loading = ref(false)
 const rawData = ref(null)
 const activeArticles = ref([])
-const showAll = ref(false)
 
 const allArticles = computed(() =>
   (rawData.value?.datasets || [])
@@ -63,8 +60,8 @@ const allArticles = computed(() =>
     .map((d) => d.label)
 )
 
-function toggleAll(val) {
-  activeArticles.value = val ? [...allArticles.value] : []
+function toggleAll() {
+  activeArticles.value = activeArticles.value.length === allArticles.value.length ? [] : [...allArticles.value]
 }
 
 const COLORS = [
@@ -90,7 +87,13 @@ const chartData = computed(() => {
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { position: 'top' } },
+  plugins: {
+    legend: { position: 'top' },
+    zoom: {
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' },
+      pan: { enabled: true, mode: 'xy' },
+    },
+  },
   scales: { x: { ticks: { maxTicksLimit: 15 } } },
 }
 
