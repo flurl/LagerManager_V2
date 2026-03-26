@@ -42,7 +42,7 @@ class StockMovementDetailSerializer(serializers.ModelSerializer[StockMovementDet
         model = StockMovementDetail
         fields = [
             'id', 'stock_movement', 'article', 'article_name', 'quantity',
-            'unit_price', 'tax_rate', 'tax_rate_percent', 'delivery_unit',
+            'unit_price', 'tax_rate', 'tax_rate_percent',
             'line_net', 'line_gross',
         ]
 
