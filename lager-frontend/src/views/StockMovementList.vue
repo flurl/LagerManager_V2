@@ -13,37 +13,88 @@
       </v-col>
     </v-row>
 
-    <v-data-table
-      :headers="headers"
-      :items="movements"
-      :loading="loading"
-      density="compact"
-      @click:row="(_, { item }) => openDetail(item)"
-    >
-      <template #item.date="{ item }">
-        {{ formatDate(item.date) }}
-      </template>
-      <template #item.total_gross="{ item }">
-        {{ formatCurrency(item.total_gross) }}
-      </template>
-      <template #item.actions="{ item }">
-        <v-icon size="small" @click.stop="openDetail(item)">mdi-pencil</v-icon>
-        <v-icon size="small" class="ml-1" color="error" @click.stop="deleteMovement(item)">mdi-delete</v-icon>
+    <v-row dense class="mb-2">
+      <v-col cols="3">
+        <v-autocomplete v-model="filterPartner" :items="partnerOptions" label="Partner" clearable
+          density="compact" hide-details />
+      </v-col>
+      <v-col cols="5">
+        <v-autocomplete v-model="filterArticles" :items="warehouseArticles" multiple chips closable-chips
+          item-title="article_name" item-value="article" label="Artikel" clearable
+          density="compact" hide-details />
+      </v-col>
+      <v-col cols="4">
+        <v-text-field v-model="filterComment" label="Kommentar" clearable density="compact" hide-details />
+      </v-col>
+    </v-row>
+
+    <v-data-table :headers="headers" :items="filteredMovements" :loading="loading" density="compact"
+      @click:row="(_, { item }) => openDetail(item)">
+      <template #item="{ item, columns }">
+        <v-menu open-on-hover :close-delay="100" location="end" max-width="600">
+          <template #activator="{ props: menuProps }">
+            <tr v-bind="menuProps" class="v-data-table__tr cursor-pointer"
+              @click="openDetail(item)" @mouseenter="loadDetails(item.id)">
+              <td v-for="col in columns" :key="col.key"
+                :class="col.align ? `text-${col.align}` : ''"
+                class="v-data-table__td">
+                <template v-if="col.key === 'date'">{{ formatDate(item.date) }}</template>
+                <template v-else-if="col.key === 'total_net'">{{ formatCurrency(item.total_net) }}</template>
+                <template v-else-if="col.key === 'total_gross'">{{ formatCurrency(item.total_gross) }}</template>
+                <template v-else-if="col.key === 'actions'">
+                  <v-icon size="small" @click.stop="openDetail(item)">mdi-pencil</v-icon>
+                  <v-icon size="small" class="ml-1" color="error" @click.stop="deleteMovement(item)">mdi-delete</v-icon>
+                </template>
+                <template v-else>{{ item[col.key] }}</template>
+              </td>
+            </tr>
+          </template>
+          <v-card min-width="400">
+            <v-card-title class="text-subtitle-2 pb-1">Positionen</v-card-title>
+            <v-card-text class="pa-0">
+              <template v-if="detailsLoading[item.id]">
+                <div class="pa-4 text-center"><v-progress-circular indeterminate size="24" /></div>
+              </template>
+              <template v-else-if="detailsCache[item.id]?.length">
+                <v-table density="compact">
+                  <thead>
+                    <tr>
+                      <th>Artikel</th>
+                      <th class="text-end">Menge</th>
+                      <th class="text-end">EP</th>
+                      <th class="text-end">Netto</th>
+                      <th class="text-end">Brutto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="d in detailsCache[item.id]" :key="d.id">
+                      <td>{{ d.article_name }}</td>
+                      <td class="text-end">{{ d.quantity }}</td>
+                      <td class="text-end">{{ formatCurrency(d.unit_price) }}</td>
+                      <td class="text-end">{{ formatCurrency(d.line_net) }}</td>
+                      <td class="text-end">{{ formatCurrency(d.line_gross) }}</td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </template>
+              <template v-else>
+                <div class="pa-4 text-medium-emphasis text-caption">Keine Positionen</div>
+              </template>
+            </v-card-text>
+          </v-card>
+        </v-menu>
       </template>
     </v-data-table>
 
     <v-dialog v-model="dialog" max-width="900" persistent>
-      <StockMovementDialog
-        :movement="selectedMovement"
-        @saved="onSaved"
-        @close="dialog = false"
-      />
+      <StockMovementDialog :movement="selectedMovement" :movement-type="movementType" @saved="onSaved"
+        @close="dialog = false" />
     </v-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import { useCsvExport } from '../composables/useCsvExport'
 import api from '../api'
@@ -57,11 +108,35 @@ const loading = ref(false)
 const movementType = ref('delivery')
 const dialog = ref(false)
 const selectedMovement = ref(null)
+const detailsCache = ref({})
+const detailsLoading = ref({})
+const filterPartner = ref(null)
+const filterArticles = ref([])
+const filterComment = ref('')
+const warehouseArticles = ref([])
+
+const partnerOptions = computed(() => {
+  const names = [...new Set(movements.value.map(m => m.partner_name).filter(Boolean))]
+  return names.sort()
+})
+
+const filteredMovements = computed(() => {
+  let list = movements.value
+  if (filterPartner.value) {
+    list = list.filter(m => m.partner_name === filterPartner.value)
+  }
+  if (filterComment.value) {
+    const q = filterComment.value.toLowerCase()
+    list = list.filter(m => m.comment?.toLowerCase().includes(q))
+  }
+  return list
+})
 
 const headers = [
   { title: 'Datum', key: 'date' },
   { title: 'Partner', key: 'partner_name' },
   { title: 'Kommentar', key: 'comment' },
+  { title: 'Netto', key: 'total_net', align: 'end' },
   { title: 'Brutto', key: 'total_gross', align: 'end' },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
@@ -69,16 +144,39 @@ const headers = [
 async function fetchMovements() {
   if (!periodStore.currentPeriodId) return
   loading.value = true
+  detailsCache.value = {}
+  detailsLoading.value = {}
   try {
-    const res = await api.get('/stock-movements/', {
-      params: {
-        period_id: periodStore.currentPeriodId,
-        movement_type: movementType.value,
-      },
+    const params = new URLSearchParams({
+      period_id: periodStore.currentPeriodId,
+      movement_type: movementType.value,
     })
+    filterArticles.value.forEach(id => params.append('article_id', id))
+    const res = await api.get(`/stock-movements/?${params}`)
     movements.value = res.data.results || res.data
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchWarehouseArticles() {
+  if (!periodStore.currentPeriodId) return
+  const res = await api.get('/warehouse-articles/', {
+    params: { period_id: periodStore.currentPeriodId },
+  })
+  warehouseArticles.value = res.data.results || res.data
+}
+
+async function loadDetails(id) {
+  if (detailsCache.value[id] !== undefined) return
+  detailsLoading.value[id] = true
+  try {
+    const res = await api.get(`/stock-movements/${id}/details/`)
+    detailsCache.value[id] = res.data.results || res.data
+  } catch {
+    detailsCache.value[id] = []
+  } finally {
+    detailsLoading.value[id] = false
   }
 }
 
@@ -119,7 +217,22 @@ function formatCurrency(val) {
   return val != null ? Number(val).toFixed(2) + ' €' : ''
 }
 
-watch(() => periodStore.currentPeriodId, fetchMovements)
-watch(movementType, fetchMovements)
-onMounted(fetchMovements)
+watch(() => periodStore.currentPeriodId, () => {
+  filterPartner.value = null
+  filterArticles.value = []
+  filterComment.value = ''
+  fetchMovements()
+  fetchWarehouseArticles()
+})
+watch(movementType, () => {
+  filterPartner.value = null
+  filterArticles.value = []
+  filterComment.value = ''
+  fetchMovements()
+})
+watch(filterArticles, fetchMovements)
+onMounted(() => {
+  fetchMovements()
+  fetchWarehouseArticles()
+})
 </script>

@@ -1,7 +1,9 @@
 <template>
   <v-card>
-    <v-card-title class="d-flex align-center pa-4">
-      <span>{{ isNew ? 'Neue Lagerbewegung' : `Lagerbewegung #${form.id}` }}</span>
+    <v-card-title class="d-flex align-center pa-4" :class="typeConfig.bgClass">
+      <v-icon :color="typeConfig.color" size="32" class="mr-3">{{ typeConfig.icon }}</v-icon>
+      <span :class="`text-${typeConfig.color}`">{{ typeConfig.label }}</span>
+      <span v-if="!isNew" class="ml-2 text-medium-emphasis text-body-1">#{{ form.id }}</span>
       <v-spacer />
       <v-btn icon @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
     </v-card-title>
@@ -9,19 +11,13 @@
     <v-card-text>
       <v-row dense>
         <v-col cols="4">
-          <v-select
-            v-model="form.partner"
-            :items="partners"
-            item-title="name"
-            item-value="id"
-            label="Partner"
-            :rules="[v => !!v || 'Pflichtfeld']"
-          />
+          <v-select v-model="form.partner" :items="partners" item-title="name" item-value="id" label="Partner"
+            :rules="[v => !!v || 'Pflichtfeld']" />
         </v-col>
-        <v-col cols="3">
-          <v-text-field v-model="form.date" label="Datum" type="datetime-local" />
+        <v-col cols="4">
+          <v-text-field v-model="form.date" label="Datum" type="date" />
         </v-col>
-        <v-col cols="5">
+        <v-col cols="4">
           <v-text-field v-model="form.comment" label="Kommentar" />
         </v-col>
       </v-row>
@@ -51,44 +47,20 @@
         <tbody>
           <tr v-for="(line, idx) in lines" :key="idx">
             <td>
-              <v-autocomplete
-                v-model="line.article"
-                :items="warehouseArticles"
-                item-title="article_name"
-                item-value="article"
-                density="compact"
-                hide-details
-                style="min-width: 180px"
-              />
+              <v-autocomplete v-model="line.article" :items="warehouseArticles" item-title="article_name"
+                item-value="article" density="compact" hide-details style="min-width: 180px" />
             </td>
             <td>
-              <v-text-field
-                v-model.number="line.quantity"
-                type="number"
-                density="compact"
-                hide-details
-                style="width: 80px"
-              />
+              <v-text-field v-model.number="line.quantity" type="number" density="compact" hide-details
+                style="width: 80px" />
             </td>
             <td>
-              <v-text-field
-                v-model.number="line.unit_price"
-                type="number"
-                density="compact"
-                hide-details
-                style="width: 90px"
-              />
+              <v-text-field v-model.number="line.unit_price" type="number" density="compact" hide-details
+                style="width: 90px" />
             </td>
             <td>
-              <v-select
-                v-model="line.tax_rate"
-                :items="taxRates"
-                item-title="name"
-                item-value="id"
-                density="compact"
-                hide-details
-                style="width: 110px"
-              />
+              <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
+                hide-details style="width: 110px" />
             </td>
             <td class="text-right">{{ lineNet(line) }}</td>
             <td class="text-right">{{ lineGross(line) }}</td>
@@ -110,12 +82,7 @@
       <!-- Skonto -->
       <v-row class="mt-3" dense>
         <v-col cols="3">
-          <v-text-field
-            v-model.number="skontoPercent"
-            label="Skonto %"
-            type="number"
-            density="compact"
-          />
+          <v-text-field v-model.number="skontoPercent" label="Skonto %" type="number" density="compact" />
         </v-col>
         <v-col cols="auto" class="d-flex align-center">
           <v-btn size="small" @click="applySkonto" :disabled="!form.id">Skonto anwenden</v-btn>
@@ -126,7 +93,7 @@
     <v-card-actions>
       <v-spacer />
       <v-btn @click="$emit('close')">Abbrechen</v-btn>
-      <v-btn color="primary" :loading="saving" @click="save">Speichern</v-btn>
+      <v-btn :color="typeConfig.color" :loading="saving" @click="save">Speichern</v-btn>
     </v-card-actions>
   </v-card>
 </template>
@@ -138,6 +105,7 @@ import api from '../api'
 
 const props = defineProps({
   movement: { type: Object, default: null },
+  movementType: { type: String, default: 'delivery' },
 })
 const emit = defineEmits(['saved', 'close'])
 
@@ -149,23 +117,53 @@ const warehouseArticles = ref([])
 const skontoPercent = ref(0)
 
 const isNew = computed(() => !props.movement?.id)
+
+// Derive the effective type: existing movements use their own type, new ones use the prop
+const effectiveType = computed(() => props.movement?.movement_type ?? props.movementType)
+
+const typeConfig = computed(() => {
+  if (effectiveType.value === 'consumption') {
+    return {
+      label: isNew.value ? 'Neuer Verbrauch' : 'Verbrauch',
+      icon: 'mdi-package-down',
+      color: 'deep-orange',
+      bgClass: 'bg-deep-orange-lighten-5',
+      partnerType: 'consumer',
+    }
+  }
+  return {
+    label: isNew.value ? 'Neue Lieferung' : 'Lieferung',
+    icon: 'mdi-truck-delivery',
+    color: 'blue',
+    bgClass: 'bg-blue-lighten-5',
+    partnerType: 'supplier',
+  }
+})
+
 const form = ref({ partner: null, date: null, comment: '', period: null })
 const lines = ref([])
 
-function initForm() {
+async function initForm() {
   if (props.movement) {
-    form.value = { ...props.movement }
-    lines.value = (props.movement.details || []).map((d) => ({ ...d }))
+    const res = await api.get(`/stock-movements/${props.movement.id}/`)
+    const full = res.data
+    form.value = { ...full }
+    lines.value = (full.details || []).map((d) => ({ ...d }))
   } else {
     form.value = {
       partner: null,
-      date: new Date().toISOString().slice(0, 16),
+      date: new Date().toISOString().slice(0, 10),
       comment: '',
-      movement_type: 'delivery',
+      movement_type: props.movementType,
       period: periodStore.currentPeriodId,
     }
     lines.value = []
   }
+}
+
+async function loadPartners() {
+  const res = await api.get('/partners/', { params: { partner_type: typeConfig.value.partnerType } })
+  partners.value = res.data.results || res.data
 }
 
 function addLine() {
@@ -236,16 +234,16 @@ async function applySkonto() {
 }
 
 onMounted(async () => {
-  const [s, t, wa] = await Promise.all([
-    api.get('/partners/'),
+  const [t, wa] = await Promise.all([
     api.get('/tax-rates/'),
     api.get('/warehouse-articles/', { params: { period_id: periodStore.currentPeriodId } }),
   ])
-  partners.value = s.data.results || s.data
   taxRates.value = t.data.results || t.data
   warehouseArticles.value = wa.data.results || wa.data
-  initForm()
+  await loadPartners()
+  await initForm()
 })
 
 watch(() => props.movement, initForm)
+watch(effectiveType, loadPartners)
 </script>
