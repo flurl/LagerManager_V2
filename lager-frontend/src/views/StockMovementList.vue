@@ -31,60 +31,65 @@
     <v-data-table :headers="headers" :items="filteredMovements" :loading="loading" density="compact"
       @click:row="(_, { item }) => openDetail(item)">
       <template #item="{ item, columns }">
-        <v-menu open-on-hover :close-delay="100" location="end" max-width="600">
-          <template #activator="{ props: menuProps }">
-            <tr v-bind="menuProps" class="v-data-table__tr cursor-pointer"
-              @click="openDetail(item)" @mouseenter="loadDetails(item.id)">
-              <td v-for="col in columns" :key="col.key"
-                :class="col.align ? `text-${col.align}` : ''"
-                class="v-data-table__td">
-                <template v-if="col.key === 'date'">{{ formatDate(item.date) }}</template>
-                <template v-else-if="col.key === 'total_net'">{{ formatCurrency(item.total_net) }}</template>
-                <template v-else-if="col.key === 'total_gross'">{{ formatCurrency(item.total_gross) }}</template>
-                <template v-else-if="col.key === 'actions'">
-                  <v-icon size="small" @click.stop="openDetail(item)">mdi-pencil</v-icon>
-                  <v-icon size="small" class="ml-1" color="error" @click.stop="deleteMovement(item)">mdi-delete</v-icon>
-                </template>
-                <template v-else>{{ item[col.key] }}</template>
-              </td>
-            </tr>
-          </template>
-          <v-card min-width="400">
-            <v-card-title class="text-subtitle-2 pb-1">Positionen</v-card-title>
-            <v-card-text class="pa-0">
-              <template v-if="detailsLoading[item.id]">
-                <div class="pa-4 text-center"><v-progress-circular indeterminate size="24" /></div>
-              </template>
-              <template v-else-if="detailsCache[item.id]?.length">
-                <v-table density="compact">
-                  <thead>
-                    <tr>
-                      <th>Artikel</th>
-                      <th class="text-end">Menge</th>
-                      <th class="text-end">EP</th>
-                      <th class="text-end">Netto</th>
-                      <th class="text-end">Brutto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="d in detailsCache[item.id]" :key="d.id">
-                      <td>{{ d.article_name }}</td>
-                      <td class="text-end">{{ d.quantity }}</td>
-                      <td class="text-end">{{ formatCurrency(d.unit_price) }}</td>
-                      <td class="text-end">{{ formatCurrency(d.line_net) }}</td>
-                      <td class="text-end">{{ formatCurrency(d.line_gross) }}</td>
-                    </tr>
-                  </tbody>
-                </v-table>
-              </template>
-              <template v-else>
-                <div class="pa-4 text-medium-emphasis text-caption">Keine Positionen</div>
-              </template>
-            </v-card-text>
-          </v-card>
-        </v-menu>
+        <tr class="v-data-table__tr cursor-pointer"
+          @click="openDetail(item)"
+          @mouseenter="onRowEnter(item, $event)"
+          @mouseleave="onRowLeave">
+          <td v-for="col in columns" :key="col.key"
+            :class="col.align ? `text-${col.align}` : ''"
+            class="v-data-table__td">
+            <template v-if="col.key === 'date'">{{ formatDate(item.date) }}</template>
+            <template v-else-if="col.key === 'total_net'">{{ formatCurrency(item.total_net) }}</template>
+            <template v-else-if="col.key === 'total_gross'">{{ formatCurrency(item.total_gross) }}</template>
+            <template v-else-if="col.key === 'actions'">
+              <v-icon size="small" @click.stop="openDetail(item)">mdi-pencil</v-icon>
+              <v-icon size="small" class="ml-1" color="error" @click.stop="deleteMovement(item)">mdi-delete</v-icon>
+            </template>
+            <template v-else>{{ item[col.key] }}</template>
+          </td>
+        </tr>
       </template>
     </v-data-table>
+
+    <Teleport to="body">
+      <div v-if="detailOverlay && hoveredItem"
+        :style="{ position: 'fixed', top: rowBottom + 'px', left: 0, right: 0, zIndex: 2000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }">
+        <v-card min-width="400" max-width="600" style="pointer-events: auto"
+          @mouseenter="onOverlayEnter" @mouseleave="onOverlayLeave">
+          <v-card-title class="text-subtitle-2 pb-1">Positionen</v-card-title>
+          <v-card-text class="pa-0">
+            <template v-if="detailsLoading[hoveredItem.id]">
+              <div class="pa-4 text-center"><v-progress-circular indeterminate size="24" /></div>
+            </template>
+            <template v-else-if="detailsCache[hoveredItem.id]?.length">
+              <v-table density="compact">
+                <thead>
+                  <tr>
+                    <th>Artikel</th>
+                    <th class="text-end">Menge</th>
+                    <th class="text-end">EP</th>
+                    <th class="text-end">Netto</th>
+                    <th class="text-end">Brutto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="d in detailsCache[hoveredItem.id]" :key="d.id">
+                    <td>{{ d.article_name }}</td>
+                    <td class="text-end">{{ d.quantity }}</td>
+                    <td class="text-end">{{ formatCurrency(d.unit_price) }}</td>
+                    <td class="text-end">{{ formatCurrency(d.line_net) }}</td>
+                    <td class="text-end">{{ formatCurrency(d.line_gross) }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </template>
+            <template v-else>
+              <div class="pa-4 text-medium-emphasis text-caption">Keine Positionen</div>
+            </template>
+          </v-card-text>
+        </v-card>
+      </div>
+    </Teleport>
 
     <v-dialog v-model="dialog" max-width="900" persistent>
       <StockMovementDialog :movement="selectedMovement" :movement-type="movementType" @saved="onSaved"
@@ -110,6 +115,11 @@ const dialog = ref(false)
 const selectedMovement = ref(null)
 const detailsCache = ref({})
 const detailsLoading = ref({})
+const detailOverlay = ref(false)
+const hoveredItem = ref(null)
+let showTimer = null
+let hideTimer = null
+const rowBottom = ref(0)
 const filterPartner = ref(null)
 const filterArticles = ref([])
 const filterComment = ref('')
@@ -165,6 +175,32 @@ async function fetchWarehouseArticles() {
     params: { period_id: periodStore.currentPeriodId },
   })
   warehouseArticles.value = res.data.results || res.data
+}
+
+function onRowEnter(item, event) {
+  clearTimeout(hideTimer)
+  const bottom = event.currentTarget.getBoundingClientRect().bottom
+  showTimer = setTimeout(() => {
+    rowBottom.value = bottom
+    hoveredItem.value = item
+    detailOverlay.value = true
+    loadDetails(item.id)
+  }, 1000)
+}
+
+function onRowLeave() {
+  clearTimeout(showTimer)
+  hideTimer = setTimeout(() => {
+    detailOverlay.value = false
+  }, 150)
+}
+
+function onOverlayEnter() {
+  clearTimeout(hideTimer)
+}
+
+function onOverlayLeave() {
+  detailOverlay.value = false
 }
 
 async function loadDetails(id) {
