@@ -96,7 +96,7 @@ class StockMovement(models.Model):
     def clean(self) -> None:
         if self.date and self.period_id:
             period = self.period
-            if not (period.start <= self.date <= period.end):
+            if not (period.start.date() <= self.date <= period.end.date()):
                 raise ValidationError(
                     {'date': f'Datum muss zwischen {period.start} und {period.end} liegen.'}
                 )
