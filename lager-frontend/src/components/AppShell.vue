@@ -117,6 +117,7 @@ const navGroups = [
     icon: 'mdi-cog',
     items: [
       { to: '/import', icon: 'mdi-database-import', title: 'Daten importieren' },
+      { to: '/settings', icon: 'mdi-tune', title: 'Einstellungen' },
     ],
   },
 ]

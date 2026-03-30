@@ -57,6 +57,11 @@ const routes = [
     component: () => import('./views/TaxRateCrud.vue'),
     meta: { title: 'Steuersätze' },
   },
+  {
+    path: '/settings',
+    component: () => import('./views/SystemSettingsView.vue'),
+    meta: { title: 'Einstellungen' },
+  },
 ]
 
 export default createRouter({

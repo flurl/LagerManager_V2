@@ -132,6 +132,5 @@ CORS_ALLOW_CREDENTIALS: bool = True
 
 CONSTANCE_BACKEND: str = 'constance.backends.database.DatabaseBackend'
 CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
-    # 'KEY': (default_value, 'Beschreibung', type)
-    # Beispiel: 'MWST_SATZ': (0.20, 'Mehrwertsteuersatz (Normal)', float),
+    'DEFAULT_TAX_RATE_ID': (0, 'Standard-Steuersatz (TaxRate-ID, 0 = keiner)', int),
 }
