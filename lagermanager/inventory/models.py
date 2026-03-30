@@ -15,8 +15,6 @@ class PeriodStartStockLevel(models.Model):
     period = models.ForeignKey(
         Period,
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name='stock_levels',
         db_column='periode_id',
     )
@@ -73,8 +71,6 @@ class PhysicalCount(models.Model):
     period = models.ForeignKey(
         Period,
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name='physical_counts',
         db_column='gst_periode_id',
     )

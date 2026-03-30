@@ -352,7 +352,7 @@ class Article(models.Model):
     rksv = models.BooleanField(db_column='artikel_rksv')
     external_receipt = models.BooleanField(db_column='artikel_externer_beleg')
     period = models.ForeignKey(
-        Period, on_delete=models.CASCADE, null=True, blank=True, db_column='artikel_periode')
+        Period, on_delete=models.CASCADE, db_column='artikel_periode')
 
     class Meta:
         db_table = 'artikel_basis'
@@ -455,7 +455,7 @@ class WarehouseArticle(models.Model):
     min_stock = models.DecimalField(
         max_digits=10, decimal_places=3, db_column='lager_artikel_minStand')
     period = models.ForeignKey(Period, on_delete=models.CASCADE,
-                               null=True, blank=True, db_column='lager_artikel_periode')
+                               db_column='lager_artikel_periode')
 
     class Meta:
         db_table = 'lager_artikel'
