@@ -67,22 +67,19 @@ class StockMovementViewSet(viewsets.ModelViewSet[StockMovement]):
             qs = qs.filter(period_id=period_id)
         if movement_type:
             qs = qs.filter(movement_type=movement_type)
+        partner_id = self.request.query_params.get('partner_id')
+        if partner_id:
+            qs = qs.filter(partner_id=partner_id)
+        date = self.request.query_params.get('date')
+        if date:
+            qs = qs.filter(date=date)
         article_ids = self.request.query_params.getlist('article_id')
         if article_ids:
             qs = qs.filter(details__article__in=article_ids).distinct()
         return qs
 
     def perform_create(self, serializer: BaseSerializer[StockMovement]) -> None:
-        movement = serializer.save()
-        # Auto-assign period from date if not provided
-        if not movement.period_id:
-            from core.models import Period
-            period = Period.objects.filter(
-                start__lte=movement.date, end__gte=movement.date
-            ).first()
-            if period:
-                movement.period = period
-                movement.save(update_fields=['period'])
+        serializer.save()
 
     @action(detail=True, methods=['post'])
     def apply_discount(self, request: Request, pk: int | None = None) -> Response:

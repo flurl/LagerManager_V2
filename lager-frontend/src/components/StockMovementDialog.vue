@@ -15,7 +15,7 @@
             :rules="[v => !!v || 'Pflichtfeld']" />
         </v-col>
         <v-col cols="4">
-          <v-text-field v-model="form.date" label="Datum" type="date" />
+          <v-text-field v-model="form.date" label="Datum" type="date" :error-messages="dateError" />
         </v-col>
         <v-col cols="4">
           <v-text-field v-model="form.comment" label="Kommentar" />
@@ -26,7 +26,10 @@
 
       <!-- Detail lines -->
       <v-row class="mb-1" align="center">
-        <v-col><strong>Positionen</strong></v-col>
+        <v-col>
+          <strong>Positionen</strong>
+          <span v-if="linesError" class="ml-3 text-error text-caption">{{ linesError }}</span>
+        </v-col>
         <v-col cols="auto">
           <v-btn size="small" prepend-icon="mdi-plus" @click="addLine">Position hinzufügen</v-btn>
         </v-col>
@@ -60,7 +63,7 @@
             </td>
             <td>
               <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
-                hide-details style="width: 110px" />
+                hide-details style="width: 110px" :error="!line.tax_rate" />
             </td>
             <td class="text-right">{{ lineNet(line) }}</td>
             <td class="text-right">{{ lineGross(line) }}</td>
@@ -96,6 +99,25 @@
       <v-btn :color="typeConfig.color" :loading="saving" @click="save">Speichern</v-btn>
     </v-card-actions>
   </v-card>
+
+  <!-- Duplicate warning dialog -->
+  <v-dialog v-model="duplicateDialog" max-width="480">
+    <v-card>
+      <v-card-title class="d-flex align-center pa-4 bg-warning-lighten-5">
+        <v-icon color="warning" size="28" class="mr-2">mdi-alert</v-icon>
+        <span class="text-warning">Bereits vorhanden</span>
+      </v-card-title>
+      <v-card-text class="pt-4">
+        Es {{ duplicateCount === 1 ? 'existiert bereits ein Eintrag' : `existieren bereits ${duplicateCount} Einträge` }}
+        für diesen Partner am selben Tag. Trotzdem speichern?
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="duplicateDialog = false">Abbrechen</v-btn>
+        <v-btn color="warning" @click="confirmSave">Trotzdem speichern</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup>
@@ -115,6 +137,11 @@ const partners = ref([])
 const taxRates = ref([])
 const warehouseArticles = ref([])
 const skontoPercent = ref(0)
+const duplicateDialog = ref(false)
+const duplicateCount = ref(0)
+const dateError = ref('')
+const linesError = ref('')
+const defaultTaxRateId = ref(null)
 
 const isNew = computed(() => !props.movement?.id)
 
@@ -144,6 +171,8 @@ const form = ref({ partner: null, date: null, comment: '', period: null })
 const lines = ref([])
 
 async function initForm() {
+  dateError.value = ''
+  linesError.value = ''
   if (props.movement) {
     const res = await api.get(`/stock-movements/${props.movement.id}/`)
     const full = res.data
@@ -167,7 +196,7 @@ async function loadPartners() {
 }
 
 function addLine() {
-  lines.value.push({ article: null, quantity: 1, unit_price: 0, tax_rate: null })
+  lines.value.push({ article: null, quantity: 1, unit_price: 0, tax_rate: defaultTaxRateId.value })
 }
 
 function removeLine(idx) {
@@ -197,6 +226,47 @@ const totalGross = computed(() =>
 )
 
 async function save() {
+  dateError.value = ''
+  linesError.value = ''
+
+  const period = periodStore.currentPeriod
+  if (form.value.date && period) {
+    if (form.value.date < period.start || form.value.date > period.end) {
+      dateError.value = `Datum muss zwischen ${period.start} und ${period.end} liegen`
+    }
+  }
+  if (lines.value.length === 0) {
+    linesError.value = 'Mindestens eine Position erforderlich'
+  } else if (lines.value.some((l) => !l.tax_rate)) {
+    linesError.value = 'Alle Positionen müssen einen Steuersatz haben'
+  }
+  if (dateError.value || linesError.value) return
+
+  if (form.value.partner && form.value.date) {
+    const res = await api.get('/stock-movements/', {
+      params: {
+        partner_id: form.value.partner,
+        date: form.value.date,
+        period_id: periodStore.currentPeriodId,
+        movement_type: effectiveType.value,
+      },
+    })
+    const matches = (res.data.results ?? res.data).filter((m) => m.id !== form.value.id)
+    if (matches.length > 0) {
+      duplicateCount.value = matches.length
+      duplicateDialog.value = true
+      return
+    }
+  }
+  await doSave()
+}
+
+async function confirmSave() {
+  duplicateDialog.value = false
+  await doSave()
+}
+
+async function doSave() {
   saving.value = true
   try {
     let movementId = form.value.id
@@ -234,12 +304,15 @@ async function applySkonto() {
 }
 
 onMounted(async () => {
-  const [t, wa] = await Promise.all([
+  const [t, wa, cfg] = await Promise.all([
     api.get('/tax-rates/'),
     api.get('/warehouse-articles/', { params: { period_id: periodStore.currentPeriodId } }),
+    api.get('/config/'),
   ])
   taxRates.value = t.data.results || t.data
   warehouseArticles.value = wa.data.results || wa.data
+  const defaultId = cfg.data.config?.DEFAULT_TAX_RATE_ID?.value
+  defaultTaxRateId.value = defaultId || null
   await loadPartners()
   await initForm()
 })

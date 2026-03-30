@@ -154,9 +154,7 @@ class StockMovementDetail(models.Model):
         max_digits=10, decimal_places=4, db_column='einkaufspreis')
     tax_rate = models.ForeignKey(
         TaxRate,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         db_column='lde_stsid',
     )
 
@@ -172,9 +170,7 @@ class StockMovementDetail(models.Model):
 
     @property
     def line_gross(self) -> Decimal:
-        if self.tax_rate:
-            return self.line_net * (1 + self.tax_rate.percent / 100)
-        return self.line_net
+        return self.line_net * (1 + self.tax_rate.percent / 100)
 
 
 class Document(models.Model):
