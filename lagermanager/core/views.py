@@ -4,7 +4,6 @@ from constance import config as constance_cfg
 from django.conf import settings
 from django.db.models.query import QuerySet
 from rest_framework import status, viewsets
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,17 +15,14 @@ from .serializers import PeriodSerializer, WorkplaceSerializer
 class PeriodViewSet(viewsets.ModelViewSet):
     queryset: QuerySet[Period, Period] = Period.objects.all()
     serializer_class = PeriodSerializer
-    permission_classes: list[type[IsAuthenticated]] = [IsAuthenticated]
 
 
 class WorkplaceViewSet(viewsets.ModelViewSet):
     queryset: QuerySet[Workplace, Workplace] = Workplace.objects.all()
     serializer_class = WorkplaceSerializer
-    permission_classes: list[type[IsAuthenticated]] = [IsAuthenticated]
 
 
 class ConfigView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         can_edit = request.user.has_perm('constance.change_config')
