@@ -12,12 +12,12 @@ from .models import Period, Workplace
 from .serializers import PeriodSerializer, WorkplaceSerializer
 
 
-class PeriodViewSet(viewsets.ModelViewSet):
+class PeriodViewSet(viewsets.ModelViewSet[Period]):
     queryset: QuerySet[Period, Period] = Period.objects.all()
     serializer_class = PeriodSerializer
 
 
-class WorkplaceViewSet(viewsets.ModelViewSet):
+class WorkplaceViewSet(viewsets.ModelViewSet[Workplace]):
     queryset: QuerySet[Workplace, Workplace] = Workplace.objects.all()
     serializer_class = WorkplaceSerializer
 
