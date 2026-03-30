@@ -1,4 +1,6 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from .models import (
     DocumentType,
@@ -62,6 +64,22 @@ class StockMovementSerializer(serializers.ModelSerializer[StockMovement]):
             'comment', 'period', 'total_net', 'total_gross', 'details',
             'created_at', 'updated_at',
         ]
+
+    def validate(self, attrs: dict) -> dict:
+        # Build an unsaved instance to run model-level clean()
+        instance = self.instance or StockMovement()
+        for field, value in attrs.items():
+            setattr(instance, field if not field.endswith('_id') else field, value)
+        # Resolve FK id attributes expected by clean()
+        if 'period' in attrs:
+            instance.period = attrs['period']
+        if 'date' in attrs:
+            instance.date = attrs['date']
+        try:
+            instance.clean()
+        except DjangoValidationError as exc:
+            raise DRFValidationError(exc.message_dict) from exc
+        return attrs
 
 
 class EkModifierSerializer(serializers.ModelSerializer[EkModifier]):

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from core.models import Period
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import DecimalField, ExpressionWrapper, F, Sum
 from pos_import.models import Article
@@ -77,8 +78,6 @@ class StockMovement(models.Model):
     period = models.ForeignKey(
         Period,
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name='stock_movements',
         db_column='lie_periode_id',
     )
@@ -93,6 +92,14 @@ class StockMovement(models.Model):
         label = self.Type(
             self.movement_type).label if self.movement_type else 'Bewegung'
         return f"{label} {self.id} – {self.date:%Y-%m-%d}"
+
+    def clean(self) -> None:
+        if self.date and self.period_id:
+            period = self.period
+            if not (period.start <= self.date <= period.end):
+                raise ValidationError(
+                    {'date': f'Datum muss zwischen {period.start} und {period.end} liegen.'}
+                )
 
     def apply_skonto(self, percent: float) -> None:
         """Apply a percentage discount to all detail line prices. Modifies unit_price in place."""
