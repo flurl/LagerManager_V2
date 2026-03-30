@@ -3,12 +3,15 @@ Stock calculation service.
 
 Current Stock[day] = Initial Inventory + Σ Deliveries[1..day] - Σ Consumption[1..day]
 
-The consumption query is the UNION of:
-  1. Recipe-based consumption: bondetail_amount * recipe_qty / unit_multiplier
-  2. Direct consumption: bondetail_amount (articles with no recipe)
+Consumption has two sources:
+  1. POS/Wiffzack consumption (get_daily_pos_consumption): raw SQL UNION of recipe-based
+     and direct consumption from POS import tables.
+  2. Manual consumption (get_daily_movements with CONSUMPTION type): StockMovement records
+     entered manually in the app.
 """
 import datetime
 import logging
+from collections.abc import Sequence
 
 from django.db import connection
 
@@ -65,9 +68,10 @@ CONSUMPTION_QUERY = """
 """
 
 
-def get_daily_consumption(period_id: int) -> dict[datetime.date, dict[str, float]]:
+def get_daily_pos_consumption(period_id: int) -> dict[datetime.date, dict[str, float]]:
     """
-    Returns {date: {article_name: amount}} for all consumption in the period.
+    Returns {date: {article_name: amount}} for POS/Wiffzack consumption in the period.
+    Uses recipe decomposition for articles with recipes, direct amounts otherwise.
     """
     result: dict[datetime.date, dict[str, float]] = {}
     with connection.cursor() as cur:
@@ -84,22 +88,28 @@ def get_daily_consumption(period_id: int) -> dict[datetime.date, dict[str, float
     return result
 
 
-def get_daily_deliveries(period_id: int) -> dict[datetime.date, dict[str, float]]:
+def get_daily_movements(
+    period_id: int,
+    movement_types: Sequence[str],
+) -> dict[datetime.date, dict[str, float]]:
     """
-    Returns {date: {article_name: amount}} for all deliveries in the period.
+    Returns {date: {article_name: amount}} for StockMovements of the given types.
+
+    Quantities are always positive — the caller is responsible for applying the correct
+    sign (add for DELIVERY, subtract for CONSUMPTION).
     """
     from core.models import Period
     from deliveries.models import StockMovement
 
     period = Period.objects.get(pk=period_id)
     result: dict[datetime.date, dict[str, float]] = {}
-    deliveries = StockMovement.objects.filter(
-        period=period, movement_type=StockMovement.Type.DELIVERY
+    movements = StockMovement.objects.filter(
+        period=period, movement_type__in=movement_types
     ).prefetch_related('details__article')
 
-    for delivery in deliveries:
-        day = delivery.date
-        for detail in delivery.details.all():
+    for movement in movements:
+        day = movement.date
+        for detail in movement.details.all():
             name = detail.article.name
             day_data = result.setdefault(day, {})
             day_data[name] = day_data.get(name, 0) + float(detail.quantity)
@@ -113,8 +123,9 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
     Returns list of {date, article_name, stock, counted, diff} records.
     """
     from core.models import Period
+    from deliveries.models import StockMovement
 
-    from inventory.models import PhysicalCount, PeriodStartStockLevel
+    from inventory.models import PeriodStartStockLevel, PhysicalCount
 
     period = Period.objects.get(pk=period_id)
 
@@ -123,10 +134,15 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
     for sl in PeriodStartStockLevel.objects.filter(period=period).select_related('article'):
         initial[sl.article.name] = float(sl.quantity)
 
-    daily_deliveries: dict[datetime.date,
-                           dict[str, float]] = get_daily_deliveries(period_id)
-    daily_consumption: dict[datetime.date,
-                            dict[str, float]] = get_daily_consumption(period_id)
+    daily_deliveries: dict[datetime.date, dict[str, float]] = get_daily_movements(
+        period_id, (StockMovement.Type.DELIVERY,)
+    )
+    daily_manual_consumption: dict[datetime.date, dict[str, float]] = get_daily_movements(
+        period_id, (StockMovement.Type.CONSUMPTION,)
+    )
+    daily_pos_consumption: dict[datetime.date, dict[str, float]] = get_daily_pos_consumption(
+        period_id
+    )
 
     # Physical counts keyed by (date, article_name)
     counts: dict[tuple[datetime.date, str], float] = {}
@@ -137,7 +153,9 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
     all_articles = set(initial.keys())
     for day_data in daily_deliveries.values():
         all_articles.update(day_data.keys())
-    for day_data in daily_consumption.values():
+    for day_data in daily_manual_consumption.values():
+        all_articles.update(day_data.keys())
+    for day_data in daily_pos_consumption.values():
         all_articles.update(day_data.keys())
 
     # Iterate day by day
@@ -151,7 +169,8 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
             running[article] = (
                 running[article]
                 + daily_deliveries.get(current_date, {}).get(article, 0.0)
-                - daily_consumption.get(current_date, {}).get(article, 0.0)
+                - daily_manual_consumption.get(current_date, {}).get(article, 0.0)
+                - daily_pos_consumption.get(current_date, {}).get(article, 0.0)
             )
             counted = counts.get((current_date, article))
             result.append({
