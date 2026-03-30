@@ -32,6 +32,7 @@
       @click:row="(_, { item }) => openDetail(item)">
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
+          :style="hoveredRowId === item.id ? { backgroundColor: HIGHLIGHT_COLOR } : {}"
           @click="openDetail(item)"
           @mouseenter="onRowEnter(item, $event)"
           @mouseleave="onRowLeave">
@@ -53,8 +54,20 @@
 
     <Teleport to="body">
       <div v-if="detailOverlay && hoveredItem"
-        :style="{ position: 'fixed', top: rowBottom + 'px', left: 0, right: 0, zIndex: 2000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }">
-        <v-card min-width="400" max-width="600" style="pointer-events: auto"
+        :style="overlayStyle">
+        <v-card min-width="400" max-width="600" :color="HIGHLIGHT_COLOR"
+          :style="{
+            pointerEvents: 'auto',
+            borderLeft: `2px solid ${HIGHLIGHT_COLOR}`,
+            borderRight: `2px solid ${HIGHLIGHT_COLOR}`,
+            borderTop: overlayAbove ? `2px solid ${HIGHLIGHT_COLOR}` : 'none',
+            borderBottom: overlayAbove ? 'none' : `2px solid ${HIGHLIGHT_COLOR}`,
+            borderTopLeftRadius: overlayAbove ? undefined : 0,
+            borderTopRightRadius: overlayAbove ? undefined : 0,
+            borderBottomLeftRadius: overlayAbove ? 0 : undefined,
+            borderBottomRightRadius: overlayAbove ? 0 : undefined,
+            boxShadow: 'none',
+          }"
           @mouseenter="onOverlayEnter" @mouseleave="onOverlayLeave">
           <v-card-title class="text-subtitle-2 pb-1">Positionen</v-card-title>
           <v-card-text class="pa-0">
@@ -117,13 +130,26 @@ const detailsCache = ref({})
 const detailsLoading = ref({})
 const detailOverlay = ref(false)
 const hoveredItem = ref(null)
+const hoveredRowId = ref(null)
 let showTimer = null
 let hideTimer = null
+const HIGHLIGHT_COLOR = '#dbeafe'
 const rowBottom = ref(0)
+const rowTop = ref(0)
 const filterPartner = ref(null)
 const filterArticles = ref([])
 const filterComment = ref('')
 const warehouseArticles = ref([])
+
+const overlayAbove = computed(() => rowBottom.value > window.innerHeight / 2)
+
+const overlayStyle = computed(() => {
+  const base = { position: 'fixed', left: 0, right: 0, zIndex: 2000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }
+  if (overlayAbove.value) {
+    return { ...base, bottom: (window.innerHeight - rowTop.value) + 'px' }
+  }
+  return { ...base, top: rowBottom.value + 'px' }
+})
 
 const partnerOptions = computed(() => {
   const names = [...new Set(movements.value.map(m => m.partner_name).filter(Boolean))]
@@ -179,9 +205,11 @@ async function fetchWarehouseArticles() {
 
 function onRowEnter(item, event) {
   clearTimeout(hideTimer)
-  const bottom = event.currentTarget.getBoundingClientRect().bottom
+  hoveredRowId.value = item.id
+  const rect = event.currentTarget.getBoundingClientRect()
   showTimer = setTimeout(() => {
-    rowBottom.value = bottom
+    rowBottom.value = rect.bottom
+    rowTop.value = rect.top
     hoveredItem.value = item
     detailOverlay.value = true
     loadDetails(item.id)
@@ -192,6 +220,7 @@ function onRowLeave() {
   clearTimeout(showTimer)
   hideTimer = setTimeout(() => {
     detailOverlay.value = false
+    hoveredRowId.value = null
   }, 150)
 }
 
@@ -201,6 +230,7 @@ function onOverlayEnter() {
 
 function onOverlayLeave() {
   detailOverlay.value = false
+  hoveredRowId.value = null
 }
 
 async function loadDetails(id) {
