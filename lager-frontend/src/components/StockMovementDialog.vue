@@ -142,6 +142,7 @@ const duplicateCount = ref(0)
 const dateError = ref('')
 const linesError = ref('')
 const defaultTaxRateId = ref(null)
+const originalDetailIds = ref([])
 
 const isNew = computed(() => !props.movement?.id)
 
@@ -178,6 +179,7 @@ async function initForm() {
     const full = res.data
     form.value = { ...full }
     lines.value = (full.details || []).map((d) => ({ ...d }))
+    originalDetailIds.value = (full.details || []).map((d) => d.id)
   } else {
     form.value = {
       partner: null,
@@ -279,10 +281,10 @@ async function doSave() {
     } else {
       await api.put(`/stock-movements/${movementId}/`, form.value)
       // Delete all existing details and re-create
-      const existing = props.movement?.details || []
       await Promise.all(
-        existing.map((d) => api.delete(`/stock-movements/${movementId}/details/${d.id}/`))
+        originalDetailIds.value.map((id) => api.delete(`/stock-movements/${movementId}/details/${id}/`))
       )
+      originalDetailIds.value = []
     }
     // Create detail lines
     await Promise.all(
