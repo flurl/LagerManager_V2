@@ -54,10 +54,10 @@
                 item-value="article" density="compact" hide-details style="min-width: 180px" />
             </td>
             <td>
-              <NumberInput v-model="line.quantity" density="compact" hide-details style="width: 80px" />
+              <NumberInput v-model="line.quantity" density="compact" hide-details style="width: 120px" />
             </td>
             <td>
-              <NumberInput v-model="line.unit_price" density="compact" hide-details style="width: 90px" />
+              <NumberInput v-model="line.unit_price" density="compact" hide-details style="width: 130px" />
             </td>
             <td>
               <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"

@@ -104,7 +104,7 @@
       </div>
     </Teleport>
 
-    <v-dialog v-model="dialog" max-width="900" persistent>
+    <v-dialog v-model="dialog" max-width="1100" persistent>
       <StockMovementDialog :movement="selectedMovement" :movement-type="movementType" @saved="onSaved"
         @close="dialog = false" />
     </v-dialog>
