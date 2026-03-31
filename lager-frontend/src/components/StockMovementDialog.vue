@@ -54,14 +54,29 @@
                 item-value="article" density="compact" hide-details style="min-width: 180px" />
             </td>
             <td>
-              <NumberInput v-model="line.quantity" density="compact" hide-details style="width: 120px" />
+              <NumberInput v-model="line.quantity" hide-controls density="compact" hide-details style="width: 120px" />
             </td>
             <td>
-              <NumberInput v-model="line.unit_price" density="compact" hide-details style="width: 130px" />
+              <div class="d-flex align-center">
+                <NumberInput v-model="line.unit_price" :decimals="4" hide-controls density="compact" hide-details
+                  style="width: 130px" />
+                <v-icon size="small" class="ml-1 text-medium-emphasis" style="cursor: pointer"
+                  title="Gesamtpreis durch Menge teilen"
+                  @click="line.quantity ? line.unit_price = +(line.unit_price / line.quantity).toFixed(4) : null">
+                  mdi-division
+                </v-icon>
+              </div>
             </td>
             <td>
-              <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
-                hide-details style="width: 110px" :error="!line.tax_rate" />
+              <div class="d-flex align-center">
+                <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
+                  hide-details style="width: 110px" :error="!line.tax_rate" />
+                <v-icon size="small" class="ml-1 text-medium-emphasis" style="cursor: pointer"
+                  title="Bruttopreis in Nettopreis umrechnen"
+                  @click="line.tax_rate ? line.unit_price = +(line.unit_price / (1 + getTaxPercent(line.tax_rate) / 100)).toFixed(4) : null">
+                  mdi-percent-outline
+                </v-icon>
+              </div>
             </td>
             <td class="text-right">{{ lineNet(line) }}</td>
             <td class="text-right">{{ lineGross(line) }}</td>
@@ -106,7 +121,8 @@
         <span class="text-warning">Bereits vorhanden</span>
       </v-card-title>
       <v-card-text class="pt-4">
-        Es {{ duplicateCount === 1 ? 'existiert bereits ein Eintrag' : `existieren bereits ${duplicateCount} Einträge` }}
+        Es {{ duplicateCount === 1 ? 'existiert bereits ein Eintrag' : `existieren bereits ${duplicateCount} Einträge`
+        }}
         für diesen Partner am selben Tag. Trotzdem speichern?
       </v-card-text>
       <v-card-actions>
