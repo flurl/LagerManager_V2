@@ -1,55 +1,58 @@
 """
-Total deliveries report — grouped delivery listing with monthly/yearly totals.
+Total deliveries report — aggregated by article with purchase price.
 """
 from decimal import Decimal
 
 from core.models import Period
-from deliveries.models import StockMovement
+from core.services.purchase_price import get_purchase_price
+from deliveries.models import StockMovement, StockMovementDetail
+from django.db.models import DecimalField, ExpressionWrapper, F, Sum
+from pos_import.models import WarehouseArticle
 
 
 def get_total_deliveries_report(period_id: int) -> dict[str, object]:
     """
-    Returns deliveries grouped by month with totals.
+    Returns deliveries aggregated by article with total quantity, total value,
+    and weighted-average purchase price (EK) per article.
     """
-    period = Period.objects.get(pk=period_id)
-    deliveries = StockMovement.objects.filter(
-        period=period, movement_type=StockMovement.Type.DELIVERY
-    ).select_related('partner').prefetch_related('details__tax_rate').order_by('date')
+    period: Period = Period.objects.get(pk=period_id)
+    year: str = str(period.checkpoint_year or period.start.year)
 
-    rows = []
-    monthly_totals = {}
-    grand_total_net = Decimal('0.00')
-    grand_total_gross = Decimal('0.00')
+    details = (
+        StockMovementDetail.objects
+        .filter(
+            stock_movement__period_id=period_id,
+            stock_movement__movement_type=StockMovement.Type.DELIVERY,
+        )
+        .values('article_id', 'article__name')
+        .annotate(
+            total_quantity=Sum('quantity'),
+            total_value=Sum(
+                ExpressionWrapper(
+                    F('quantity') * F('unit_price'),
+                    output_field=DecimalField(max_digits=18, decimal_places=4),
+                )
+            ),
+        )
+        .order_by('article__name')
+    )
 
-    for delivery in deliveries:
-        net = delivery.total_net
-        gross = delivery.total_gross
-        month_key = delivery.date.strftime('%Y-%m')
+    unit_map: dict[int, str] = {
+        wa.article_id: wa.unit.name if wa.unit else ''
+        for wa in WarehouseArticle.objects.filter(period_id=period_id).select_related('unit')
+    }
 
-        if month_key not in monthly_totals:
-            monthly_totals[month_key] = {'net': Decimal('0.00'), 'gross': Decimal('0.00')}
-
-        monthly_totals[month_key]['net'] += Decimal(str(net))
-        monthly_totals[month_key]['gross'] += Decimal(str(gross))
-        grand_total_net += Decimal(str(net))
-        grand_total_gross += Decimal(str(gross))
-
+    rows: list[dict[str, object]] = []
+    for d in details:
+        article_pk: int = d['article_id']
+        avg_price: Decimal = get_purchase_price(article_pk, period_id)
         rows.append({
-            'id': delivery.id,
-            'date': delivery.date.isoformat(),
-            'partner': delivery.partner.name,
-            'comment': delivery.comment or '',
-            'net': float(net),
-            'gross': float(gross),
-            'month': month_key,
+            'date': year,
+            'article': d['article__name'],
+            'quantity': float(d['total_quantity'] or 0),
+            'unit': unit_map.get(article_pk, ''),
+            'total_value': float(d['total_value'] or 0),
+            'avg_price': float(avg_price),
         })
 
-    return {
-        'deliveries': rows,
-        'monthly_totals': {
-            k: {'net': float(v['net']), 'gross': float(v['gross'])}
-            for k, v in monthly_totals.items()
-        },
-        'grand_total_net': float(grand_total_net),
-        'grand_total_gross': float(grand_total_gross),
-    }
+    return {'deliveries': rows}

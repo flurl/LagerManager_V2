@@ -1,22 +1,15 @@
 <template>
   <div>
-    <ReportTable :headers="headers" :items="items" :loading="loading" title="Gesamte Lieferungen"
-      csv-filename="gesamte_lieferungen.csv" group-by="date" :group-by-fn="(d) => d.slice(0, 7)">
-      <template #item.net="{ item }">{{ item.net.toFixed(2) }} €</template>
-      <template #item.gross="{ item }">{{ item.gross.toFixed(2) }} €</template>
-      <template #body.append>
-        <tr>
-          <td colspan="3"><strong>Jahresgesamt</strong></td>
-          <td class="text-right"><strong>{{ grandTotalNet.toFixed(2) }} €</strong></td>
-          <td class="text-right"><strong>{{ grandTotalGross.toFixed(2) }} €</strong></td>
-        </tr>
-      </template>
+    <ReportTable :headers="headers" :items="items" :loading="loading" title="Insgesamt gelieferte Artikel"
+      csv-filename="gesamte_lieferungen.csv">
+      <template #item.total_value="{ item }">{{ item.total_value.toFixed(2) }}</template>
+      <template #item.avg_price="{ item }">{{ item.avg_price.toFixed(2) }}</template>
     </ReportTable>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
 import ReportTable from '../components/ReportTable.vue'
@@ -27,14 +20,12 @@ const loading = ref(false)
 
 const headers = [
   { title: 'Datum', key: 'date' },
-  { title: 'Partner', key: 'partner' },
-  { title: 'Kommentar', key: 'comment' },
-  { title: 'Netto', key: 'net', align: 'end' },
-  { title: 'Brutto', key: 'gross', align: 'end' },
+  { title: 'Artikel', key: 'article' },
+  { title: 'Anzahl', key: 'quantity', align: 'end' },
+  { title: 'Einheit', key: 'unit' },
+  { title: 'Warenwert', key: 'total_value', align: 'end' },
+  { title: 'Warenwert Durchschnitt', key: 'avg_price', align: 'end' },
 ]
-
-const grandTotalNet = computed(() => items.value.reduce((s, i) => s + Number(i.net), 0))
-const grandTotalGross = computed(() => items.value.reduce((s, i) => s + Number(i.gross), 0))
 
 async function fetchData() {
   if (!periodStore.currentPeriodId) return
