@@ -8,8 +8,8 @@ const routes = [
     meta: { title: 'Lagerbewegungen' },
   },
   {
-    path: '/stock-levels',
-    component: () => import('./views/StockLevelTable.vue'),
+    path: '/period-start-stock',
+    component: () => import('./views/PeriodStartStockView.vue'),
     meta: { title: 'Lagerstand' },
   },
   {

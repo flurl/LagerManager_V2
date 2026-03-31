@@ -81,7 +81,7 @@ const navGroups = [
     icon: 'mdi-warehouse',
     items: [
       { to: '/stock-movements', icon: 'mdi-receipt-text', title: 'Lagerbewegungen' },
-      { to: '/stock-levels', icon: 'mdi-format-list-numbered', title: 'Periode Start-Stand' },
+      { to: '/period-start-stock', icon: 'mdi-format-list-numbered', title: 'Periode Start-Stand' },
       { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand' },
       { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand' },
     ],
