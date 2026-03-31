@@ -1,12 +1,7 @@
 <template>
   <div>
-    <ReportTable
-      :headers="headers"
-      :items="items"
-      :loading="loading"
-      title="Gesamte Lieferungen"
-      csv-filename="gesamte_lieferungen.csv"
-    >
+    <ReportTable :headers="headers" :items="items" :loading="loading" title="Gesamte Lieferungen"
+      csv-filename="gesamte_lieferungen.csv" group-by="date" :group-by-fn="(d) => d.slice(0, 7)">
       <template #item.net="{ item }">{{ item.net.toFixed(2) }} €</template>
       <template #item.gross="{ item }">{{ item.gross.toFixed(2) }} €</template>
       <template #body.append>
