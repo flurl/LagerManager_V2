@@ -9,6 +9,8 @@
       </v-col>
     </v-row>
 
+    <slot name="controls" />
+
     <v-text-field
       v-model="search"
       label="Suchen..."
