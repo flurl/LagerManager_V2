@@ -1,28 +1,19 @@
 <template>
   <div>
     <v-row class="mb-2" align="center">
-      <v-col><h2>Lagerstand</h2></v-col>
+      <v-col>
+        <h2>Periode Start-Stand</h2>
+      </v-col>
       <v-col cols="auto">
         <v-btn color="secondary" :loading="initLoading" @click="initPeriod">Periode initialisieren</v-btn>
         <v-btn class="ml-2" prepend-icon="mdi-download" @click="exportCsvAction">CSV</v-btn>
       </v-col>
     </v-row>
 
-    <v-data-table
-      :headers="headers"
-      :items="items"
-      :loading="loading"
-      density="compact"
-    >
+    <v-data-table :headers="headers" :items="items" :loading="loading" density="compact">
       <template #item.quantity="{ item }">
-        <v-text-field
-          v-model.number="item.quantity"
-          type="number"
-          density="compact"
-          hide-details
-          style="width: 100px"
-          @change="saveItem(item)"
-        />
+        <v-text-field v-model.number="item.quantity" type="number" density="compact" hide-details style="width: 100px"
+          @change="saveItem(item)" />
       </template>
     </v-data-table>
   </div>

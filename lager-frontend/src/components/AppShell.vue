@@ -14,27 +14,15 @@
         </v-btn>
       </template>
       <v-list density="compact" nav min-width="200">
-        <v-list-item
-          v-for="item in group.items"
-          :key="item.to"
-          :to="item.to"
-          :prepend-icon="item.icon"
-          :title="item.title"
-        />
+        <v-list-item v-for="item in group.items" :key="item.to" :to="item.to" :prepend-icon="item.icon"
+          :title="item.title" />
       </v-list>
     </v-menu>
 
     <v-spacer />
 
-    <v-select
-      v-model="periodStore.currentPeriodId"
-      :items="periodStore.periods"
-      item-title="name"
-      item-value="id"
-      label="Periode"
-      hide-details
-      style="max-width: 220px"
-    />
+    <v-select v-model="periodStore.currentPeriodId" :items="periodStore.periods" item-title="name" item-value="id"
+      label="Periode" hide-details style="max-width: 220px" />
     <v-btn icon class="ml-1 mr-1" title="Neue Periode" @click="newPeriodDialog = true">
       <v-icon>mdi-plus-circle-outline</v-icon>
     </v-btn>
@@ -51,13 +39,8 @@
         <v-text-field v-model="newPeriod.name" label="Bezeichnung" placeholder="z.B. 2025" class="mb-2" />
         <v-text-field v-model="newPeriod.start" label="Von" type="datetime-local" class="mb-2" />
         <v-text-field v-model="newPeriod.end" label="Bis" type="datetime-local" class="mb-2" />
-        <v-text-field
-          v-model.number="newPeriod.checkpoint_year"
-          label="Checkpoint-Jahr (optional)"
-          type="number"
-          hint="Wiffzack checkpoint_jahr Wert für diesen Zeitraum"
-          persistent-hint
-        />
+        <v-text-field v-model.number="newPeriod.checkpoint_year" label="Checkpoint-Jahr (optional)" type="number"
+          hint="Wiffzack checkpoint_jahr Wert für diesen Zeitraum" persistent-hint />
         <v-alert v-if="newPeriodError" type="error" class="mt-3" density="compact">{{ newPeriodError }}</v-alert>
       </v-card-text>
       <v-card-actions>
@@ -97,7 +80,7 @@ const navGroups = [
     icon: 'mdi-warehouse',
     items: [
       { to: '/stock-movements', icon: 'mdi-receipt-text', title: 'Lagerbewegungen' },
-      { to: '/stock-levels', icon: 'mdi-format-list-numbered', title: 'Lagerstand' },
+      { to: '/stock-levels', icon: 'mdi-format-list-numbered', title: 'Periode Start-Stand' },
       { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand' },
       { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand' },
     ],
