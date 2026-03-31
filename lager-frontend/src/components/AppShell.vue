@@ -6,7 +6,7 @@
     </v-app-bar-title>
 
     <!-- Nav groups -->
-    <v-menu v-for="group in navGroups" :key="group.label" open-on-hover>
+    <v-menu v-for="group in navGroups" :key="group.label">
       <template #activator="{ props }">
         <v-btn v-bind="props" :prepend-icon="group.icon" variant="text" class="text-none">
           {{ group.label }}
