@@ -1,5 +1,5 @@
 """
-Total deliveries report — aggregated by article with purchase price.
+Total movements report — aggregated by article with purchase price.
 """
 from decimal import Decimal
 from enum import StrEnum
@@ -17,17 +17,19 @@ class DateGrouping(StrEnum):
     YEAR_MONTH = 'year_month'
 
 
-def get_total_deliveries_report(
+def get_total_movements_report(
     period_id: int,
+    movement_type: StockMovement.Type = StockMovement.Type.DELIVERY,
     date_grouping: DateGrouping | None = None,
     group_by_partner: bool = False,
 ) -> dict[str, object]:
     """
-    Returns deliveries aggregated by article with total quantity, total value,
+    Returns stock movements aggregated by article with total quantity, total value,
     and weighted-average purchase price (EK) per article.
 
     Args:
         period_id: The period to report on.
+        movement_type: Filter by movement type (delivery or consumption).
         date_grouping: When set, adds a date bucket to each row grouped by
             year (``DateGrouping.YEAR``) or year-month (``DateGrouping.YEAR_MONTH``).
             When ``None`` the period year is used as a single date label.
@@ -39,7 +41,7 @@ def get_total_deliveries_report(
 
     qs = StockMovementDetail.objects.filter(
         stock_movement__period_id=period_id,
-        stock_movement__movement_type=StockMovement.Type.DELIVERY,
+        stock_movement__movement_type=movement_type,
     )
 
     group_fields: list[str] = ['article_id', 'article__name']
@@ -102,4 +104,4 @@ def get_total_deliveries_report(
 
         rows.append(row)
 
-    return {'deliveries': rows}
+    return {'movements': rows}

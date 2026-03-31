@@ -38,9 +38,9 @@ const routes = [
     meta: { title: 'Verbrauch' },
   },
   {
-    path: '/reports/total-deliveries',
-    component: () => import('./views/TotalDeliveriesReport.vue'),
-    meta: { title: 'Gesamte Lieferungen' },
+    path: '/reports/total-movements',
+    component: () => import('./views/TotalMovementsReport.vue'),
+    meta: { title: 'Gesamte Bewegungen' },
   },
   {
     path: '/import',

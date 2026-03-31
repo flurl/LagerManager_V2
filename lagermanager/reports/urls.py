@@ -5,13 +5,13 @@ from .views import (
     InventoryReportView,
     PurchasePriceView,
     StockLevelReportView,
-    TotalDeliveriesReportView,
+    TotalMovementsReportView,
 )
 
 urlpatterns = [
     path('reports/stock-level/', StockLevelReportView.as_view(), name='report-stock-level'),
     path('reports/inventory/', InventoryReportView.as_view(), name='report-inventory'),
     path('reports/consumption/', ConsumptionReportView.as_view(), name='report-consumption'),
-    path('reports/total-deliveries/', TotalDeliveriesReportView.as_view(), name='report-total-deliveries'),
+    path('reports/total-movements/', TotalMovementsReportView.as_view(), name='report-total-movements'),
     path('purchase-price/', PurchasePriceView.as_view(), name='purchase-price'),
 ]

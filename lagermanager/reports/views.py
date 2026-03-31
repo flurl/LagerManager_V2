@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 from .services.consumption_report import get_consumption_chart_data
 from .services.inventory_report import get_inventory_report
 from .services.stock_level_report import get_stock_level_chart_data
-from .services.total_deliveries_report import DateGrouping, get_total_deliveries_report
+from .services.total_movements_report import DateGrouping, get_total_movements_report
+from deliveries.models import StockMovement
 
 
 class StockLevelReportView(APIView):
@@ -44,19 +45,29 @@ class ConsumptionReportView(APIView):
         return Response(data)
 
 
-class TotalDeliveriesReportView(APIView):
+class TotalMovementsReportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        movement_type_raw = request.query_params.get('movement_type', StockMovement.Type.DELIVERY)
+        if movement_type_raw in StockMovement.Type.values:
+            movement_type = StockMovement.Type(movement_type_raw)
+        else:
+            movement_type = StockMovement.Type.DELIVERY
         date_grouping_raw = request.query_params.get('date_grouping')
         date_grouping: DateGrouping | None = None
         if date_grouping_raw is not None and date_grouping_raw in DateGrouping._value2member_map_:
             date_grouping = DateGrouping(date_grouping_raw)
         group_by_partner = request.query_params.get('group_by_partner', '').lower() in ('1', 'true')
-        data = get_total_deliveries_report(int(period_id), date_grouping=date_grouping, group_by_partner=group_by_partner)
+        data = get_total_movements_report(
+            int(period_id),
+            movement_type=movement_type,
+            date_grouping=date_grouping,
+            group_by_partner=group_by_partner,
+        )
         return Response(data)
 
 

@@ -92,7 +92,7 @@ const navGroups = [
       { to: '/reports/stock-level', icon: 'mdi-chart-line', title: 'Lagerstand' },
       { to: '/reports/inventory', icon: 'mdi-clipboard-text', title: 'Inventur' },
       { to: '/reports/consumption', icon: 'mdi-chart-area', title: 'Verbrauch' },
-      { to: '/reports/total-deliveries', icon: 'mdi-table', title: 'Gesamte Lieferungen' },
+      { to: '/reports/total-movements', icon: 'mdi-table', title: 'Gesamte Bewegungen' },
     ],
   },
   {
