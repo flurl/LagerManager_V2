@@ -24,14 +24,8 @@
     >
       <template #item.date="{ item }">{{ formatDate(item.date) }}</template>
       <template #item.quantity="{ item }">
-        <v-text-field
-          v-model.number="item.quantity"
-          type="number"
-          density="compact"
-          hide-details
-          style="width: 100px"
-          @change="saveItem(item)"
-        />
+        <NumberInput v-model="item.quantity" density="compact" hide-details style="width: 100px"
+          @change="saveItem(item)" />
       </template>
     </v-data-table>
   </div>
@@ -41,6 +35,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
+import NumberInput from '../components/NumberInput.vue'
 
 const periodStore = usePeriodStore()
 const items = ref([])

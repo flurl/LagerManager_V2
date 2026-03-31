@@ -39,7 +39,7 @@
         <v-text-field v-model="newPeriod.name" label="Bezeichnung" placeholder="z.B. 2025" class="mb-2" />
         <v-text-field v-model="newPeriod.start" label="Von" type="datetime-local" class="mb-2" />
         <v-text-field v-model="newPeriod.end" label="Bis" type="datetime-local" class="mb-2" />
-        <v-text-field v-model.number="newPeriod.checkpoint_year" label="Checkpoint-Jahr (optional)" type="number"
+        <NumberInput v-model="newPeriod.checkpoint_year" label="Checkpoint-Jahr (optional)" :decimals="0"
           hint="Wiffzack checkpoint_jahr Wert für diesen Zeitraum" persistent-hint />
         <v-alert v-if="newPeriodError" type="error" class="mt-3" density="compact">{{ newPeriodError }}</v-alert>
       </v-card-text>
@@ -62,6 +62,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import { useAuthStore } from '../stores/auth'
+import NumberInput from './NumberInput.vue'
 
 const periodStore = usePeriodStore()
 const auth = useAuthStore()

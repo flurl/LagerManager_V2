@@ -54,12 +54,10 @@
                 item-value="article" density="compact" hide-details style="min-width: 180px" />
             </td>
             <td>
-              <v-text-field v-model.number="line.quantity" type="number" density="compact" hide-details
-                style="width: 80px" />
+              <NumberInput v-model="line.quantity" density="compact" hide-details style="width: 80px" />
             </td>
             <td>
-              <v-text-field v-model.number="line.unit_price" type="number" density="compact" hide-details
-                style="width: 90px" />
+              <NumberInput v-model="line.unit_price" density="compact" hide-details style="width: 90px" />
             </td>
             <td>
               <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
@@ -85,7 +83,7 @@
       <!-- Skonto -->
       <v-row class="mt-3" dense>
         <v-col cols="3">
-          <v-text-field v-model.number="skontoPercent" label="Skonto %" type="number" density="compact" />
+          <NumberInput v-model="skontoPercent" label="Skonto %" density="compact" />
         </v-col>
         <v-col cols="auto" class="d-flex align-center">
           <v-btn size="small" @click="applySkonto" :disabled="!form.id">Skonto anwenden</v-btn>
@@ -124,6 +122,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
+import NumberInput from './NumberInput.vue'
 
 const props = defineProps({
   movement: { type: Object, default: null },

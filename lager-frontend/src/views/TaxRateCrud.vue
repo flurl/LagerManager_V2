@@ -20,7 +20,7 @@
         <v-card-title>{{ form.id ? 'Bearbeiten' : 'Neu' }}</v-card-title>
         <v-card-text>
           <v-text-field v-model="form.name" label="Bezeichnung" />
-          <v-text-field v-model.number="form.percent" label="Prozent" type="number" />
+          <NumberInput v-model="form.percent" label="Prozent" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -35,6 +35,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import NumberInput from '../components/NumberInput.vue'
 
 const items = ref([])
 const loading = ref(false)
