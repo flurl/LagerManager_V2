@@ -6,16 +6,29 @@
     </v-app-bar-title>
 
     <!-- Nav groups -->
-    <v-menu v-for="group in navGroups" :key="group.label">
+    <v-menu
+      v-for="(group, i) in navGroups"
+      :key="group.label"
+      v-model="openMenus[i]"
+      :open-delay="0"
+      :close-delay="0"
+      transition="false"
+    >
       <template #activator="{ props }">
-        <v-btn v-bind="props" :prepend-icon="group.icon" variant="text" class="text-none">
+        <v-btn
+          v-bind="props"
+          :prepend-icon="group.icon"
+          variant="text"
+          class="text-none"
+          @mouseenter="onNavHover(i)"
+        >
           {{ group.label }}
           <v-icon end>mdi-chevron-down</v-icon>
         </v-btn>
       </template>
       <v-list density="compact" nav min-width="200">
         <template v-for="item in group.items" :key="item.to ?? item.title">
-          <v-menu v-if="item.items" location="end" open-on-hover :close-delay="100">
+          <v-menu v-if="item.items" location="end" open-on-hover :open-delay="0" :close-delay="0" transition="false">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :prepend-icon="item.icon" :title="item.title"
                 append-icon="mdi-chevron-right" />
@@ -126,6 +139,16 @@ const navGroups = [
     ],
   },
 ]
+
+// Desktop-style nav: hovering over another menu button while one is open switches immediately
+const openMenus = reactive(navGroups.map(() => false))
+
+function onNavHover(i) {
+  if (openMenus.some(Boolean) && !openMenus[i]) {
+    openMenus.fill(false)
+    openMenus[i] = true
+  }
+}
 
 // New period dialog
 const newPeriodDialog = ref(false)
