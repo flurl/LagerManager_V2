@@ -28,9 +28,9 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { usePeriodStore } from '../stores/period'
-import { useCsvExport } from '../composables/useCsvExport'
-import api from '../api'
+import { usePeriodStore } from '../../stores/period'
+import { useCsvExport } from '../../composables/useCsvExport'
+import api from '../../api'
 
 const periodStore = usePeriodStore()
 const { exportCsv } = useCsvExport()

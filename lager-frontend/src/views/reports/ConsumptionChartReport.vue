@@ -2,7 +2,7 @@
   <div>
     <v-row class="mb-2" align="center">
       <v-col>
-        <h2>Lagerstand Verlauf</h2>
+        <h2>Verbrauch (kumulativ)</h2>
       </v-col>
       <v-col cols="auto">
         <v-btn variant="text" @click="chartRef?.chart.resetZoom()">Zoom zurücksetzen</v-btn>
@@ -28,7 +28,7 @@
     </v-row>
     <v-row>
       <v-col cols="12">
-        <Line v-if="chartData" ref="chartRef" :data="chartData" :options="chartOptions" style="height: 500px" />
+        <Line v-if="chartData" ref="chartRef" :data="chartData" :options="chartOptions" style="height: 450px" />
         <v-progress-circular v-else-if="loading" indeterminate />
       </v-col>
     </v-row>
@@ -43,8 +43,8 @@ import {
   Title, Tooltip, Legend,
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
-import { usePeriodStore } from '../stores/period'
-import api from '../api'
+import { usePeriodStore } from '../../stores/period'
+import api from '../../api'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, zoomPlugin)
 
@@ -54,11 +54,7 @@ const loading = ref(false)
 const rawData = ref(null)
 const activeArticles = ref([])
 
-const allArticles = computed(() =>
-  (rawData.value?.datasets || [])
-    .filter((d) => !d.label.endsWith('-gezaehlt'))
-    .map((d) => d.label)
-)
+const allArticles = computed(() => (rawData.value?.datasets || []).map((d) => d.label))
 
 function toggleAll() {
   activeArticles.value = activeArticles.value.length === allArticles.value.length ? [] : [...allArticles.value]
@@ -94,14 +90,13 @@ const chartOptions = {
       pan: { enabled: true, mode: 'xy' },
     },
   },
-  scales: { x: { ticks: { maxTicksLimit: 15 } } },
 }
 
 async function fetchData() {
   if (!periodStore.currentPeriodId) return
   loading.value = true
   try {
-    const res = await api.get('/reports/stock-level/', {
+    const res = await api.get('/reports/consumption/', {
       params: { period_id: periodStore.currentPeriodId },
     })
     rawData.value = res.data

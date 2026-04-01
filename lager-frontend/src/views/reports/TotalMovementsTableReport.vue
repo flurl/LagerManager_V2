@@ -30,9 +30,9 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { usePeriodStore } from '../stores/period'
-import api from '../api'
-import ReportTable from '../components/ReportTable.vue'
+import { usePeriodStore } from '../../stores/period'
+import api from '../../api'
+import ReportTable from '../../components/ReportTable.vue'
 
 const periodStore = usePeriodStore()
 const items = ref([])

@@ -4,7 +4,7 @@ const routes = [
   { path: '/', redirect: '/stock-movements' },
   {
     path: '/stock-movements',
-    component: () => import('./views/StockMovementList.vue'),
+    component: () => import('./views/StockMovementView.vue'),
     meta: { title: 'Lagerbewegungen' },
   },
   {
@@ -14,57 +14,57 @@ const routes = [
   },
   {
     path: '/initial-inventory',
-    component: () => import('./views/InitialInventoryTable.vue'),
+    component: () => import('./views/InitialInventoryView.vue'),
     meta: { title: 'Initialer Stand' },
   },
   {
     path: '/physical-counts',
-    component: () => import('./views/PhysicalCountTable.vue'),
+    component: () => import('./views/PhysicalCountView.vue'),
     meta: { title: 'Gezählter Stand' },
   },
   {
     path: '/reports/stock-level',
-    component: () => import('./views/StockLevelChart.vue'),
+    component: () => import('./views/reports/StockLevelChartReport.vue'),
     meta: { title: 'Lagerstand Bericht' },
   },
   {
     path: '/reports/current-stock-level',
-    component: () => import('./views/CurrentStockLevelReport.vue'),
+    component: () => import('./views/reports/CurrentStockLevelTableReport.vue'),
     meta: { title: 'Aktueller Lagerstand' },
   },
   {
     path: '/reports/inventory',
-    component: () => import('./views/InventoryReport.vue'),
+    component: () => import('./views/reports/InventoryTableReport.vue'),
     meta: { title: 'Inventur' },
   },
   {
     path: '/reports/consumption',
-    component: () => import('./views/ConsumptionChart.vue'),
+    component: () => import('./views/reports/ConsumptionChartReport.vue'),
     meta: { title: 'Verbrauch' },
   },
   {
     path: '/reports/consumption-totals',
-    component: () => import('./views/ConsumptionTotalsReport.vue'),
+    component: () => import('./views/reports/ConsumptionTotalsTableReport.vue'),
     meta: { title: 'Gesamtverbrauch' },
   },
   {
     path: '/reports/total-movements',
-    component: () => import('./views/TotalMovementsReport.vue'),
+    component: () => import('./views/reports/TotalMovementsTableReport.vue'),
     meta: { title: 'Gesamte Bewegungen' },
   },
   {
     path: '/import',
-    component: () => import('./views/ImportDialog.vue'),
+    component: () => import('./views/ImportView.vue'),
     meta: { title: 'Daten importieren' },
   },
   {
     path: '/partners',
-    component: () => import('./views/PartnerCrud.vue'),
+    component: () => import('./views/PartnerView.vue'),
     meta: { title: 'Partner' },
   },
   {
     path: '/tax-rates',
-    component: () => import('./views/TaxRateCrud.vue'),
+    component: () => import('./views/TaxRateView.vue'),
     meta: { title: 'Steuersätze' },
   },
   {
