@@ -60,3 +60,15 @@ def get_consumption_chart_data(period_id: int) -> dict[str, Any]:
     ]
 
     return {'labels': dates, 'datasets': datasets}
+
+
+def get_consumption_totals(period_id: int) -> list[dict[str, Any]]:
+    """
+    Returns total consumption per article for the period.
+    Derived from get_consumption_chart_data: the last cumulative value per dataset is the total.
+    """
+    chart_data: dict[str, Any] = get_consumption_chart_data(period_id)
+    return [
+        {'article': ds['label'], 'total': ds['data'][-1] if ds['data'] else 0.0}
+        for ds in chart_data['datasets']
+    ]

@@ -5,7 +5,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .services.consumption_report import get_consumption_chart_data
+from .services.consumption_report import get_consumption_chart_data, get_consumption_totals
 from .services.inventory_report import get_inventory_report
 from .services.stock_level_report import get_stock_level_chart_data
 from .services.total_movements_report import DateGrouping, get_total_movements_report
@@ -42,6 +42,17 @@ class ConsumptionReportView(APIView):
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
         data = get_consumption_chart_data(int(period_id))
+        return Response(data)
+
+
+class ConsumptionTotalsReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        period_id = request.query_params.get('period_id')
+        if not period_id:
+            return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        data = get_consumption_totals(int(period_id))
         return Response(data)
 
 

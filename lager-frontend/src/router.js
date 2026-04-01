@@ -38,6 +38,11 @@ const routes = [
     meta: { title: 'Verbrauch' },
   },
   {
+    path: '/reports/consumption-totals',
+    component: () => import('./views/ConsumptionTotalsReport.vue'),
+    meta: { title: 'Gesamtverbrauch' },
+  },
+  {
     path: '/reports/total-movements',
     component: () => import('./views/TotalMovementsReport.vue'),
     meta: { title: 'Gesamte Bewegungen' },
