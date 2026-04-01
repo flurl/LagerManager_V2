@@ -14,8 +14,19 @@
         </v-btn>
       </template>
       <v-list density="compact" nav min-width="200">
-        <v-list-item v-for="item in group.items" :key="item.to" :to="item.to" :prepend-icon="item.icon"
-          :title="item.title" />
+        <template v-for="item in group.items" :key="item.to ?? item.title">
+          <v-menu v-if="item.items" location="end" open-on-hover :close-delay="100">
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" :prepend-icon="item.icon" :title="item.title"
+                append-icon="mdi-chevron-right" />
+            </template>
+            <v-list density="compact" nav min-width="180">
+              <v-list-item v-for="sub in item.items" :key="sub.to" :to="sub.to" :prepend-icon="sub.icon"
+                :title="sub.title" />
+            </v-list>
+          </v-menu>
+          <v-list-item v-else :to="item.to" :prepend-icon="item.icon" :title="item.title" />
+        </template>
       </v-list>
     </v-menu>
 
@@ -90,10 +101,18 @@ const navGroups = [
     label: 'Berichte',
     icon: 'mdi-chart-bar',
     items: [
-      { to: '/reports/stock-level', icon: 'mdi-chart-line', title: 'Lagerstand' },
-      { to: '/reports/inventory', icon: 'mdi-clipboard-text', title: 'Inventur' },
-      { to: '/reports/consumption', icon: 'mdi-chart-area', title: 'Verbrauch' },
-      { to: '/reports/total-movements', icon: 'mdi-table', title: 'Gesamte Bewegungen' },
+      {
+        title: 'Lager',
+        icon: 'mdi-warehouse',
+        items: [
+          { to: '/reports/stock-level', icon: 'mdi-chart-line', title: 'Lagerstand' },
+          { to: '/reports/inventory', icon: 'mdi-clipboard-text', title: 'Inventur' },
+          { to: '/reports/consumption', icon: 'mdi-chart-area', title: 'Verbrauch' },
+          { to: '/reports/total-movements', icon: 'mdi-table', title: 'Gesamte Bewegungen' },
+        ],
+
+      },
+      //{ to: '/reports/stock-level', icon: 'mdi-chart-line', title: 'Lagerstand' },
     ],
   },
   {
