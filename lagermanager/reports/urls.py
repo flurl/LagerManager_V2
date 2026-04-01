@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     ConsumptionReportView,
     ConsumptionTotalsReportView,
+    CurrentStockLevelReportView,
     InventoryReportView,
     PurchasePriceView,
     StockLevelReportView,
@@ -11,6 +12,7 @@ from .views import (
 
 urlpatterns = [
     path('reports/stock-level/', StockLevelReportView.as_view(), name='report-stock-level'),
+    path('reports/current-stock-level/', CurrentStockLevelReportView.as_view(), name='report-current-stock-level'),
     path('reports/inventory/', InventoryReportView.as_view(), name='report-inventory'),
     path('reports/consumption/', ConsumptionReportView.as_view(), name='report-consumption'),
     path('reports/consumption-totals/', ConsumptionTotalsReportView.as_view(), name='report-consumption-totals'),

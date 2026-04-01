@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from .services.consumption_report import get_consumption_chart_data, get_consumption_totals
 from .services.inventory_report import get_inventory_report
-from .services.stock_level_report import get_stock_level_chart_data
+from .services.stock_level_report import get_current_stock_levels, get_stock_level_chart_data
 from .services.total_movements_report import DateGrouping, get_total_movements_report
 from deliveries.models import StockMovement
 
@@ -20,6 +20,17 @@ class StockLevelReportView(APIView):
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
         data = get_stock_level_chart_data(int(period_id))
+        return Response(data)
+
+
+class CurrentStockLevelReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        period_id = request.query_params.get('period_id')
+        if not period_id:
+            return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        data = get_current_stock_levels(int(period_id))
         return Response(data)
 
 

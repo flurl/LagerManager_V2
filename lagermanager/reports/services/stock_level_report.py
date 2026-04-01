@@ -47,3 +47,28 @@ def get_stock_level_chart_data(period_id: int) -> dict[str, Any]:
         'datasets': datasets,
         'counted_datasets': counted_datasets,
     }
+
+
+def get_current_stock_levels(period_id: int) -> list[dict[str, Any]]:
+    """
+    Returns the current stock level for each article — i.e. the running stock
+    accumulated from the start of the period up to the most recent date with data.
+
+    Builds on get_stock_level_chart_data() and extracts the last date's value
+    from each dataset, returning a flat list of records sorted by article name.
+    Each record includes: article, stock, purchase_price, total_value,
+    warehouse_unit, warehouse_unit_multiplier.
+    """
+    from .article_enrichment import enrich_with_article_data
+
+    chart_data: dict[str, Any] = get_stock_level_chart_data(period_id)
+    if not chart_data['labels']:
+        return []
+
+    rows: list[dict[str, Any]] = [
+        {'article': ds['label'], 'stock': ds['data'][-1]}
+        for ds in chart_data['datasets']
+        if ds['data'] and ds['data'][-1] is not None
+    ]
+    rows.sort(key=lambda r: r['article'])
+    return enrich_with_article_data(rows, period_id, quantity_key='stock')

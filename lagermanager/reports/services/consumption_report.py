@@ -66,9 +66,14 @@ def get_consumption_totals(period_id: int) -> list[dict[str, Any]]:
     """
     Returns total consumption per article for the period.
     Derived from get_consumption_chart_data: the last cumulative value per dataset is the total.
+    Each record includes: article, total, purchase_price, total_value,
+    warehouse_unit, warehouse_unit_multiplier.
     """
+    from .article_enrichment import enrich_with_article_data
+
     chart_data: dict[str, Any] = get_consumption_chart_data(period_id)
-    return [
+    rows: list[dict[str, Any]] = [
         {'article': ds['label'], 'total': ds['data'][-1] if ds['data'] else 0.0}
         for ds in chart_data['datasets']
     ]
+    return enrich_with_article_data(rows, period_id, quantity_key='total')

@@ -28,6 +28,11 @@ const routes = [
     meta: { title: 'Lagerstand Bericht' },
   },
   {
+    path: '/reports/current-stock-level',
+    component: () => import('./views/CurrentStockLevelReport.vue'),
+    meta: { title: 'Aktueller Lagerstand' },
+  },
+  {
     path: '/reports/inventory',
     component: () => import('./views/InventoryReport.vue'),
     meta: { title: 'Inventur' },

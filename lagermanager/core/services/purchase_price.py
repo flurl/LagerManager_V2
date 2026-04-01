@@ -57,7 +57,7 @@ def get_purchase_price(article_pk: int, period_id: int, max_date: date | None = 
                 LEFT JOIN lager_einheiten le ON la.lager_artikel_einheit_id = le.id
                     AND le.lager_einheit_periode = %s
                 WHERE az.zutate_master_artikel_id = %s
-                  AND az.zutate_istRezept = TRUE
+                  AND az."zutate_istRezept" = TRUE
                   AND az.zutate_periode = %s
                 """,
                 [period_id, period_id, article_pk, period_id],
