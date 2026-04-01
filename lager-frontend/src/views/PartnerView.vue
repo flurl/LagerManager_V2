@@ -17,7 +17,7 @@
       </template>
     </v-data-table>
 
-    <v-dialog v-model="dialog" max-width="400">
+    <v-dialog v-model="dialog" max-width="500">
       <v-card>
         <v-card-title>{{ form.id ? 'Bearbeiten' : 'Neu' }}</v-card-title>
         <v-card-text>
@@ -29,6 +29,7 @@
             item-value="value"
             label="Typ"
           />
+          <v-textarea v-model="form.llm_instructions" label="LLM-Anweisungen" rows="4" clearable />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -75,7 +76,7 @@ async function fetchItems() {
 }
 
 function openNew() {
-  form.value = { name: '', partner_type: 'supplier' }
+  form.value = { name: '', partner_type: 'supplier', llm_instructions: null }
   dialog.value = true
 }
 

@@ -20,6 +20,7 @@ class Partner(models.Model):
         choices=Type.choices,
         default=Type.SUPPLIER,
     )
+    llm_instructions = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'partner'

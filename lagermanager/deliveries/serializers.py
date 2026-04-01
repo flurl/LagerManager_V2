@@ -17,7 +17,7 @@ from .models import (
 class PartnerSerializer(serializers.ModelSerializer[Partner]):
     class Meta:
         model = Partner
-        fields = ['id', 'name', 'partner_type']
+        fields = ['id', 'name', 'partner_type', 'llm_instructions']
 
 
 class TaxRateSerializer(serializers.ModelSerializer[TaxRate]):
