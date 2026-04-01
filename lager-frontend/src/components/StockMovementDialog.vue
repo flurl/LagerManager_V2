@@ -22,88 +22,103 @@
         </v-col>
       </v-row>
 
-      <v-divider class="my-3" />
+      <v-divider class="mb-2" />
 
-      <!-- Detail lines -->
-      <v-row class="mb-1" align="center">
-        <v-col>
-          <strong>Positionen</strong>
-          <span v-if="linesError" class="ml-3 text-error text-caption">{{ linesError }}</span>
-        </v-col>
-        <v-col cols="auto">
-          <v-btn size="small" prepend-icon="mdi-plus" @click="addLine">Position hinzufügen</v-btn>
-        </v-col>
-      </v-row>
+      <v-tabs v-model="activeTab" density="compact">
+        <v-tab value="positions">Positionen</v-tab>
+        <v-tab value="documents" :disabled="isNew">
+          Dokumente
+        </v-tab>
+      </v-tabs>
 
-      <v-table density="compact">
-        <thead>
-          <tr>
-            <th>Artikel</th>
-            <th>Menge</th>
-            <th>EK-Preis</th>
-            <th>MwSt</th>
-            <th class="text-right">Netto</th>
-            <th class="text-right">Brutto</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(line, idx) in lines" :key="idx">
-            <td>
-              <v-autocomplete v-model="line.article" :items="warehouseArticles" item-title="article_name"
-                item-value="article" density="compact" hide-details style="min-width: 180px" />
-            </td>
-            <td>
-              <NumberInput v-model="line.quantity" hide-controls density="compact" hide-details style="width: 120px" />
-            </td>
-            <td>
-              <div class="d-flex align-center">
-                <NumberInput v-model="line.unit_price" :decimals="4" hide-controls density="compact" hide-details
-                  style="width: 130px" />
-                <v-icon size="small" class="ml-1 text-medium-emphasis" style="cursor: pointer"
-                  title="Gesamtpreis durch Menge teilen"
-                  @click="line.quantity ? line.unit_price = +(line.unit_price / line.quantity).toFixed(4) : null">
-                  mdi-division
-                </v-icon>
-              </div>
-            </td>
-            <td>
-              <div class="d-flex align-center">
-                <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
-                  hide-details style="width: 110px" :error="!line.tax_rate" />
-                <v-icon size="small" class="ml-1 text-medium-emphasis" style="cursor: pointer"
-                  title="Bruttopreis in Nettopreis umrechnen"
-                  @click="line.tax_rate ? line.unit_price = +(line.unit_price / (1 + getTaxPercent(line.tax_rate) / 100)).toFixed(4) : null">
-                  mdi-percent-outline
-                </v-icon>
-              </div>
-            </td>
-            <td class="text-right">{{ lineNet(line) }}</td>
-            <td class="text-right">{{ lineGross(line) }}</td>
-            <td>
-              <v-icon size="small" color="error" @click="removeLine(idx)">mdi-delete</v-icon>
-            </td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4"><strong>Gesamt</strong></td>
-            <td class="text-right"><strong>{{ totalNet }}</strong></td>
-            <td class="text-right"><strong>{{ totalGross }}</strong></td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </v-table>
+      <v-tabs-window v-model="activeTab">
+        <v-tabs-window-item value="positions">
+          <!-- Detail lines -->
+          <v-row class="mb-1 mt-2" align="center">
+            <v-col>
+              <strong>Positionen</strong>
+              <span v-if="linesError" class="ml-3 text-error text-caption">{{ linesError }}</span>
+            </v-col>
+            <v-col cols="auto">
+              <v-btn size="small" prepend-icon="mdi-plus" @click="addLine">Position hinzufügen</v-btn>
+            </v-col>
+          </v-row>
 
-      <!-- Skonto -->
-      <v-row class="mt-3" dense>
-        <v-col cols="3">
-          <NumberInput v-model="skontoPercent" label="Skonto %" density="compact" />
-        </v-col>
-        <v-col cols="auto" class="d-flex align-center">
-          <v-btn size="small" @click="applySkonto" :disabled="!form.id">Skonto anwenden</v-btn>
-        </v-col>
-      </v-row>
+          <v-table density="compact">
+            <thead>
+              <tr>
+                <th>Artikel</th>
+                <th>Menge</th>
+                <th>EK-Preis</th>
+                <th>MwSt</th>
+                <th class="text-right">Netto</th>
+                <th class="text-right">Brutto</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(line, idx) in lines" :key="idx">
+                <td>
+                  <v-autocomplete v-model="line.article" :items="warehouseArticles" item-title="article_name"
+                    item-value="article" density="compact" hide-details style="min-width: 180px" />
+                </td>
+                <td>
+                  <NumberInput v-model="line.quantity" hide-controls density="compact" hide-details style="width: 120px" />
+                </td>
+                <td>
+                  <div class="d-flex align-center">
+                    <NumberInput v-model="line.unit_price" :decimals="4" hide-controls density="compact" hide-details
+                      style="width: 130px" />
+                    <v-icon size="small" class="ml-1 text-medium-emphasis" style="cursor: pointer"
+                      title="Gesamtpreis durch Menge teilen"
+                      @click="line.quantity ? line.unit_price = +(line.unit_price / line.quantity).toFixed(4) : null">
+                      mdi-division
+                    </v-icon>
+                  </div>
+                </td>
+                <td>
+                  <div class="d-flex align-center">
+                    <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
+                      hide-details style="width: 110px" :error="!line.tax_rate" />
+                    <v-icon size="small" class="ml-1 text-medium-emphasis" style="cursor: pointer"
+                      title="Bruttopreis in Nettopreis umrechnen"
+                      @click="line.tax_rate ? line.unit_price = +(line.unit_price / (1 + getTaxPercent(line.tax_rate) / 100)).toFixed(4) : null">
+                      mdi-percent-outline
+                    </v-icon>
+                  </div>
+                </td>
+                <td class="text-right">{{ lineNet(line) }}</td>
+                <td class="text-right">{{ lineGross(line) }}</td>
+                <td>
+                  <v-icon size="small" color="error" @click="removeLine(idx)">mdi-delete</v-icon>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4"><strong>Gesamt</strong></td>
+                <td class="text-right"><strong>{{ totalNet }}</strong></td>
+                <td class="text-right"><strong>{{ totalGross }}</strong></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </v-table>
+
+          <!-- Skonto -->
+          <v-row class="mt-3" dense>
+            <v-col cols="3">
+              <NumberInput v-model="skontoPercent" label="Skonto %" density="compact" />
+            </v-col>
+            <v-col cols="auto" class="d-flex align-center">
+              <v-btn size="small" @click="applySkonto" :disabled="!form.id">Skonto anwenden</v-btn>
+            </v-col>
+          </v-row>
+        </v-tabs-window-item>
+
+        <v-tabs-window-item value="documents" class="pt-3">
+          <AttachmentGallery v-if="form.id" :movement-id="form.id" />
+        </v-tabs-window-item>
+      </v-tabs-window>
     </v-card-text>
 
     <v-card-actions>
@@ -139,6 +154,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
+import AttachmentGallery from './AttachmentGallery.vue'
 
 const props = defineProps({
   movement: { type: Object, default: null },
@@ -147,6 +163,7 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'close'])
 
 const periodStore = usePeriodStore()
+const activeTab = ref('positions')
 const saving = ref(false)
 const partners = ref([])
 const taxRates = ref([])
@@ -187,6 +204,7 @@ const form = ref({ partner: null, date: null, comment: '', period: null })
 const lines = ref([])
 
 async function initForm() {
+  activeTab.value = 'positions'
   dateError.value = ''
   linesError.value = ''
   if (props.movement) {

@@ -43,17 +43,6 @@ class TaxRate(models.Model):
         return f"{self.name} ({self.percent}%)"
 
 
-class DocumentType(models.Model):
-    """dokumenttypen"""
-    name = models.CharField(max_length=255, db_column='dot_bezeichnung')
-
-    class Meta:
-        db_table = 'dokumenttypen'
-
-    def __str__(self) -> str:
-        return self.name
-
-
 class StockMovement(models.Model):
     """lagerbewegungen — a delivery or consumption record."""
 
@@ -173,31 +162,45 @@ class StockMovementDetail(models.Model):
         return self.line_net * (1 + self.tax_rate.percent / 100)
 
 
-class Document(models.Model):
-    """dokumente — delivery document attachments."""
-    doc_type = models.ForeignKey(
-        DocumentType,
-        on_delete=models.PROTECT,
-        db_column='dok_dotid',
-    )
-    name = models.CharField(max_length=255, db_column='dok_bezeichnung')
-    ocr_text = models.TextField(null=True, blank=True, db_column='dok_ocr')
-    data = models.BinaryField(db_column='dok_data')
-    date = models.DateTimeField(db_column='dok_datum')
+
+def attachment_upload_path(instance: "Attachment", filename: str) -> str:
+    return f"attachments/{instance.stock_movement_id}/{filename}"
+
+
+class Attachment(models.Model):
+    """Uploaded document images attached to a stock movement.
+
+    PDFs are converted server-side to one Attachment per page (PNG).
+    Images are stored as-is.
+    """
+
     stock_movement = models.ForeignKey(
         StockMovement,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+    )
+    file = models.ImageField(upload_to=attachment_upload_path)
+    original_filename = models.CharField(max_length=255)
+    source_filename = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Original PDF filename when this image was extracted from a PDF.',
+    )
+    page_number = models.PositiveIntegerField(
         null=True,
         blank=True,
-        related_name='documents',
-        db_column='dok_lagerbewegung_id',
+        help_text='Page number (1-based) if extracted from a PDF.',
     )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'dokumente'
+        ordering = ['source_filename', 'page_number', 'created_at']
 
     def __str__(self) -> str:
-        return self.name
+        if self.source_filename and self.page_number:
+            return f"{self.source_filename} S.{self.page_number}"
+        return self.original_filename
 
 
 class EkModifier(models.Model):

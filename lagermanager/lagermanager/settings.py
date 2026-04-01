@@ -84,6 +84,8 @@ USE_I18N: bool = True
 USE_TZ: bool = True
 
 STATIC_URL: str = 'static/'
+MEDIA_URL: str = '/media/'
+MEDIA_ROOT: Path = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD: str = 'django.db.models.BigAutoField'
 
 SIMPLE_JWT: dict[str, timedelta] = {

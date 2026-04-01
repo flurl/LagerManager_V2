@@ -1,9 +1,11 @@
+from typing import Any
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from .models import (
-    DocumentType,
+    Attachment,
     EkModifier,
     Partner,
     StockMovement,
@@ -24,10 +26,17 @@ class TaxRateSerializer(serializers.ModelSerializer[TaxRate]):
         fields = ['id', 'name', 'percent']
 
 
-class DocumentTypeSerializer(serializers.ModelSerializer[DocumentType]):
+class AttachmentSerializer(serializers.ModelSerializer["Attachment"]):
     class Meta:
-        model = DocumentType
-        fields = ['id', 'name']
+        model = Attachment
+        fields = [
+            'id', 'stock_movement', 'file', 'original_filename',
+            'source_filename', 'page_number', 'created_at',
+        ]
+        read_only_fields = [
+            'id', 'stock_movement', 'original_filename',
+            'source_filename', 'page_number', 'created_at',
+        ]
 
 
 class StockMovementDetailSerializer(serializers.ModelSerializer[StockMovementDetail]):
@@ -65,7 +74,7 @@ class StockMovementSerializer(serializers.ModelSerializer[StockMovement]):
             'created_at', 'updated_at',
         ]
 
-    def validate(self, attrs: dict) -> dict:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         # Build an unsaved instance to run model-level clean()
         instance = self.instance or StockMovement()
         for field, value in attrs.items():
@@ -95,11 +104,12 @@ class StockMovementListSerializer(serializers.ModelSerializer[StockMovement]):
         max_digits=18, decimal_places=4, read_only=True)
     total_gross = serializers.DecimalField(
         max_digits=18, decimal_places=4, read_only=True)
+    attachment_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = StockMovement
         fields = [
             'id', 'partner', 'partner_name', 'date', 'movement_type',
             'comment', 'period', 'total_net', 'total_gross',
-            'created_at', 'updated_at',
+            'attachment_count', 'created_at', 'updated_at',
         ]

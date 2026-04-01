@@ -9,3 +9,5 @@ python-decouple==3.8
 django-constance
 django-stubs
 djangorestframework-stubs
+Pillow>=10.0
+PyMuPDF>=1.24
