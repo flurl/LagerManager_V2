@@ -39,7 +39,8 @@
               <strong>Positionen</strong>
               <span v-if="linesError" class="ml-3 text-error text-caption">{{ linesError }}</span>
             </v-col>
-            <v-col cols="auto">
+            <v-col cols="auto" class="d-flex gap-2">
+              <v-btn size="small" prepend-icon="mdi-import" @click="openImportDialog">Importieren</v-btn>
               <v-btn size="small" prepend-icon="mdi-plus" @click="addLine">Position hinzufügen</v-btn>
             </v-col>
           </v-row>
@@ -128,6 +129,78 @@
     </v-card-actions>
   </v-card>
 
+  <!-- Import dialog -->
+  <v-dialog v-model="importDialog" max-width="860" persistent>
+    <v-card>
+      <v-card-title class="d-flex align-center pa-4">
+        <v-icon class="mr-2">mdi-import</v-icon>
+        Positionen importieren
+        <v-spacer />
+        <v-btn icon @click="importDialog = false"><v-icon>mdi-close</v-icon></v-btn>
+      </v-card-title>
+
+      <!-- Step 1: JSON input -->
+      <v-card-text v-if="importStep === 'input'">
+        <v-row dense align="start">
+          <v-col>
+            <v-textarea v-model="importJson" label="JSON einfügen" rows="12" auto-grow
+              :error-messages="importError" hide-details="auto" />
+          </v-col>
+          <v-col cols="auto" class="pt-2">
+            <v-btn icon title="Von API laden (noch nicht verfügbar)" disabled>
+              <v-icon>mdi-cloud-download</v-icon>
+            </v-btn>
+          </v-col>
+        </v-row>
+      </v-card-text>
+
+      <!-- Step 2: Preview -->
+      <v-card-text v-else>
+        <v-table density="compact">
+          <thead>
+            <tr>
+              <th style="width: 40px"></th>
+              <th>Name</th>
+              <th>Artikel</th>
+              <th>Menge</th>
+              <th>EK-Preis</th>
+              <th>MwSt %</th>
+              <th class="text-right">Netto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, idx) in importPreviewLines" :key="idx"
+              :class="!row.matched ? 'text-medium-emphasis' : ''">
+              <td>
+                <v-checkbox v-model="row.selected" hide-details density="compact" />
+              </td>
+              <td>{{ row.name }}</td>
+              <td>
+                <span v-if="row.matched">{{ row.articleName }}</span>
+                <span v-else class="d-flex align-center">
+                  <v-icon size="small" color="warning" class="mr-1">mdi-alert</v-icon>
+                  nicht zugeordnet
+                </span>
+              </td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ row.unit_price }}</td>
+              <td>{{ row.taxPercent }}</td>
+              <td class="text-right">{{ (row.quantity * row.unit_price).toFixed(2) }}</td>
+            </tr>
+          </tbody>
+        </v-table>
+      </v-card-text>
+
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="importDialog = false">Abbrechen</v-btn>
+        <v-btn v-if="importStep === 'preview'" @click="importStep = 'input'">Zurück</v-btn>
+        <v-btn v-if="importStep === 'input'" color="primary" @click="parseImportJson">Vorschau</v-btn>
+        <v-btn v-else color="primary" @click="confirmImport">Übernehmen</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <!-- Duplicate warning dialog -->
   <v-dialog v-model="duplicateDialog" max-width="480">
     <v-card>
@@ -171,6 +244,11 @@ const warehouseArticles = ref([])
 const skontoPercent = ref(0)
 const duplicateDialog = ref(false)
 const duplicateCount = ref(0)
+const importDialog = ref(false)
+const importStep = ref('input')
+const importJson = ref('')
+const importError = ref('')
+const importPreviewLines = ref([])
 const dateError = ref('')
 const linesError = ref('')
 const defaultTaxRateId = ref(null)
@@ -329,6 +407,58 @@ async function doSave() {
   } finally {
     saving.value = false
   }
+}
+
+function openImportDialog() {
+  importStep.value = 'input'
+  importJson.value = ''
+  importError.value = ''
+  importPreviewLines.value = []
+  importDialog.value = true
+}
+
+function parseImportJson() {
+  importError.value = ''
+  let data
+  try {
+    data = JSON.parse(importJson.value)
+  } catch {
+    importError.value = 'Ungültiges JSON'
+    return
+  }
+  if (!Array.isArray(data?.articles)) {
+    importError.value = 'JSON muss ein "articles"-Array enthalten'
+    return
+  }
+  importPreviewLines.value = data.articles.map((a) => {
+    const wa = a.ID != null ? warehouseArticles.value.find((w) => w.source_article_id === a.ID) : null
+    const tr = taxRates.value.find((t) => Number(t.percent) === a.tax) ?? taxRates.value.find((t) => t.id === defaultTaxRateId.value)
+    return {
+      name: a.Name,
+      quantity: a.quantity,
+      unit_price: a.price_per_unit,
+      taxPercent: a.tax,
+      tax_rate: tr?.id ?? null,
+      article: wa?.article ?? null,
+      articleName: wa?.article_name ?? null,
+      matched: wa != null,
+      selected: true,
+    }
+  })
+  importStep.value = 'preview'
+}
+
+function confirmImport() {
+  for (const row of importPreviewLines.value) {
+    if (!row.selected) continue
+    lines.value.push({
+      article: row.article,
+      quantity: row.quantity,
+      unit_price: row.unit_price,
+      tax_rate: row.tax_rate,
+    })
+  }
+  importDialog.value = false
 }
 
 async function applySkonto() {

@@ -33,7 +33,7 @@ class WarehouseArticleSerializer(serializers.ModelSerializer[WarehouseArticle]):
     class Meta:
         model = WarehouseArticle
         fields = [
-            'id', 'source_id', 'article', 'article_name', 'supplier_source_id',
-            'supplier_article_number', 'priority', 'unit', 'warehouse',
+            'id', 'source_id', 'article', 'article_name', 'source_article_id',
+            'supplier_source_id', 'supplier_article_number', 'priority', 'unit', 'warehouse',
             'min_stock', 'max_stock', 'period',
         ]
