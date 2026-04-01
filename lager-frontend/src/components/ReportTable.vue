@@ -26,6 +26,7 @@
       :items="displayItems"
       :loading="loading"
       :search="groupByKey ? undefined : search"
+      :items-per-page="100"
       density="compact"
     >
       <!-- Custom item rendering when groupBy is active -->
@@ -48,7 +49,7 @@
             </strong>
           </td>
         </tr>
-        <tr v-else v-bind="slotProps.props">
+        <tr v-else v-bind="slotProps.props" :class="{ 'alt-row': slotProps.item._altRow }">
           <td
             v-for="col in slotProps.columns"
             :key="col.key"
@@ -152,8 +153,11 @@ const displayItems = computed(() => {
   }
 
   const result = []
+  let dataRowIndex = 0
   for (const [groupVal, groupItems] of groups) {
-    result.push(...groupItems)
+    for (const item of groupItems) {
+      result.push({ ...item, _altRow: dataRowIndex++ % 2 === 1 })
+    }
     const totalRow = { _isGroupTotal: true, _groupValue: groupVal }
     for (const key of numericKeys.value) {
       totalRow[key] = groupItems.reduce((sum, item) => sum + (Number(item[key]) || 0), 0)
@@ -176,6 +180,16 @@ function handleExportCsv() {
 </script>
 
 <style scoped>
+/* Alternating rows — non-groupBy case (v-data-table renders its own tbody) */
+:deep(tbody tr:nth-child(even):not(.group-total-row)) td {
+  background-color: rgba(var(--v-theme-on-surface), 0.04) !important;
+}
+
+/* Alternating rows — groupBy case (we render tr ourselves) */
+.alt-row td {
+  background-color: rgba(var(--v-theme-on-surface), 0.04) !important;
+}
+
 .group-total-row td {
   border-top: 2px solid rgba(var(--v-theme-on-surface), 0.15) !important;
   background-color: rgba(var(--v-theme-on-surface), 0.05) !important;
