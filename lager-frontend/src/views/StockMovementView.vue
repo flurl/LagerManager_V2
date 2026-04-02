@@ -28,7 +28,7 @@
       </v-col>
     </v-row>
 
-    <v-data-table :headers="headers" :items="filteredMovements" :loading="loading" density="compact"
+    <v-data-table :headers="headers" :items="filteredMovements" :loading="loading" density="compact" :items-per-page="100" :sort-by="[{ key: 'date', order: 'desc' }]"
       @click:row="(_, { item }) => openDetail(item)">
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
@@ -280,7 +280,7 @@ function formatDate(dt) {
 }
 
 function formatCurrency(val) {
-  return val != null ? Number(val).toFixed(2) + ' €' : ''
+  return val != null ? Number(val).toFixed(2) + '\u00a0€' : ''
 }
 
 watch(() => periodStore.currentPeriodId, () => {
