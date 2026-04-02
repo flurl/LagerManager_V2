@@ -3,7 +3,7 @@ from django.db.models import Count, QuerySet
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -80,42 +80,6 @@ class StockMovementViewSet(viewsets.ModelViewSet[StockMovement]):
     def perform_create(self, serializer: BaseSerializer[StockMovement]) -> None:
         serializer.save()
 
-    @action(detail=True, methods=['get'])
-    def merged_pdf(self, request: Request, pk: int | None = None) -> HttpResponse:
-        import pymupdf
-
-        movement = self.get_object()
-        attachment_ids: list[str] = request.query_params.getlist('attachment_id')
-
-        if attachment_ids:
-            id_list: list[int] = [int(a) for a in attachment_ids]
-            attachments_by_id: dict[int, Attachment] = {
-                a.pk: a for a in Attachment.objects.filter(stock_movement=movement, pk__in=id_list)
-            }
-            # Preserve the caller-supplied order: look up each id in the map so the
-            # resulting PDF pages follow the same sequence as the provided id list.
-            attachments = [attachments_by_id[i] for i in id_list if i in attachments_by_id]
-        else:
-            attachments = list(movement.attachments.all())
-
-        if not attachments:
-            return Response({'error': 'Keine Anhänge vorhanden.'}, status=status.HTTP_404_NOT_FOUND)
-
-        merged: pymupdf.Document = pymupdf.open()
-        for attachment in attachments:
-            img_bytes: bytes = attachment.file.read()
-            img_doc: pymupdf.Document = pymupdf.open(stream=img_bytes, filetype='png')
-            img_pdf_bytes: bytes = img_doc.convert_to_pdf()
-            img_pdf: pymupdf.Document = pymupdf.open('pdf', img_pdf_bytes)
-            merged.insert_pdf(img_pdf)
-            img_doc.close()
-            img_pdf.close()
-
-        pdf_bytes: bytes = merged.tobytes()
-        merged.close()
-
-        return HttpResponse(pdf_bytes, content_type='application/pdf')
-
     @action(detail=True, methods=['post'])
     def apply_discount(self, request: Request, pk: int | None = None) -> Response:
         movement = self.get_object()
@@ -156,13 +120,15 @@ ACCEPTED_MIME_TYPES = ('application/pdf',)
 class AttachmentViewSet(viewsets.ModelViewSet[Attachment]):
     serializer_class = AttachmentSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self) -> QuerySet[Attachment]:
         movement_pk = self.kwargs.get('movement_pk')
-        return Attachment.objects.filter(stock_movement_id=movement_pk)
+        if movement_pk:
+            return Attachment.objects.filter(stock_movement_id=movement_pk)
+        return Attachment.objects.all()
 
-    def create(self, request: Request, movement_pk: int) -> Response:
+    def create(self, request: Request, movement_pk: int | None = None) -> Response:
         uploaded_file = request.FILES.get('file')
         if not uploaded_file:
             return Response({'error': 'Keine Datei hochgeladen.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -177,7 +143,7 @@ class AttachmentViewSet(viewsets.ModelViewSet[Attachment]):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        movement = StockMovement.objects.get(pk=movement_pk)
+        movement: StockMovement | None = StockMovement.objects.get(pk=movement_pk) if movement_pk else None
         filename: str = uploaded_file.name or 'upload'
 
         if is_pdf:
@@ -196,7 +162,7 @@ class AttachmentViewSet(viewsets.ModelViewSet[Attachment]):
 
     def _process_pdf(
         self,
-        movement: StockMovement,
+        movement: StockMovement | None,
         uploaded_file: object,
         filename: str,
     ) -> list[Attachment]:
@@ -227,3 +193,36 @@ class AttachmentViewSet(viewsets.ModelViewSet[Attachment]):
 
         doc.close()
         return attachments
+
+    @action(detail=False, methods=['get'])
+    def merged_pdf(self, request: Request) -> HttpResponse:
+        import pymupdf
+
+        attachment_ids: list[str] = request.query_params.getlist('attachment_id')
+        if not attachment_ids:
+            return Response({'error': 'Keine Anhang-IDs angegeben.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        id_list: list[int] = [int(a) for a in attachment_ids]
+        attachments_by_id: dict[int, Attachment] = {
+            a.pk: a for a in Attachment.objects.filter(pk__in=id_list)
+        }
+        # Preserve caller-supplied order
+        ordered: list[Attachment] = [attachments_by_id[i] for i in id_list if i in attachments_by_id]
+
+        if not ordered:
+            return Response({'error': 'Keine Anhänge gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+
+        merged: pymupdf.Document = pymupdf.open()
+        for attachment in ordered:
+            img_bytes: bytes = attachment.file.read()
+            img_doc: pymupdf.Document = pymupdf.open(stream=img_bytes, filetype='png')
+            img_pdf_bytes: bytes = img_doc.convert_to_pdf()
+            img_pdf: pymupdf.Document = pymupdf.open('pdf', img_pdf_bytes)
+            merged.insert_pdf(img_pdf)
+            img_doc.close()
+            img_pdf.close()
+
+        pdf_bytes: bytes = merged.tobytes()
+        merged.close()
+
+        return HttpResponse(pdf_bytes, content_type='application/pdf')

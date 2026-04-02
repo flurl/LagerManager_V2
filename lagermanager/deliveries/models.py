@@ -183,7 +183,8 @@ class StockMovementDetail(models.Model):
 
 
 def attachment_upload_path(instance: "Attachment", filename: str) -> str:
-    return f"attachments/{instance.stock_movement_id}/{filename}"
+    folder = instance.stock_movement_id if instance.stock_movement_id is not None else "orphaned"
+    return f"attachments/{folder}/{filename}"
 
 
 class Attachment(models.Model):
@@ -191,12 +192,16 @@ class Attachment(models.Model):
 
     PDFs are converted server-side to one Attachment per page (PNG).
     Images are stored as-is.
+    Attachments may temporarily have no movement (stock_movement=None) while a new movement
+    is being created; they are assigned once the movement is saved.
     """
 
     stock_movement = models.ForeignKey(
         StockMovement,
         on_delete=models.CASCADE,
         related_name='attachments',
+        null=True,
+        blank=True,
     )
     file = models.ImageField(upload_to=attachment_upload_path)
     original_filename = models.CharField(max_length=255)

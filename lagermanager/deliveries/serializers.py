@@ -61,7 +61,7 @@ class AttachmentSerializer(serializers.ModelSerializer["Attachment"]):
             'source_filename', 'page_number', 'created_at',
         ]
         read_only_fields = [
-            'id', 'stock_movement', 'original_filename',
+            'id', 'original_filename',
             'source_filename', 'page_number', 'created_at',
         ]
 

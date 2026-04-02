@@ -5,7 +5,7 @@
       <span :class="`text-${typeConfig.color}`">{{ typeConfig.label }}</span>
       <span v-if="!isNew" class="ml-2 text-medium-emphasis text-body-1">#{{ form.id }}</span>
       <v-spacer />
-      <v-btn icon @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
+      <v-btn icon @click="handleClose"><v-icon>mdi-close</v-icon></v-btn>
     </v-card-title>
 
     <v-card-text>
@@ -26,7 +26,7 @@
 
       <v-tabs v-model="activeTab" density="compact">
         <v-tab value="positions">Positionen</v-tab>
-        <v-tab value="documents" :disabled="isNew">
+        <v-tab value="documents">
           Dokumente
         </v-tab>
       </v-tabs>
@@ -117,14 +117,18 @@
         </v-tabs-window-item>
 
         <v-tabs-window-item value="documents" class="pt-3">
-          <AttachmentGallery v-if="form.id" :movement-id="form.id" />
+          <AttachmentGallery
+            :movement-id="form.id ?? null"
+            :preloaded-attachments="!form.id ? pendingAttachments : []"
+            @uploaded="onPendingUploaded"
+          />
         </v-tabs-window-item>
       </v-tabs-window>
     </v-card-text>
 
     <v-card-actions>
       <v-spacer />
-      <v-btn @click="$emit('close')">Abbrechen</v-btn>
+      <v-btn @click="handleClose">Abbrechen</v-btn>
       <v-btn :color="typeConfig.color" :loading="saving" @click="save">Speichern</v-btn>
     </v-card-actions>
   </v-card>
@@ -142,9 +146,9 @@
       <!-- Step 1: JSON input -->
       <v-card-text v-if="importStep === 'input'">
         <AttachmentGallery
-          v-if="form.id"
           ref="importGalleryRef"
-          :movement-id="form.id"
+          :movement-id="form.id ?? null"
+          :preloaded-attachments="!form.id ? pendingAttachments : []"
           selectable
           hide-upload
           v-model="selectedAttachmentIds"
@@ -284,6 +288,7 @@ const importError = ref('')
 const importPreviewLines = ref([])
 const selectedAttachmentIds = ref([])
 const importGalleryRef = ref(null)
+const pendingAttachments = ref([])
 const apiLoading = ref(false)
 const dateError = ref('')
 const linesError = ref('')
@@ -323,6 +328,7 @@ async function initForm() {
   activeTab.value = 'positions'
   dateError.value = ''
   linesError.value = ''
+  pendingAttachments.value = []
   if (props.movement) {
     const res = await api.get(`/stock-movements/${props.movement.id}/`)
     const full = res.data
@@ -441,10 +447,33 @@ async function doSave() {
         api.post(`/stock-movements/${movementId}/details/`, { ...l, stock_movement: movementId })
       )
     )
+    // Assign any pending (orphaned) attachments to the newly created movement
+    if (isNew.value && pendingAttachments.value.length) {
+      await Promise.all(
+        pendingAttachments.value.map((a) =>
+          api.patch(`/attachments/${a.id}/`, { stock_movement: movementId })
+        )
+      )
+      pendingAttachments.value = []
+    }
     emit('saved')
   } finally {
     saving.value = false
   }
+}
+
+function onPendingUploaded(newAttachments) {
+  if (!form.value.id) {
+    pendingAttachments.value = [...pendingAttachments.value, ...newAttachments]
+  }
+}
+
+async function handleClose() {
+  if (pendingAttachments.value.length) {
+    await Promise.all(pendingAttachments.value.map((a) => api.delete(`/attachments/${a.id}/`)))
+    pendingAttachments.value = []
+  }
+  emit('close')
 }
 
 function openImportDialog() {
@@ -531,10 +560,10 @@ async function callAiProvider() {
 
     const attachmentUrls = []
     const blobUrls = []
-    if (form.value.id && selectedAttachmentIds.value.length) {
+    if (selectedAttachmentIds.value.length) {
       const providerEntry = AI_PROVIDERS.find((p) => p.id === selectedProviderId.value)
       if (providerEntry?.requiresMergedPdf) {
-        const mergedRes = await api.get(`/stock-movements/${form.value.id}/merged_pdf/`, {
+        const mergedRes = await api.get('/attachments/merged_pdf/', {
           responseType: 'blob',
           params: { attachment_id: selectedAttachmentIds.value },
           paramsSerializer: { indexes: null },

@@ -129,12 +129,14 @@ import { ref, onMounted } from 'vue'
 import api from '../api'
 
 const props = defineProps({
-  movementId: { type: Number, required: true },
+  movementId: { type: Number, default: null },
   selectable: { type: Boolean, default: false },
   hideUpload: { type: Boolean, default: false },
   modelValue: { type: Array, default: () => [] },
+  // Seed the attachment list when no movementId (e.g. pending attachments for a new movement)
+  preloadedAttachments: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'uploaded'])
 
 const attachments = ref([])
 const loading = ref(false)
@@ -167,13 +169,22 @@ async function upload() {
   uploading.value = true
   uploadError.value = ''
   try {
+    const newAttachments = []
     for (const file of filesToUpload.value) {
       const fd = new FormData()
       fd.append('file', file)
-      await api.post(`/stock-movements/${props.movementId}/attachments/`, fd)
+      const url = props.movementId
+        ? `/stock-movements/${props.movementId}/attachments/`
+        : '/attachments/'
+      const res = await api.post(url, fd)
+      newAttachments.push(...(Array.isArray(res.data) ? res.data : [res.data]))
     }
     filesToUpload.value = []
-    await loadAttachments()
+    attachments.value = [...attachments.value, ...newAttachments]
+    if (props.selectable) {
+      emit('update:modelValue', attachments.value.map((a) => a.id))
+    }
+    emit('uploaded', newAttachments)
   } catch (err) {
     uploadError.value = err.response?.data?.error ?? 'Fehler beim Hochladen.'
   } finally {
@@ -182,8 +193,11 @@ async function upload() {
 }
 
 async function deleteAttachment(att) {
-  await api.delete(`/stock-movements/${props.movementId}/attachments/${att.id}/`)
+  await api.delete(`/attachments/${att.id}/`)
   attachments.value = attachments.value.filter((a) => a.id !== att.id)
+  if (props.selectable) {
+    emit('update:modelValue', attachments.value.map((a) => a.id))
+  }
 }
 
 function onThumbEnter(att, event) {
@@ -223,7 +237,16 @@ function viewImage(att) {
 
 defineExpose({ attachments })
 
-onMounted(loadAttachments)
+onMounted(() => {
+  if (props.movementId) {
+    loadAttachments()
+  } else if (props.preloadedAttachments.length) {
+    attachments.value = [...props.preloadedAttachments]
+    if (props.selectable) {
+      emit('update:modelValue', attachments.value.map((a) => a.id))
+    }
+  }
+})
 </script>
 
 <style scoped>

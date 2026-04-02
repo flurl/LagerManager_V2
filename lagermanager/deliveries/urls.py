@@ -15,6 +15,7 @@ router.register(r'partners', PartnerViewSet)
 router.register(r'tax-rates', TaxRateViewSet)
 router.register(r'stock-movements', StockMovementViewSet, basename='stockmovement')
 router.register(r'ek-modifiers', EkModifierViewSet, basename='ekmodifier')
+router.register(r'attachments', AttachmentViewSet, basename='attachment')
 
 # Nested: /api/stock-movements/{movement_pk}/details/
 movement_detail_list = StockMovementDetailViewSet.as_view(
