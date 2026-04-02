@@ -195,11 +195,24 @@
               </td>
               <td>{{ row.name }}</td>
               <td>
-                <span v-if="row.matched">{{ row.articleName }}</span>
-                <span v-else class="d-flex align-center">
-                  <v-icon size="small" color="warning" class="mr-1">mdi-alert</v-icon>
-                  nicht zugeordnet
-                </span>
+                <v-autocomplete
+                  v-model="row.article"
+                  :items="warehouseArticles"
+                  item-title="article_name"
+                  item-value="article"
+                  density="compact"
+                  hide-details
+                  style="min-width: 180px"
+                  :prepend-inner-icon="!row.article ? 'mdi-alert' : undefined"
+                  :prepend-inner-icon-color="!row.article ? 'warning' : undefined"
+                  clearable
+                  @update:model-value="val => {
+                    const wa = warehouseArticles.find(w => w.article === val)
+                    row.articleName = wa?.article_name ?? null
+                    row.matched = val != null
+                    if (val != null) row.selected = true
+                  }"
+                />
               </td>
               <td>{{ row.quantity }}</td>
               <td>{{ row.unit_price }}</td>
@@ -470,7 +483,7 @@ function parseImportJson() {
       article: wa?.article ?? null,
       articleName: wa?.article_name ?? null,
       matched: wa != null,
-      selected: true,
+      selected: wa != null,
     }
   })
   importStep.value = 'preview'
