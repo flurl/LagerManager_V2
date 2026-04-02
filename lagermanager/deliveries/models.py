@@ -20,7 +20,6 @@ class Partner(models.Model):
         choices=Type.choices,
         default=Type.SUPPLIER,
     )
-    llm_instructions = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'partner'
@@ -28,6 +27,25 @@ class Partner(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class PartnerAiInstruction(models.Model):
+    """Per-provider LLM instructions for a partner."""
+
+    partner = models.ForeignKey(
+        Partner,
+        on_delete=models.CASCADE,
+        related_name='ai_instructions',
+    )
+    provider = models.CharField(max_length=50)
+    instructions = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = [('partner', 'provider')]
+        ordering = ['provider']
+
+    def __str__(self) -> str:
+        return f"{self.partner} – {self.provider}"
 
 
 class TaxRate(models.Model):

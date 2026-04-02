@@ -29,7 +29,19 @@
             item-value="value"
             label="Typ"
           />
-          <v-textarea v-model="form.llm_instructions" label="LLM-Anweisungen" rows="4" clearable />
+          <div v-for="p in AI_PROVIDERS" :key="p.id">
+            <v-textarea
+              v-model="instructionFor(p.id).instructions"
+              :label="`${p.label} – Anweisungen`"
+              rows="4"
+              clearable
+              class="mt-2"
+            >
+              <template #prepend>
+                <img :src="p.imgSrc" :alt="p.label" width="20" height="20" style="margin-top:2px" />
+              </template>
+            </v-textarea>
+          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -44,6 +56,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import { AI_PROVIDERS } from '../ai/index.js'
 
 const items = ref([])
 const loading = ref(false)
@@ -75,13 +88,27 @@ async function fetchItems() {
   }
 }
 
+function blankInstructions() {
+  return AI_PROVIDERS.map((p) => ({ provider: p.id, instructions: '' }))
+}
+
+function instructionFor(providerId) {
+  return form.value.ai_instructions.find((i) => i.provider === providerId)
+}
+
 function openNew() {
-  form.value = { name: '', partner_type: 'supplier', llm_instructions: null }
+  form.value = { name: '', partner_type: 'supplier', ai_instructions: blankInstructions() }
   dialog.value = true
 }
 
 function openEdit(item) {
-  form.value = { ...item }
+  form.value = {
+    ...item,
+    ai_instructions: AI_PROVIDERS.map((p) => ({
+      provider: p.id,
+      instructions: item.ai_instructions?.find((i) => i.provider === p.id)?.instructions ?? '',
+    })),
+  }
   dialog.value = true
 }
 

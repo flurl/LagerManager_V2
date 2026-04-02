@@ -146,9 +146,18 @@
             <v-textarea v-model="importJson" label="JSON einfügen" rows="12" auto-grow
               :error-messages="importError" hide-details="auto" />
           </v-col>
-          <v-col cols="auto" class="pt-2">
-            <v-btn icon title="Von API laden (noch nicht verfügbar)" disabled>
-              <v-icon>mdi-cloud-download</v-icon>
+          <v-col cols="auto" class="pt-2 d-flex flex-column gap-1">
+            <v-btn
+              v-for="p in AI_PROVIDERS"
+              :key="p.id"
+              icon
+              :title="`Von ${p.label} laden`"
+              :loading="apiLoading && selectedProviderId === p.id"
+              :disabled="apiLoading && selectedProviderId !== p.id"
+              :variant="selectedProviderId === p.id ? 'tonal' : 'text'"
+              @click="selectedProviderId = p.id; callAiProvider()"
+            >
+              <img :src="p.imgSrc" :alt="p.label" width="20" height="20" />
             </v-btn>
           </v-col>
         </v-row>
@@ -228,6 +237,7 @@ import { usePeriodStore } from '../stores/period'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
 import AttachmentGallery from './AttachmentGallery.vue'
+import { AI_PROVIDERS, createProvider } from '../ai/index.js'
 
 const props = defineProps({
   movement: { type: Object, default: null },
@@ -249,9 +259,12 @@ const importStep = ref('input')
 const importJson = ref('')
 const importError = ref('')
 const importPreviewLines = ref([])
+const apiLoading = ref(false)
 const dateError = ref('')
 const linesError = ref('')
 const defaultTaxRateId = ref(null)
+const aiConfig = ref({})
+const selectedProviderId = ref(AI_PROVIDERS[0].id)
 const originalDetailIds = ref([])
 
 const isNew = computed(() => !props.movement?.id)
@@ -433,10 +446,12 @@ function parseImportJson() {
   importPreviewLines.value = data.articles.map((a) => {
     const wa = a.ID != null ? warehouseArticles.value.find((w) => w.source_article_id === a.ID) : null
     const tr = taxRates.value.find((t) => Number(t.percent) === a.tax) ?? taxRates.value.find((t) => t.id === defaultTaxRateId.value)
+    const net = (a.total_price ?? 0) - (a.discount ?? 0)
+    const unit_price = a.quantity ? +(net / a.quantity).toFixed(4) : 0
     return {
       name: a.Name,
       quantity: a.quantity,
-      unit_price: a.price_per_unit,
+      unit_price,
       taxPercent: a.tax,
       tax_rate: tr?.id ?? null,
       article: wa?.article ?? null,
@@ -461,6 +476,50 @@ function confirmImport() {
   importDialog.value = false
 }
 
+function buildArticleMarkdownTable() {
+  const rows = warehouseArticles.value
+    .filter((wa) => wa.source_article_id != null)
+    .map((wa) => ` ${wa.source_article_id} | ${wa.article_name}`)
+  return ' artikel_id |    artikel_bezeichnung\n------------+----------------------------\n' + rows.join('\n')
+}
+
+async function callAiProvider() {
+  importError.value = ''
+  if (!form.value.partner) {
+    importError.value = 'Bitte zuerst einen Partner auswählen'
+    return
+  }
+
+  apiLoading.value = true
+  try {
+    const partnerRes = await api.get(`/partners/${form.value.partner}/`)
+    const partner = partnerRes.data
+    const instrObj = partner.ai_instructions?.find((i) => i.provider === selectedProviderId.value)
+    if (!instrObj?.instructions) {
+      importError.value = `Dieser Partner hat keine Anweisungen für ${selectedProviderId.value} konfiguriert`
+      return
+    }
+
+    const articleTable = buildArticleMarkdownTable()
+    const prompt = instrObj.instructions.replace('%%article_table%%', articleTable)
+
+    const attachmentUrls = []
+    if (form.value.id) {
+      const attRes = await api.get(`/stock-movements/${form.value.id}/attachments/`)
+      const attachments = attRes.data.results ?? attRes.data
+      attachmentUrls.push(...attachments.map((a) => a.file))
+    }
+
+    const provider = createProvider(selectedProviderId.value, aiConfig.value)
+    importJson.value = await provider.generateJson({ attachmentUrls, prompt })
+  } catch (err) {
+    importError.value = err.message ?? 'Fehler beim AI-Aufruf'
+    console.error('AI provider error:', err)
+  } finally {
+    apiLoading.value = false
+  }
+}
+
 async function applySkonto() {
   if (!form.value.id) return
   await api.post(`/stock-movements/${form.value.id}/apply_discount/`, { percent: skontoPercent.value })
@@ -478,6 +537,7 @@ onMounted(async () => {
   warehouseArticles.value = wa.data.results || wa.data
   const defaultId = cfg.data.config?.DEFAULT_TAX_RATE_ID?.value
   defaultTaxRateId.value = defaultId || null
+  aiConfig.value = cfg.data.config ?? {}
   await loadPartners()
   await initForm()
 })

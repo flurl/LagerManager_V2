@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^1.48.0",
     "@mdi/font": "^7.4.47",
     "axios": "^1.7.0",
     "chart.js": "^4.4.0",

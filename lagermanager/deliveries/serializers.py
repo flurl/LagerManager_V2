@@ -8,16 +8,43 @@ from .models import (
     Attachment,
     EkModifier,
     Partner,
+    PartnerAiInstruction,
     StockMovement,
     StockMovementDetail,
     TaxRate,
 )
 
 
+class PartnerAiInstructionSerializer(serializers.ModelSerializer[PartnerAiInstruction]):
+    class Meta:
+        model = PartnerAiInstruction
+        fields = ['provider', 'instructions']
+
+
 class PartnerSerializer(serializers.ModelSerializer[Partner]):
+    ai_instructions = PartnerAiInstructionSerializer(many=True, required=False)
+
     class Meta:
         model = Partner
-        fields = ['id', 'name', 'partner_type', 'llm_instructions']
+        fields = ['id', 'name', 'partner_type', 'ai_instructions']
+
+    def create(self, validated_data: dict[str, Any]) -> Partner:
+        ai_instructions: list[dict[str, Any]] = validated_data.pop('ai_instructions', [])
+        partner = super().create(validated_data)
+        for instr in ai_instructions:
+            if instr.get('instructions'):
+                PartnerAiInstruction.objects.create(partner=partner, **instr)
+        return partner
+
+    def update(self, instance: Partner, validated_data: dict[str, Any]) -> Partner:
+        ai_instructions: list[dict[str, Any]] | None = validated_data.pop('ai_instructions', None)
+        instance = super().update(instance, validated_data)
+        if ai_instructions is not None:
+            instance.ai_instructions.all().delete()
+            for instr in ai_instructions:
+                if instr.get('instructions'):
+                    PartnerAiInstruction.objects.create(partner=instance, **instr)
+        return instance
 
 
 class TaxRateSerializer(serializers.ModelSerializer[TaxRate]):

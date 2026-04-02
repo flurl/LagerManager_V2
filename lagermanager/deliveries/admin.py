@@ -4,12 +4,21 @@ from .models import (
     Attachment,
     EkModifier,
     Partner,
+    PartnerAiInstruction,
     StockMovement,
     StockMovementDetail,
     TaxRate,
 )
 
-admin.site.register(Partner)
+
+class PartnerAiInstructionInline(admin.TabularInline):
+    model = PartnerAiInstruction
+    extra = 1
+
+
+@admin.register(Partner)
+class PartnerAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    inlines = [PartnerAiInstructionInline]
 admin.site.register(TaxRate)
 admin.site.register(StockMovement)
 admin.site.register(StockMovementDetail)
