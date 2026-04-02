@@ -10,6 +10,7 @@
   "dependencies": {
     "@google/genai": "^1.48.0",
     "@mdi/font": "^7.4.47",
+    "@mistralai/mistralai": "^2.1.2",
     "axios": "^1.7.0",
     "chart.js": "^4.4.0",
     "chartjs-plugin-zoom": "^2.2.0",

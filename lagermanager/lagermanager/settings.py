@@ -136,4 +136,5 @@ CONSTANCE_BACKEND: str = 'constance.backends.database.DatabaseBackend'
 CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'DEFAULT_TAX_RATE_ID': (0, 'Standard-Steuersatz (TaxRate-ID, 0 = keiner)', int),
     'GEMINI_API_KEY': ('', 'Google Gemini API Key für den Dokumenten-Import', str),
+    'MISTRAL_API_KEY': ('', 'Mistral API Key für den Dokumenten-Import (OCR)', str),
 }

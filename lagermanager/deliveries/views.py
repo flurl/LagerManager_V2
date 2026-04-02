@@ -1,5 +1,6 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Count, QuerySet
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -78,6 +79,42 @@ class StockMovementViewSet(viewsets.ModelViewSet[StockMovement]):
 
     def perform_create(self, serializer: BaseSerializer[StockMovement]) -> None:
         serializer.save()
+
+    @action(detail=True, methods=['get'])
+    def merged_pdf(self, request: Request, pk: int | None = None) -> HttpResponse:
+        import pymupdf
+
+        movement = self.get_object()
+        attachment_ids: list[str] = request.query_params.getlist('attachment_id')
+
+        if attachment_ids:
+            id_list: list[int] = [int(a) for a in attachment_ids]
+            attachments_by_id: dict[int, Attachment] = {
+                a.pk: a for a in Attachment.objects.filter(stock_movement=movement, pk__in=id_list)
+            }
+            # Preserve the caller-supplied order: look up each id in the map so the
+            # resulting PDF pages follow the same sequence as the provided id list.
+            attachments = [attachments_by_id[i] for i in id_list if i in attachments_by_id]
+        else:
+            attachments = list(movement.attachments.all())
+
+        if not attachments:
+            return Response({'error': 'Keine Anhänge vorhanden.'}, status=status.HTTP_404_NOT_FOUND)
+
+        merged: pymupdf.Document = pymupdf.open()
+        for attachment in attachments:
+            img_bytes: bytes = attachment.file.read()
+            img_doc: pymupdf.Document = pymupdf.open(stream=img_bytes, filetype='png')
+            img_pdf_bytes: bytes = img_doc.convert_to_pdf()
+            img_pdf: pymupdf.Document = pymupdf.open('pdf', img_pdf_bytes)
+            merged.insert_pdf(img_pdf)
+            img_doc.close()
+            img_pdf.close()
+
+        pdf_bytes: bytes = merged.tobytes()
+        merged.close()
+
+        return HttpResponse(pdf_bytes, content_type='application/pdf')
 
     @action(detail=True, methods=['post'])
     def apply_discount(self, request: Request, pk: int | None = None) -> Response:

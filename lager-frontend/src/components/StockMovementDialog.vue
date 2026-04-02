@@ -141,6 +141,16 @@
 
       <!-- Step 1: JSON input -->
       <v-card-text v-if="importStep === 'input'">
+        <AttachmentGallery
+          v-if="form.id"
+          ref="importGalleryRef"
+          :movement-id="form.id"
+          selectable
+          hide-upload
+          v-model="selectedAttachmentIds"
+          class="mb-3"
+        />
+
         <v-row dense align="start">
           <v-col>
             <v-textarea v-model="importJson" label="JSON einfügen" rows="12" auto-grow
@@ -259,6 +269,8 @@ const importStep = ref('input')
 const importJson = ref('')
 const importError = ref('')
 const importPreviewLines = ref([])
+const selectedAttachmentIds = ref([])
+const importGalleryRef = ref(null)
 const apiLoading = ref(false)
 const dateError = ref('')
 const linesError = ref('')
@@ -427,6 +439,7 @@ function openImportDialog() {
   importJson.value = ''
   importError.value = ''
   importPreviewLines.value = []
+  selectedAttachmentIds.value = []
   importDialog.value = true
 }
 
@@ -504,14 +517,31 @@ async function callAiProvider() {
     const prompt = instrObj.instructions.replace('%%article_table%%', articleTable)
 
     const attachmentUrls = []
-    if (form.value.id) {
-      const attRes = await api.get(`/stock-movements/${form.value.id}/attachments/`)
-      const attachments = attRes.data.results ?? attRes.data
-      attachmentUrls.push(...attachments.map((a) => a.file))
+    const blobUrls = []
+    if (form.value.id && selectedAttachmentIds.value.length) {
+      const providerEntry = AI_PROVIDERS.find((p) => p.id === selectedProviderId.value)
+      if (providerEntry?.requiresMergedPdf) {
+        const mergedRes = await api.get(`/stock-movements/${form.value.id}/merged_pdf/`, {
+          responseType: 'blob',
+          params: { attachment_id: selectedAttachmentIds.value },
+          paramsSerializer: { indexes: null },
+        })
+        const blobUrl = URL.createObjectURL(mergedRes.data)
+        blobUrls.push(blobUrl)
+        attachmentUrls.push(blobUrl)
+      } else {
+        const allAttachments = importGalleryRef.value?.attachments ?? []
+        const selected = allAttachments.filter((a) => selectedAttachmentIds.value.includes(a.id))
+        attachmentUrls.push(...selected.map((a) => a.file))
+      }
     }
 
     const provider = createProvider(selectedProviderId.value, aiConfig.value)
-    importJson.value = await provider.generateJson({ attachmentUrls, prompt })
+    try {
+      importJson.value = await provider.generateJson({ attachmentUrls, prompt })
+    } finally {
+      blobUrls.forEach((u) => URL.revokeObjectURL(u))
+    }
   } catch (err) {
     importError.value = err.message ?? 'Fehler beim AI-Aufruf'
     console.error('AI provider error:', err)

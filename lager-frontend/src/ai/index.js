@@ -1,5 +1,7 @@
 import { GeminiProvider } from './providers/GeminiProvider.js'
+import { MistralProvider } from './providers/MistralProvider.js'
 import geminiIcon from '../assets/gemini-icon.svg'
+import mistralIcon from '../assets/mistral-icon.svg'
 
 /**
  * All registered AI providers.
@@ -12,6 +14,15 @@ export const AI_PROVIDERS = [
     label: 'Gemini',
     imgSrc: geminiIcon,
     factory: (config) => new GeminiProvider(config.GEMINI_API_KEY?.value ?? ''),
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral',
+    imgSrc: mistralIcon,
+    // Mistral OCR processes one document at a time; the backend merges all
+    // attachments into a single PDF before the API call.
+    requiresMergedPdf: true,
+    factory: (config) => new MistralProvider(config.MISTRAL_API_KEY?.value ?? ''),
   },
 ]
 
