@@ -134,108 +134,16 @@
   </v-card>
 
   <!-- Import dialog -->
-  <v-dialog v-model="importDialog" max-width="860" persistent>
-    <v-card>
-      <v-card-title class="d-flex align-center pa-4">
-        <v-icon class="mr-2">mdi-import</v-icon>
-        Positionen importieren
-        <v-spacer />
-        <v-btn icon @click="importDialog = false"><v-icon>mdi-close</v-icon></v-btn>
-      </v-card-title>
-
-      <!-- Step 1: JSON input -->
-      <v-card-text v-if="importStep === 'input'">
-        <AttachmentGallery
-          ref="importGalleryRef"
-          :movement-id="form.id ?? null"
-          :preloaded-attachments="!form.id ? pendingAttachments : []"
-          selectable
-          hide-upload
-          v-model="selectedAttachmentIds"
-          class="mb-3"
-        />
-
-        <v-row dense align="start">
-          <v-col>
-            <v-textarea v-model="importJson" label="JSON einfügen" rows="12" auto-grow
-              :error-messages="importError" hide-details="auto" />
-          </v-col>
-          <v-col cols="auto" class="pt-2 d-flex flex-column gap-1">
-            <v-btn
-              v-for="p in AI_PROVIDERS"
-              :key="p.id"
-              icon
-              :title="`Von ${p.label} laden`"
-              :loading="apiLoading && selectedProviderId === p.id"
-              :disabled="apiLoading && selectedProviderId !== p.id"
-              :variant="selectedProviderId === p.id ? 'tonal' : 'text'"
-              @click="selectedProviderId = p.id; callAiProvider()"
-            >
-              <img :src="p.imgSrc" :alt="p.label" width="20" height="20" />
-            </v-btn>
-          </v-col>
-        </v-row>
-      </v-card-text>
-
-      <!-- Step 2: Preview -->
-      <v-card-text v-else>
-        <v-table density="compact">
-          <thead>
-            <tr>
-              <th style="width: 40px"></th>
-              <th>Name</th>
-              <th>Artikel</th>
-              <th>Menge</th>
-              <th>EK-Preis</th>
-              <th>MwSt %</th>
-              <th class="text-right">Netto</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, idx) in importPreviewLines" :key="idx"
-              :class="!row.matched ? 'text-medium-emphasis' : ''">
-              <td>
-                <v-checkbox v-model="row.selected" hide-details density="compact" />
-              </td>
-              <td>{{ row.name }}</td>
-              <td>
-                <v-autocomplete
-                  v-model="row.article"
-                  :items="warehouseArticles"
-                  item-title="article_name"
-                  item-value="article"
-                  density="compact"
-                  hide-details
-                  style="min-width: 180px"
-                  :prepend-inner-icon="!row.article ? 'mdi-alert' : undefined"
-                  :prepend-inner-icon-color="!row.article ? 'warning' : undefined"
-                  clearable
-                  @update:model-value="val => {
-                    const wa = warehouseArticles.find(w => w.article === val)
-                    row.articleName = wa?.article_name ?? null
-                    row.matched = val != null
-                    if (val != null) row.selected = true
-                  }"
-                />
-              </td>
-              <td>{{ row.quantity }}</td>
-              <td>{{ row.unit_price }}</td>
-              <td>{{ row.taxPercent }}</td>
-              <td class="text-right">{{ (row.quantity * row.unit_price).toFixed(2) }}</td>
-            </tr>
-          </tbody>
-        </v-table>
-      </v-card-text>
-
-      <v-card-actions>
-        <v-spacer />
-        <v-btn @click="importDialog = false">Abbrechen</v-btn>
-        <v-btn v-if="importStep === 'preview'" @click="importStep = 'input'">Zurück</v-btn>
-        <v-btn v-if="importStep === 'input'" color="primary" @click="parseImportJson">Vorschau</v-btn>
-        <v-btn v-else color="primary" @click="confirmImport">Übernehmen</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <ImportDialog
+    v-model="importDialog"
+    :pending-attachments="pendingAttachments"
+    :warehouse-articles="warehouseArticles"
+    :tax-rates="taxRates"
+    :partner-id="form.partner"
+    :movement-id="form.id ?? null"
+    :config="config"
+    @confirm="onImportConfirm"
+  />
 
   <!-- Duplicate warning dialog -->
   <v-dialog v-model="duplicateDialog" max-width="480">
@@ -264,7 +172,7 @@ import { usePeriodStore } from '../stores/period'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
 import AttachmentGallery from './AttachmentGallery.vue'
-import { AI_PROVIDERS, createProvider } from '../ai/index.js'
+import ImportDialog from './ImportDialog.vue'
 
 const props = defineProps({
   movement: { type: Object, default: null },
@@ -282,19 +190,11 @@ const skontoPercent = ref(0)
 const duplicateDialog = ref(false)
 const duplicateCount = ref(0)
 const importDialog = ref(false)
-const importStep = ref('input')
-const importJson = ref('')
-const importError = ref('')
-const importPreviewLines = ref([])
-const selectedAttachmentIds = ref([])
-const importGalleryRef = ref(null)
 const pendingAttachments = ref([])
-const apiLoading = ref(false)
 const dateError = ref('')
 const linesError = ref('')
 const defaultTaxRateId = ref(null)
-const aiConfig = ref({})
-const selectedProviderId = ref(AI_PROVIDERS[0].id)
+const config = ref({})
 const originalDetailIds = ref([])
 
 const isNew = computed(() => !props.movement?.id)
@@ -477,119 +377,11 @@ async function handleClose() {
 }
 
 function openImportDialog() {
-  importStep.value = 'input'
-  importJson.value = ''
-  importError.value = ''
-  importPreviewLines.value = []
-  selectedAttachmentIds.value = []
   importDialog.value = true
 }
 
-function parseImportJson() {
-  importError.value = ''
-  let data
-  try {
-    data = JSON.parse(importJson.value)
-  } catch {
-    importError.value = 'Ungültiges JSON'
-    return
-  }
-  if (!Array.isArray(data?.articles)) {
-    importError.value = 'JSON muss ein "articles"-Array enthalten'
-    return
-  }
-  importPreviewLines.value = data.articles.map((a) => {
-    const wa = a.ID != null ? warehouseArticles.value.find((w) => w.source_article_id === a.ID) : null
-    const tr = taxRates.value.find((t) => Number(t.percent) === a.tax) ?? taxRates.value.find((t) => t.id === defaultTaxRateId.value)
-    const net = (a.total_price ?? 0) - (a.discount ?? 0)
-    const unit_price = a.quantity ? +(net / a.quantity).toFixed(4) : 0
-    return {
-      name: a.Name,
-      quantity: a.quantity,
-      unit_price,
-      taxPercent: a.tax,
-      tax_rate: tr?.id ?? null,
-      article: wa?.article ?? null,
-      articleName: wa?.article_name ?? null,
-      matched: wa != null,
-      selected: wa != null,
-    }
-  })
-  importStep.value = 'preview'
-}
-
-function confirmImport() {
-  for (const row of importPreviewLines.value) {
-    if (!row.selected) continue
-    lines.value.push({
-      article: row.article,
-      quantity: row.quantity,
-      unit_price: row.unit_price,
-      tax_rate: row.tax_rate,
-    })
-  }
-  importDialog.value = false
-}
-
-function buildArticleMarkdownTable() {
-  const rows = warehouseArticles.value
-    .filter((wa) => wa.source_article_id != null)
-    .map((wa) => ` ${wa.source_article_id} | ${wa.article_name}`)
-  return ' artikel_id |    artikel_bezeichnung\n------------+----------------------------\n' + rows.join('\n')
-}
-
-async function callAiProvider() {
-  importError.value = ''
-  if (!form.value.partner) {
-    importError.value = 'Bitte zuerst einen Partner auswählen'
-    return
-  }
-
-  apiLoading.value = true
-  try {
-    const partnerRes = await api.get(`/partners/${form.value.partner}/`)
-    const partner = partnerRes.data
-    const instrObj = partner.ai_instructions?.find((i) => i.provider === selectedProviderId.value)
-    if (!instrObj?.instructions) {
-      importError.value = `Dieser Partner hat keine Anweisungen für ${selectedProviderId.value} konfiguriert`
-      return
-    }
-
-    const articleTable = buildArticleMarkdownTable()
-    const prompt = instrObj.instructions.replace('%%article_table%%', articleTable)
-
-    const attachmentUrls = []
-    const blobUrls = []
-    if (selectedAttachmentIds.value.length) {
-      const providerEntry = AI_PROVIDERS.find((p) => p.id === selectedProviderId.value)
-      if (providerEntry?.requiresMergedPdf) {
-        const mergedRes = await api.get('/attachments/merged_pdf/', {
-          responseType: 'blob',
-          params: { attachment_id: selectedAttachmentIds.value },
-          paramsSerializer: { indexes: null },
-        })
-        const blobUrl = URL.createObjectURL(mergedRes.data)
-        blobUrls.push(blobUrl)
-        attachmentUrls.push(blobUrl)
-      } else {
-        const allAttachments = importGalleryRef.value?.attachments ?? []
-        const selected = allAttachments.filter((a) => selectedAttachmentIds.value.includes(a.id))
-        attachmentUrls.push(...selected.map((a) => a.file))
-      }
-    }
-
-    const provider = createProvider(selectedProviderId.value, aiConfig.value)
-    try {
-      importJson.value = await provider.generateJson({ attachmentUrls, prompt })
-    } finally {
-      blobUrls.forEach((u) => URL.revokeObjectURL(u))
-    }
-  } catch (err) {
-    importError.value = err.message ?? 'Fehler beim AI-Aufruf'
-    console.error('AI provider error:', err)
-  } finally {
-    apiLoading.value = false
-  }
+function onImportConfirm(newLines) {
+  lines.value.push(...newLines)
 }
 
 async function applySkonto() {
@@ -607,9 +399,8 @@ onMounted(async () => {
   ])
   taxRates.value = t.data.results || t.data
   warehouseArticles.value = wa.data.results || wa.data
-  const defaultId = cfg.data.config?.DEFAULT_TAX_RATE_ID?.value
-  defaultTaxRateId.value = defaultId || null
-  aiConfig.value = cfg.data.config ?? {}
+  config.value = cfg.data.config ?? {}
+  defaultTaxRateId.value = config.value.DEFAULT_TAX_RATE_ID?.value || null
   await loadPartners()
   await initForm()
 })
