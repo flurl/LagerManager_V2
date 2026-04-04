@@ -135,7 +135,7 @@ class StockMovement(models.Model):
             total=Sum(
                 ExpressionWrapper(
                     F('quantity') * F('unit_price') *
-                    (1 + F('tax_rate__percent') / 100),
+                    (1.0 + F('tax_rate__percent') / 100.0),
                     output_field=DecimalField(max_digits=18, decimal_places=4),
                 )
             )
