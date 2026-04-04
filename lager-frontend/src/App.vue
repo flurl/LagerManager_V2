@@ -16,3 +16,12 @@ import LoginView from './views/LoginView.vue'
 
 const auth = useAuthStore()
 </script>
+
+<style>
+.v-data-table tbody tr:nth-child(even) td {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+.v-data-table tbody tr:hover td {
+  background-color: rgba(21, 101, 192, 0.08) !important;
+}
+</style>
