@@ -68,6 +68,11 @@ const routes = [
     meta: { title: 'Steuersätze' },
   },
   {
+    path: '/locations',
+    component: () => import('./views/LocationView.vue'),
+    meta: { title: 'Standorte' },
+  },
+  {
     path: '/settings',
     component: () => import('./views/SystemSettingsView.vue'),
     meta: { title: 'Einstellungen' },

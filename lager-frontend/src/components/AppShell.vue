@@ -98,6 +98,7 @@ const navGroups = [
     items: [
       { to: '/partners', icon: 'mdi-truck', title: 'Partner' },
       { to: '/tax-rates', icon: 'mdi-percent', title: 'Steuersätze' },
+      { to: '/locations', icon: 'mdi-map-marker', title: 'Standorte' },
     ],
   },
   {
