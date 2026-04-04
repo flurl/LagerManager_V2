@@ -96,8 +96,3 @@ python manage.py runserver
 .venv/bin/ruff format lagermanager/  # format
 ```
 
----
-
-## Legacy reference
-
-The original PyQt4/Python 2 desktop app is preserved in `lagerManager/` for business logic reference. Do not modify it.
