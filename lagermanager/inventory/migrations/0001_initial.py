@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('article', models.ForeignKey(db_column='ist_artikel_id', on_delete=django.db.models.deletion.CASCADE, related_name='initial_inventories', to='pos_import.article')),
                 ('period', models.ForeignKey(db_column='ist_periode_id', on_delete=django.db.models.deletion.CASCADE, related_name='initial_inventories', to='core.period')),
-                ('workplace', models.ForeignKey(db_column='ist_arp_id', on_delete=django.db.models.deletion.CASCADE, to='core.workplace')),
+                ('workplace', models.ForeignKey(db_column='ist_arp_id', on_delete=django.db.models.deletion.CASCADE, to='core.Location')),
             ],
             options={
                 'db_table': 'initialer_stand',
