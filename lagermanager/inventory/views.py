@@ -48,13 +48,13 @@ class InitialInventoryViewSet(viewsets.ModelViewSet[InitialInventory]):
 
     def get_queryset(self) -> QuerySet[InitialInventory]:
         qs = InitialInventory.objects.select_related(
-            'article', 'workplace', 'period')
+            'article', 'location', 'period')
         period_id = self.request.query_params.get('period_id')
-        workplace_id = self.request.query_params.get('workplace_id')
+        location_id = self.request.query_params.get('location_id')
         if period_id:
             qs = qs.filter(period_id=period_id)
-        if workplace_id:
-            qs = qs.filter(workplace_id=workplace_id)
+        if location_id:
+            qs = qs.filter(location_id=location_id)
         return qs
 
     @action(detail=False, methods=['post'])
@@ -80,7 +80,7 @@ class InitialInventoryViewSet(viewsets.ModelViewSet[InitialInventory]):
         writer.writerow(['Artikel', 'Arbeitsplatz', 'Menge', 'Periode'])
         for obj in qs:
             writer.writerow(
-                [obj.article.name, obj.workplace.name, obj.quantity, obj.period.name])
+                [obj.article.name, obj.location.name, obj.quantity, obj.period.name])
         return response
 
 

@@ -1,5 +1,5 @@
 from pos_import.models import Article
-from core.models import Period, Workplace
+from core.models import Location, Period
 from django.db import models
 
 
@@ -29,7 +29,7 @@ class PeriodStartStockLevel(models.Model):
 
 
 class InitialInventory(models.Model):
-    """initialer_stand — initial stock per article/workplace/period."""
+    """initialer_stand — initial stock per article/location/period."""
     article = models.ForeignKey(
         Article,
         on_delete=models.CASCADE,
@@ -37,8 +37,8 @@ class InitialInventory(models.Model):
         db_column='ist_artikel_id',
     )
     quantity = models.DecimalField(max_digits=10, decimal_places=3, db_column='ist_anzahl')
-    workplace = models.ForeignKey(
-        Workplace,
+    location = models.ForeignKey(
+        Location,
         on_delete=models.CASCADE,
         db_column='ist_arp_id',
     )
@@ -52,10 +52,10 @@ class InitialInventory(models.Model):
 
     class Meta:
         db_table = 'initialer_stand'
-        unique_together = [('article', 'workplace', 'period')]
+        unique_together = [('article', 'location', 'period')]
 
     def __str__(self) -> str:
-        return f"IS {self.article_id}/{self.workplace_id}/{self.period_id}"
+        return f"IS {self.article_id}/{self.location_id}/{self.period_id}"
 
 
 class PhysicalCount(models.Model):

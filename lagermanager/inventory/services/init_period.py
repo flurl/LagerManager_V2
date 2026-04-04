@@ -5,7 +5,7 @@ import datetime as dt
 from decimal import Decimal
 
 from pos_import.models import WarehouseArticle
-from core.models import Period, Workplace
+from core.models import Location, Period
 from django.db import transaction
 
 
@@ -45,7 +45,7 @@ def init_initial_inventory(period_id: int, source_period_id: int | None = None) 
     """
     Create InitialInventory entries for the given period.
     If source_period_id is provided, copies quantities from that period.
-    Otherwise creates zero entries for all article/workplace combinations.
+    Otherwise creates zero entries for all article/location combinations.
     Returns the number of entries created.
     """
     from inventory.models import InitialInventory
@@ -55,10 +55,10 @@ def init_initial_inventory(period_id: int, source_period_id: int | None = None) 
     warehouse_articles = WarehouseArticle.objects.filter(
         period=period
     ).select_related('article')
-    workplaces = list(Workplace.objects.all())
+    locations = list(Location.objects.all())
     existing = set(
         InitialInventory.objects.filter(period=period).values_list(
-            'article__source_id', 'workplace_id'
+            'article__source_id', 'location_id'
         )
     )
 
@@ -66,18 +66,18 @@ def init_initial_inventory(period_id: int, source_period_id: int | None = None) 
     if source_period_id:
         for entry in InitialInventory.objects.filter(period_id=source_period_id).select_related('article'):
             source_quantities[(entry.article.source_id,
-                               entry.workplace_id)] = entry.quantity
+                               entry.location_id)] = entry.quantity
 
     to_create = []
     for wa in warehouse_articles:
-        for wp in workplaces:
-            key = (wa.article.source_id, wp.pk)
+        for loc in locations:
+            key = (wa.article.source_id, loc.pk)
             if key not in existing:
                 quantity: Decimal = source_quantities.get(key, Decimal(0))
                 to_create.append(InitialInventory(
                     article=wa.article,
                     quantity=quantity,
-                    workplace=wp,
+                    location=loc,
                     period=period,
                 ))
 

@@ -20,13 +20,13 @@ class Period(models.Model):
         return self.name
 
 
-class Workplace(models.Model):
-    """Arbeitsplatz / Bar / Lager"""
+class Location(models.Model):
+    """Standort / Arbeitsplatz / Bar / Lager / Abteilung"""
     name = models.CharField(
         max_length=255, db_column='arp_bezeichnung')
 
     class Meta:
-        db_table = 'arbeitsplaetze'
+        db_table = 'locations'
         ordering = ['name']
 
     def __str__(self) -> str:

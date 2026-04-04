@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Period, Workplace
+from .models import Location, Period
 
 admin.site.register(Period)
-admin.site.register(Workplace)
+admin.site.register(Location)

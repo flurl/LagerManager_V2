@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Period, Workplace
+from .models import Location, Period
 
 
 class PeriodSerializer(serializers.ModelSerializer):
@@ -9,7 +9,7 @@ class PeriodSerializer(serializers.ModelSerializer):
         fields: list[str] = ['id', 'name', 'checkpoint_year', 'start', 'end']
 
 
-class WorkplaceSerializer(serializers.ModelSerializer):
+class LocationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Workplace
+        model = Location
         fields: list[str] = ['id', 'name']

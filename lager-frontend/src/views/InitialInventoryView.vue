@@ -4,8 +4,8 @@
       <v-col><h2>Initialer Stand</h2></v-col>
       <v-col cols="auto">
         <v-select
-          v-model="workplaceId"
-          :items="workplaces"
+          v-model="locationId"
+          :items="locations"
           item-title="name"
           item-value="id"
           label="Arbeitsplatz"
@@ -44,14 +44,14 @@ import NumberInput from '../components/NumberInput.vue'
 const periodStore = usePeriodStore()
 const { exportCsv } = useCsvExport()
 const items = ref([])
-const workplaces = ref([])
-const workplaceId = ref(null)
+const locations = ref([])
+const locationId = ref(null)
 const loading = ref(false)
 const initLoading = ref(false)
 
 const headers = [
   { title: 'Artikel', key: 'article_name' },
-  { title: 'Arbeitsplatz', key: 'workplace_name' },
+  { title: 'Arbeitsplatz', key: 'location_name' },
   { title: 'Menge', key: 'quantity' },
 ]
 
@@ -60,7 +60,7 @@ async function fetchItems() {
   loading.value = true
   try {
     const res = await api.get('/initial-inventory/', {
-      params: { period_id: periodStore.currentPeriodId, workplace_id: workplaceId.value || undefined },
+      params: { period_id: periodStore.currentPeriodId, location_id: locationId.value || undefined },
     })
     items.value = res.data.results || res.data
   } finally {
@@ -83,15 +83,15 @@ async function initPeriod() {
 }
 
 function exportCsvAction() {
-  exportCsv(['article_name', 'workplace_name', 'quantity'], items.value, 'initialer_stand.csv')
+  exportCsv(['article_name', 'location_name', 'quantity'], items.value, 'initialer_stand.csv')
 }
 
 onMounted(async () => {
-  const res = await api.get('/workplaces/')
-  workplaces.value = res.data.results || res.data
+  const res = await api.get('/locations/')
+  locations.value = res.data.results || res.data
   await fetchItems()
 })
 
 watch(() => periodStore.currentPeriodId, fetchItems)
-watch(workplaceId, fetchItems)
+watch(locationId, fetchItems)
 </script>

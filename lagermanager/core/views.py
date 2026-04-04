@@ -8,8 +8,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Period, Workplace
-from .serializers import PeriodSerializer, WorkplaceSerializer
+from .models import Location, Period
+from .serializers import LocationSerializer, PeriodSerializer
 
 
 class PeriodViewSet(viewsets.ModelViewSet[Period]):
@@ -17,9 +17,9 @@ class PeriodViewSet(viewsets.ModelViewSet[Period]):
     serializer_class = PeriodSerializer
 
 
-class WorkplaceViewSet(viewsets.ModelViewSet[Workplace]):
-    queryset: QuerySet[Workplace, Workplace] = Workplace.objects.all()
-    serializer_class = WorkplaceSerializer
+class LocationViewSet(viewsets.ModelViewSet[Location]):
+    queryset: QuerySet[Location, Location] = Location.objects.all()
+    serializer_class = LocationSerializer
 
 
 class ConfigView(APIView):
