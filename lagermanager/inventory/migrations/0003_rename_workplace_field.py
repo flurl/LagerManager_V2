@@ -1,4 +1,5 @@
-from django.db import migrations
+import django.db.models.deletion
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
@@ -10,4 +11,13 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RenameField('initialinventory', 'workplace', 'location'),
+        migrations.AlterField(
+            model_name='initialinventory',
+            name='location',
+            field=models.ForeignKey(
+                db_column='ist_arp_id',
+                on_delete=django.db.models.deletion.CASCADE,
+                to='core.location',
+            ),
+        ),
     ]
