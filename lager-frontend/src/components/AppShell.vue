@@ -96,6 +96,7 @@ const navGroups = [
     label: 'Stammdaten',
     icon: 'mdi-database',
     items: [
+      { to: '/article-meta', icon: 'mdi-tag-edit', title: 'Artikel-Metadaten' },
       { to: '/partners', icon: 'mdi-truck', title: 'Partner' },
       { to: '/tax-rates', icon: 'mdi-percent', title: 'Steuersätze' },
       { to: '/locations', icon: 'mdi-map-marker', title: 'Standorte' },

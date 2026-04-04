@@ -357,9 +357,31 @@ class Article(models.Model):
     class Meta:
         db_table = 'artikel_basis'
         unique_together = [('source_id', 'period')]
+        ordering = ['name']
 
     def __str__(self) -> str:
         return self.name
+
+
+class ArticleMeta(models.Model):
+    """Per-article metadata scoped to a period, keyed by (source_id, period)."""
+    source_id = models.IntegerField()
+    period = models.ForeignKey(
+        Period,
+        on_delete=models.CASCADE,
+        related_name='article_metas',
+    )
+    is_hidden = models.BooleanField(default=False)
+    sub_articles = models.TextField(blank=True)   # comma-separated, e.g. "lemon,orange"
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = 'Article Meta'
+        verbose_name_plural = 'Article Meta'
+        unique_together = [('source_id', 'period')]
+
+    def __str__(self) -> str:
+        return f"ArticleMeta(source_id={self.source_id}, period={self.period_id})"
 
 
 class Recipe(models.Model):

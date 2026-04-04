@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     ArticleGroupViewSet,
+    ArticleMetaViewSet,
     ArticleViewSet,
     ImportRunView,
     RecipeViewSet,
@@ -11,6 +12,7 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.register(r'article-meta', ArticleMetaViewSet, basename='articlemeta')
 router.register(r'articles', ArticleViewSet, basename='article')
 router.register(r'article-groups', ArticleGroupViewSet, basename='articlegroup')
 router.register(r'recipes', RecipeViewSet, basename='recipe')

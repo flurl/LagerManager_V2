@@ -1,6 +1,16 @@
 from rest_framework import serializers
 
-from .models import Article, ArticleGroup, Recipe, WarehouseArticle, WarehouseUnit
+from core.fields import CommaSeparatedListField
+
+from .models import Article, ArticleGroup, ArticleMeta, Recipe, WarehouseArticle, WarehouseUnit
+
+
+class ArticleMetaSerializer(serializers.ModelSerializer[ArticleMeta]):
+    sub_articles = CommaSeparatedListField()
+
+    class Meta:
+        model = ArticleMeta
+        fields = ['id', 'source_id', 'period', 'is_hidden', 'sub_articles', 'extra']
 
 
 class ArticleGroupSerializer(serializers.ModelSerializer[ArticleGroup]):

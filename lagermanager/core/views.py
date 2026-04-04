@@ -8,6 +8,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from pos_import.models import ArticleMeta
+
 from .models import Location, Period
 from .serializers import LocationSerializer, PeriodSerializer
 
@@ -15,6 +17,22 @@ from .serializers import LocationSerializer, PeriodSerializer
 class PeriodViewSet(viewsets.ModelViewSet[Period]):
     queryset: QuerySet[Period, Period] = Period.objects.all()
     serializer_class = PeriodSerializer
+
+    def perform_create(self, serializer: PeriodSerializer) -> None:
+        new_period: Period = serializer.save()
+        source_period: Period | None = Period.objects.exclude(pk=new_period.pk).order_by('-start').first()
+        if source_period is not None:
+            metas = ArticleMeta.objects.filter(period=source_period)
+            ArticleMeta.objects.bulk_create([
+                ArticleMeta(
+                    source_id=m.source_id,
+                    period=new_period,
+                    is_hidden=m.is_hidden,
+                    sub_articles=m.sub_articles,
+                    extra=m.extra,
+                )
+                for m in metas
+            ])
 
 
 class LocationViewSet(viewsets.ModelViewSet[Location]):

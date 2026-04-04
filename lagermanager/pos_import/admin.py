@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     Article,
     ArticleGroup,
+    ArticleMeta,
     JournalCheckpoint,
     KellnerBasis,
     MwstGruppe,
@@ -11,6 +12,7 @@ from .models import (
     WarehouseUnit,
 )
 
+admin.site.register(ArticleMeta)
 admin.site.register(JournalCheckpoint)
 admin.site.register(MwstGruppe)
 admin.site.register(KellnerBasis)

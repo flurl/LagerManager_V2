@@ -58,6 +58,11 @@ const routes = [
     meta: { title: 'Daten importieren' },
   },
   {
+    path: '/article-meta',
+    component: () => import('./views/ArticleMetaView.vue'),
+    meta: { title: 'Artikel-Metadaten' },
+  },
+  {
     path: '/partners',
     component: () => import('./views/PartnerView.vue'),
     meta: { title: 'Partner' },

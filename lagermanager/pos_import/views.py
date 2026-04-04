@@ -5,15 +5,29 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Article, ArticleGroup, Recipe, WarehouseArticle, WarehouseUnit
+from .models import Article, ArticleGroup, ArticleMeta, Recipe, WarehouseArticle, WarehouseUnit
 from .serializers import (
     ArticleGroupSerializer,
+    ArticleMetaSerializer,
     ArticleSerializer,
     RecipeSerializer,
     WarehouseArticleSerializer,
     WarehouseUnitSerializer,
 )
 from .services.mssql_import import run_import
+
+
+class ArticleMetaViewSet(viewsets.ModelViewSet[ArticleMeta]):
+    """CRUD for per-article metadata scoped to a period."""
+    serializer_class = ArticleMetaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet[ArticleMeta]:
+        qs = ArticleMeta.objects.all()
+        period_id = self.request.query_params.get('period_id')
+        if period_id:
+            qs = qs.filter(period_id=period_id)
+        return qs
 
 
 class ArticleGroupViewSet(viewsets.ReadOnlyModelViewSet[ArticleGroup]):
