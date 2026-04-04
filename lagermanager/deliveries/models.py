@@ -225,28 +225,3 @@ class Attachment(models.Model):
         if self.source_filename and self.page_number:
             return f"{self.source_filename} S.{self.page_number}"
         return self.original_filename
-
-
-class EkModifier(models.Model):
-    """ek_modifikatoren — purchase price modifiers per article/period."""
-    OPERATOR_CHOICES = [('+', '+'), ('-', '-'), ('*', '*'), ('/', '/')]
-
-    article = models.ForeignKey(
-        Article,
-        on_delete=models.CASCADE,
-        related_name='ek_modifiers',
-        db_column='emo_artikel_id',
-    )
-    operator = models.CharField(
-        max_length=1, choices=OPERATOR_CHOICES, db_column='emo_operator')
-    modifier = models.DecimalField(
-        max_digits=10, decimal_places=4, db_column='emo_modifikator')
-    period = models.ForeignKey(
-        Period, on_delete=models.CASCADE, db_column='emo_periode_id')
-
-    class Meta:
-        db_table = 'ek_modifikatoren'
-        ordering = ['id']
-
-    def __str__(self) -> str:
-        return f"{self.article_id} {self.operator} {self.modifier}"

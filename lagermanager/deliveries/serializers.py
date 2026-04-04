@@ -6,7 +6,6 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from .models import (
     Attachment,
-    EkModifier,
     Partner,
     PartnerAiInstruction,
     StockMovement,
@@ -116,12 +115,6 @@ class StockMovementSerializer(serializers.ModelSerializer[StockMovement]):
         except DjangoValidationError as exc:
             raise DRFValidationError(exc.message_dict) from exc
         return attrs
-
-
-class EkModifierSerializer(serializers.ModelSerializer[EkModifier]):
-    class Meta:
-        model = EkModifier
-        fields = ['id', 'article', 'operator', 'modifier', 'period']
 
 
 class StockMovementListSerializer(serializers.ModelSerializer[StockMovement]):

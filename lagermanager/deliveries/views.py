@@ -11,7 +11,6 @@ from rest_framework.serializers import BaseSerializer
 
 from .models import (
     Attachment,
-    EkModifier,
     Partner,
     StockMovement,
     StockMovementDetail,
@@ -19,7 +18,6 @@ from .models import (
 )
 from .serializers import (
     AttachmentSerializer,
-    EkModifierSerializer,
     PartnerSerializer,
     StockMovementDetailSerializer,
     StockMovementListSerializer,
@@ -99,18 +97,6 @@ class StockMovementDetailViewSet(viewsets.ModelViewSet[StockMovementDetail]):
         return StockMovementDetail.objects.filter(
             stock_movement_id=movement_pk
         ).select_related('article', 'tax_rate')
-
-
-class EkModifierViewSet(viewsets.ModelViewSet[EkModifier]):
-    serializer_class = EkModifierSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self) -> QuerySet[EkModifier]:
-        qs = EkModifier.objects.all()
-        period_id = self.request.query_params.get('period_id')
-        if period_id:
-            qs = qs.filter(period_id=period_id)
-        return qs
 
 
 ACCEPTED_MIME_PREFIXES = ('image/',)

@@ -3,7 +3,6 @@ Purchase price service — Python port of sf_getPurchasePrice.sql.
 
 Computes weighted average purchase price (EK) for an article in a period,
 recursively expanding recipes via artikel_zutaten.
-EK modifiers (+, -, *, /) from ek_modifikatoren are applied afterwards.
 
 NOTE: All FKs in the new schema use Django auto-id (not MSSQL source_id).
 The article argument is the Django PK.
@@ -95,26 +94,5 @@ def get_purchase_price(article_pk: int, period_id: int, max_date: date | None = 
         ek: Decimal = Decimal(
             str(row[0])) if row and row[0] is not None else Decimal('0.00')
         total_ek += ek * factor
-
-    # Apply EK modifiers
-    with connection.cursor() as cur:
-        cur.execute(
-            "SELECT emo_operator, emo_modifikator FROM ek_modifikatoren "
-            "WHERE emo_artikel_id = %s AND emo_periode_id = %s ORDER BY id",
-            [article_pk, period_id],
-        )
-        modifiers: list[tuple[Any, ...]] = cur.fetchall()
-
-    for operator, mod_value in modifiers:
-        mod: Decimal = Decimal(str(mod_value))
-        if operator == '+':
-            total_ek += mod
-        elif operator == '-':
-            total_ek -= mod
-        elif operator == '*':
-            total_ek *= mod
-        elif operator == '/':
-            if mod != 0:
-                total_ek /= mod
 
     return total_ek.quantize(Decimal('0.0001'))
