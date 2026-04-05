@@ -21,7 +21,8 @@ class ExpandedArticleListView(APIView):
         period_id = request.query_params.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        articles = get_expanded_articles(int(period_id))
+        include_base = request.query_params.get('include_base', 'true').lower() != 'false'
+        articles = get_expanded_articles(int(period_id), include_base=include_base)
         serializer = ExpandedArticleSerializer(articles, many=True)  # type: ignore[arg-type]
         return Response(serializer.data)
 

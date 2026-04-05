@@ -123,6 +123,23 @@ class GetExpandedArticlesServiceTest(TestCase):
         self.assertIn('202-orange', ids)
         self.assertEqual(len(rows), 3)
 
+    def test_include_base_false_omits_base_row(self) -> None:
+        self._make_article(202, 'Cola')
+        ArticleMeta.objects.create(source_id=202, period=self.period, sub_articles='lemon,orange')
+        rows = get_expanded_articles(self.period.pk, include_base=False)
+        ids = [r['article_id'] for r in rows]
+        self.assertNotIn('202', ids)
+        self.assertIn('202-lemon', ids)
+        self.assertIn('202-orange', ids)
+        self.assertEqual(len(rows), 2)
+
+    def test_include_base_false_keeps_article_without_subs(self) -> None:
+        self._make_article(208, 'Wasser')
+        rows = get_expanded_articles(self.period.pk, include_base=False)
+        ids = [r['article_id'] for r in rows]
+        self.assertIn('208', ids)
+        self.assertEqual(len(rows), 1)
+
     def test_article_with_empty_sub_articles_no_expansion(self) -> None:
         self._make_article(203, 'Bier')
         ArticleMeta.objects.create(source_id=203, period=self.period, sub_articles='')

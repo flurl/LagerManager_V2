@@ -234,7 +234,7 @@ async function loadArticles() {
   loadingArticles.value = true
   try {
     const [articlesRes, entriesRes] = await Promise.allSettled([
-      api.get('/stock-count/articles/', { params: { period_id: periodId } }),
+      api.get('/stock-count/articles/', { params: { period_id: periodId, include_base: 'false' } }),
       api.get('/stock-count/entries/', {
         params: {
           period_id: periodId,

@@ -101,6 +101,20 @@ class StockCountTestCase(APITestCase):
         self.assertEqual(name_by_id['102-lemon'], 'Cola-lemon')
         self.assertEqual(name_by_id['102-orange'], 'Cola-orange')
 
+    def test_include_base_false_omits_base_article(self) -> None:
+        resp = self.client.get('/api/stock-count/articles/', {
+            'period_id': self.period.pk,
+            'include_base': 'false',
+        })
+        self.assertEqual(resp.status_code, 200)
+        ids = {r['article_id'] for r in resp.data}
+        # Cola has sub-articles — base row must be absent
+        self.assertNotIn('102', ids)
+        self.assertIn('102-lemon', ids)
+        self.assertIn('102-orange', ids)
+        # Bier has no sub-articles — still present
+        self.assertIn('101', ids)
+
     def test_articles_requires_period_id(self) -> None:
         resp = self.client.get('/api/stock-count/articles/')
         self.assertEqual(resp.status_code, 400)

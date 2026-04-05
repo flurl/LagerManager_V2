@@ -1,14 +1,18 @@
 from pos_import.models import ArticleMeta, WarehouseArticle
 
 
-def get_expanded_articles(period_id: int) -> list[dict[str, str]]:
+def get_expanded_articles(period_id: int, include_base: bool = True) -> list[dict[str, str]]:
     """
     Return all countable articles for a period, expanded with sub_articles from ArticleMeta.
 
-    For an article with sub_articles="lemon,orange":
+    For an article with sub_articles="lemon,orange" and include_base=True (default):
       - Base row:      article_id="123",        article_name="Cola"
       - Sub row:       article_id="123-lemon",   article_name="Cola-lemon"
       - Sub row:       article_id="123-orange",  article_name="Cola-orange"
+
+    With include_base=False the base row is omitted for articles that have sub_articles,
+    so only the sub-article rows are returned for those articles.
+    Articles without sub_articles are always included regardless of include_base.
 
     Hidden articles (ArticleMeta.is_hidden=True) are excluded entirely.
     Articles without any ArticleMeta are included as-is.
@@ -33,10 +37,12 @@ def get_expanded_articles(period_id: int) -> list[dict[str, str]]:
         if meta is not None and meta.is_hidden:
             continue
 
-        rows.append({'article_id': str(source_id), 'article_name': name})
+        has_subs = meta is not None and bool(meta.sub_articles)
+        if include_base or not has_subs:
+            rows.append({'article_id': str(source_id), 'article_name': name})
 
-        if meta is not None and meta.sub_articles:
-            for sub in (s.strip() for s in meta.sub_articles.split(',') if s.strip()):
+        if has_subs:
+            for sub in (s.strip() for s in meta.sub_articles.split(',') if s.strip()):  # type: ignore[union-attr]
                 rows.append({
                     'article_id': f'{source_id}-{sub}',
                     'article_name': f'{name}-{sub}',
