@@ -7,7 +7,7 @@ from decimal import Decimal
 from datetime import timedelta
 
 class InventoryModelTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.period = Period.objects.create(
             name="Test Period",
             start=timezone.now() - timedelta(days=10),
@@ -25,7 +25,7 @@ class InventoryModelTests(TestCase):
             price_popup=False, ep_price_popup=False, rksv=False, external_receipt=False
         )
 
-    def test_period_start_stock_level(self):
+    def test_period_start_stock_level(self) -> None:
         sl = PeriodStartStockLevel.objects.create(
             article=self.article,
             quantity=Decimal("50.000"),
@@ -34,7 +34,7 @@ class InventoryModelTests(TestCase):
         self.assertEqual(sl.quantity, Decimal("50.000"))
         self.assertEqual(sl.article, self.article)
 
-    def test_initial_inventory(self):
+    def test_initial_inventory(self) -> None:
         ii = InitialInventory.objects.create(
             article=self.article,
             quantity=Decimal("10.500"),
@@ -44,7 +44,7 @@ class InventoryModelTests(TestCase):
         self.assertEqual(ii.quantity, Decimal("10.500"))
         self.assertEqual(ii.location, self.location)
 
-    def test_physical_count(self):
+    def test_physical_count(self) -> None:
         pc = PhysicalCount.objects.create(
             date=timezone.now(),
             article=self.article,

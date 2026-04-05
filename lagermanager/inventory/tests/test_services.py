@@ -6,12 +6,22 @@ from deliveries.models import Partner, TaxRate, StockMovement, StockMovementDeta
 from inventory.models import PeriodStartStockLevel
 from inventory.services.stock_calculation import compute_running_stock
 from decimal import Decimal
-from datetime import timedelta, date
-from unittest.mock import patch
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
+
 
 class StockCalculationTests(TestCase):
-    def setUp(self):
-        self.start_date = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    period: Period
+    partner: Partner
+    tax_rate: TaxRate
+    article_group: ArticleGroup
+    article: Article
+    start_date: datetime
+    end_date: datetime
+
+    def setUp(self) -> None:
+        self.start_date = timezone.now().replace(
+            hour=0, minute=0, second=0, microsecond=0)
         self.end_date = self.start_date + timedelta(days=2)
         self.period = Period.objects.create(
             name="Test Period",
@@ -19,7 +29,8 @@ class StockCalculationTests(TestCase):
             end=self.end_date
         )
         self.partner = Partner.objects.create(name="Supplier A")
-        self.tax_rate = TaxRate.objects.create(name="Standard", percent=Decimal("20"))
+        self.tax_rate = TaxRate.objects.create(
+            name="Standard", percent=Decimal("20"))
         self.article_group = ArticleGroup.objects.create(
             source_id=1, name="Drinks", is_revenue=True,
             show_on_receipt=True, print_recipe=False,
@@ -32,7 +43,7 @@ class StockCalculationTests(TestCase):
         )
 
     @patch('inventory.services.stock_calculation.get_daily_pos_consumption')
-    def test_compute_running_stock(self, mock_pos_consumption):
+    def test_compute_running_stock(self, mock_pos_consumption: MagicMock) -> None:
         # Mock POS consumption: 0 for all days
         mock_pos_consumption.return_value = {}
 
@@ -84,6 +95,6 @@ class StockCalculationTests(TestCase):
         article_results = [r for r in results if r['article'] == "Beer"]
         self.assertEqual(len(article_results), 3)
 
-        self.assertEqual(article_results[0]['stock'], 10.0) # Day 0
-        self.assertEqual(article_results[1]['stock'], 30.0) # Day 1
-        self.assertEqual(article_results[2]['stock'], 25.0) # Day 2
+        self.assertEqual(article_results[0]['stock'], 10.0)  # Day 0
+        self.assertEqual(article_results[1]['stock'], 30.0)  # Day 1
+        self.assertEqual(article_results[2]['stock'], 25.0)  # Day 2
