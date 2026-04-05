@@ -10,7 +10,7 @@ Web migration of a legacy PyQt4/Python2 desktop warehouse management app (LagerM
 
 ```bash
 # Start database and backend (PostgreSQL + Django via Docker)
-docker-compose up -d
+docker compose up -d
 
 # Run frontend dev server
 cd lager-frontend && npm run dev
@@ -44,6 +44,11 @@ npm run build  # production build
 .venv/bin/ruff format lagermanager/  # format
 ```
 
+**Tests:** Run from the project root (requires the Docker backend to be running):
+```bash
+docker compose exec backend python manage.py test --verbosity=2
+```
+
 ## Architecture
 
 ### Stack
@@ -55,11 +60,10 @@ npm run build  # production build
 
 | App | Purpose |
 |-----|---------|
-| `core` | `Period` (accounting periods), `Workplace` (bars/warehouses), `Config` |
-| `articles` | Product catalog: `Article`, `ArticleGroup`, `Recipe`, `WarehouseArticle`, `WarehouseUnit`, `EkModifier` |
-| `inventory` | Stock tracking: `StockLevel`, `InitialInventory`, `PhysicalCount` |
-| `deliveries` | `Partner`, `StockMovement`, `StockMovementDetail`, `TaxRate`, `Document` |
-| `pos_import` | Read-only POS mirror from MSSQL: `TischBon`, `TischBonDetail`, `RechnungBasis`, etc. |
+| `core` | `Period` (accounting periods), `Location` (bars/warehouses), `Config` |
+| `inventory` | Stock tracking: `PeriodStartStockLevel`, `InitialInventory`, `PhysicalCount` |
+| `deliveries` | `Partner`, `PartnerAiInstruction`, `StockMovement`, `StockMovementDetail`, `TaxRate`, `Attachment` |
+| `pos_import` | Read-only POS mirror from MSSQL: `TischBon`, `TischBonDetail`, `RechnungBasis`, `Article`, `ArticleGroup`, `Recipe`, `WarehouseArticle`, `WarehouseUnit`, `ArticleMeta`, etc. |
 | `reports` | Aggregated analytics, CSV exports, chart data endpoints |
 
 Every major entity links to a `Period` — this is the fundamental multi-period isolation mechanism.
@@ -67,21 +71,32 @@ Every major entity links to a `Period` — this is the fundamental multi-period 
 **Key services:**
 - `core/services/purchase_price.py` — Weighted average cost (EK) calculation
 - `inventory/services/stock_calculation.py` — Complex UNION query: Initial + Deliveries − Consumption
+- `inventory/services/init_period.py` — Period initialisation logic
+- `reports/services/` — Report-specific query services (consumption, stock level, inventory, total movements)
 - `pos_import/services/mssql_import.py` — Synchronous blocking POS sync (1000-item bulk_create batches, 10-min Axios timeout on frontend)
 - `StockMovement.apply_skonto()` — Skonto (percentage discount) applied directly as a model method
 
-**Stock formula:** `Current Stock = InitialInventory + Deliveries − Consumption`
-Consumption uses recipe decomposition: a sold "beer" decomposes into its ingredient articles via the `Recipe` model.
+**Stock formula:** `Current Stock = PeriodStartStockLevel + Deliveries − Consumption`
+Consumption uses recipe decomposition: a sold item decomposes into its ingredient articles via the `Recipe` model.
 
 ### Frontend (`lager-frontend/src/`)
 
 - `main.js` — Vue app bootstrap (Vuetify, Pinia, Router)
-- `router.js` — 11 routes (German labels), all guarded by JWT auth
+- `router.js` — Routes (German labels), all guarded by JWT auth
 - `api.js` — Axios instance with Bearer token interceptor
 - `stores/auth.js` — JWT tokens in localStorage, login/logout
 - `stores/period.js` — Currently selected accounting period (shared state)
-- `views/` — One component per route (StockMovementList, StockLevelTable, PartnerCrud, etc.)
+- `views/` — One component per route (`{Feature}View.vue`)
+- `views/reports/` — Report views (`{Feature}{Type}Report.vue`, e.g. `StockLevelChartReport.vue`)
 - `components/AppShell.vue` — Main layout with navigation drawer
+- `ai/` — AI provider abstraction (Gemini, Mistral) used for OCR/document processing on attachments
+
+### AI Integration
+
+`lager-frontend/src/ai/` contains a provider abstraction for AI-assisted document processing:
+- Providers: `GeminiProvider`, `MistralProvider`
+- Mistral requires a merged PDF (all attachments combined server-side before the API call)
+- Provider selection and API keys come from Django Constance config (`/api/config/`)
 
 ### `null=True` on String Fields
 
@@ -95,6 +110,15 @@ Many string/text fields across all apps use `null=True, blank=True` — this is 
 
 ### Locale
 German/Austria (`de-at`), timezone `Europe/Vienna`.
+
+## Testing Policy
+
+- Every feature and every feature modification must be accompanied by a suitable test, unless there is a clear reason why a test is not practical (e.g. a thin view that only proxies a serializer, or pure UI glue code).
+- For new features, prefer TDD: write the failing test first, then implement.
+- Tests live in `<app>/tests/` and use Django's `TestCase`. Run via:
+  ```bash
+  docker compose exec backend python manage.py test --verbosity=2
+  ```
 
 ## Legacy Reference
 `lagerManager/` — Original PyQt4/Python 2 desktop app. Read-only reference for business logic. Do not modify.

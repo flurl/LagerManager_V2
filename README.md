@@ -96,3 +96,12 @@ python manage.py runserver
 .venv/bin/ruff format lagermanager/  # format
 ```
 
+---
+
+## Tests
+
+Requires the Docker backend to be running (`docker compose up -d`).
+
+```bash
+docker compose exec backend python manage.py test --verbosity=2
+```
