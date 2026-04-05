@@ -1,7 +1,14 @@
 <template>
   <v-app>
     <template v-if="auth.isAuthenticated">
-      <AppShell />
+      <template v-if="route.meta.fullscreen">
+        <v-main>
+          <router-view />
+        </v-main>
+      </template>
+      <template v-else>
+        <AppShell />
+      </template>
     </template>
     <template v-else>
       <LoginView />
@@ -10,11 +17,13 @@
 </template>
 
 <script setup>
+import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import AppShell from './components/AppShell.vue'
 import LoginView from './views/LoginView.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
 </script>
 
 <style>

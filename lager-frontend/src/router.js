@@ -25,7 +25,7 @@ const routes = [
   {
     path: '/stock-count',
     component: () => import('./views/StockCountView.vue'),
-    meta: { title: 'Bestandszählung' },
+    meta: { title: 'Bestandszählung', fullscreen: true },
   },
   {
     path: '/reports/stock-level',
