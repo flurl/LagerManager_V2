@@ -237,12 +237,14 @@ function currentSession(articleId) {
 
 function adjustUnit(articleId, delta) {
   touchArticle(articleId)
-  currentSession(articleId).unitCount += delta
+  const sess = currentSession(articleId)
+  sess.unitCount = Math.max(0, sess.unitCount + delta)
 }
 
 function adjustPkg(articleId, delta) {
   touchArticle(articleId)
-  currentSession(articleId).pkgCount += delta
+  const sess = currentSession(articleId)
+  sess.pkgCount = Math.max(0, sess.pkgCount + delta)
 }
 
 // --- Alphabet navigation ---
