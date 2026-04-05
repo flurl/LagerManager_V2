@@ -4,9 +4,32 @@
       <v-col><h2>Artikel-Metadaten</h2></v-col>
     </v-row>
 
+    <v-row class="mb-2" align="center" dense>
+      <v-col cols="12" sm="6">
+        <v-text-field
+          v-model="search"
+          label="Suchen…"
+          prepend-inner-icon="mdi-magnify"
+          clearable
+          hide-details
+          density="compact"
+          variant="outlined"
+        />
+      </v-col>
+      <v-col cols="12" sm="6" class="d-flex align-center">
+        <v-switch
+          v-model="onlyWarehouse"
+          label="Nur Lagerartikel"
+          hide-details
+          density="compact"
+          color="primary"
+        />
+      </v-col>
+    </v-row>
+
     <v-data-table
       :headers="headers"
-      :items="rows"
+      :items="filteredRows"
       :loading="loading"
       density="compact"
       :items-per-page="100"
@@ -81,8 +104,11 @@ const periodStore = usePeriodStore()
 const periodId = computed(() => periodStore.currentPeriodId)
 
 const articles = ref([])
-const metaMap = ref({})   // source_id → meta object
+const metaMap = ref({})          // source_id → meta object
+const warehouseSourceIds = ref(new Set())
 const loading = ref(false)
+const search = ref('')
+const onlyWarehouse = ref(false)
 
 const dialog = ref(false)
 const saving = ref(false)
@@ -101,17 +127,33 @@ const rows = computed(() =>
   articles.value.map((a) => ({ ...a, meta: metaMap.value[a.source_id] ?? null }))
 )
 
+const filteredRows = computed(() => {
+  let result = rows.value
+  if (onlyWarehouse.value) {
+    result = result.filter((r) => warehouseSourceIds.value.has(r.source_id))
+  }
+  const q = search.value?.trim().toLowerCase()
+  if (q) {
+    result = result.filter((r) => r.name.toLowerCase().includes(q))
+  }
+  return result
+})
+
 async function fetchData() {
   if (!periodId.value) return
   loading.value = true
   try {
-    const [artRes, metaRes] = await Promise.all([
+    const [artRes, metaRes, waRes] = await Promise.all([
       api.get('/articles/', { params: { period_id: periodId.value } }),
       api.get('/article-meta/', { params: { period_id: periodId.value } }),
+      api.get('/warehouse-articles/', { params: { period_id: periodId.value } }),
     ])
     articles.value = artRes.data.results ?? artRes.data
     metaMap.value = Object.fromEntries(
       (metaRes.data.results ?? metaRes.data).map((m) => [m.source_id, m])
+    )
+    warehouseSourceIds.value = new Set(
+      (waRes.data.results ?? waRes.data).map((w) => w.source_article_id)
     )
   } finally {
     loading.value = false
