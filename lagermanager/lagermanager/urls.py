@@ -13,6 +13,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path('api/', include('deliveries.urls')),
     path('api/', include('pos_import.urls')),
     path('api/', include('reports.urls')),
+    path('api/', include('stock_count.urls')),
 ]
 
 if settings.DEBUG:

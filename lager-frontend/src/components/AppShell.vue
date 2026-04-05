@@ -110,6 +110,7 @@ const navGroups = [
       { to: '/period-start-stock', icon: 'mdi-format-list-numbered', title: 'Periode Start-Stand' },
       { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand' },
       { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand' },
+      { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung' },
     ],
   },
   {

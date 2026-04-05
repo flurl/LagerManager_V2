@@ -23,6 +23,11 @@ const routes = [
     meta: { title: 'Gezählter Stand' },
   },
   {
+    path: '/stock-count',
+    component: () => import('./views/StockCountView.vue'),
+    meta: { title: 'Bestandszählung' },
+  },
+  {
     path: '/reports/stock-level',
     component: () => import('./views/reports/StockLevelChartReport.vue'),
     meta: { title: 'Lagerstand Bericht' },
