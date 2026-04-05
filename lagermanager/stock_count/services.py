@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 from pos_import.models import ArticleMeta, WarehouseArticle
 
 
-def get_expanded_articles(period_id: int, include_base: bool = True) -> list[dict[str, str]]:
+def get_expanded_articles(period_id: int, include_base: bool = True) -> list[dict[str, str | Decimal | None]]:
     """
     Return all countable articles for a period, expanded with sub_articles from ArticleMeta.
 
@@ -28,7 +30,7 @@ def get_expanded_articles(period_id: int, include_base: bool = True) -> list[dic
         for m in ArticleMeta.objects.filter(period_id=period_id)
     }
 
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, str | Decimal | None]] = []
     for wa in warehouse_articles:
         source_id = wa.article.source_id
         name = wa.article.name
@@ -37,15 +39,17 @@ def get_expanded_articles(period_id: int, include_base: bool = True) -> list[dic
         if meta is not None and meta.is_hidden:
             continue
 
+        package_size: Decimal | None = meta.package_size if meta is not None else None
         has_subs = meta is not None and bool(meta.sub_articles)
         if include_base or not has_subs:
-            rows.append({'article_id': str(source_id), 'article_name': name})
+            rows.append({'article_id': str(source_id), 'article_name': name, 'package_size': package_size})
 
         if has_subs:
             for sub in (s.strip() for s in meta.sub_articles.split(',') if s.strip()):  # type: ignore[union-attr]
                 rows.append({
                     'article_id': f'{source_id}-{sub}',
                     'article_name': f'{name}-{sub}',
+                    'package_size': package_size,
                 })
 
     rows.sort(key=lambda r: r['article_name'].lower())

@@ -10,7 +10,7 @@ class ArticleMetaSerializer(serializers.ModelSerializer[ArticleMeta]):
 
     class Meta:
         model = ArticleMeta
-        fields = ['id', 'source_id', 'period', 'is_hidden', 'sub_articles', 'extra']
+        fields = ['id', 'source_id', 'period', 'is_hidden', 'sub_articles', 'package_size', 'extra']
 
 
 class ArticleGroupSerializer(serializers.ModelSerializer[ArticleGroup]):

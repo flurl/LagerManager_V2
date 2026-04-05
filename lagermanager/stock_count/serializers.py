@@ -16,6 +16,7 @@ class StockCountEntrySerializer(serializers.ModelSerializer[StockCountEntry]):
 class ExpandedArticleSerializer(serializers.Serializer[dict]):  # type: ignore[type-arg]
     article_id = serializers.CharField()
     article_name = serializers.CharField()
+    package_size = serializers.DecimalField(max_digits=10, decimal_places=4, allow_null=True)
 
 
 class BulkEntrySerializer(serializers.Serializer[dict]):  # type: ignore[type-arg]

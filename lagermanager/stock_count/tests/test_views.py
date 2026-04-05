@@ -190,3 +190,26 @@ class StockCountTestCase(APITestCase):
         self.client.force_authenticate(user=None)
         resp = self.client.get('/api/stock-count/articles/', {'period_id': self.period.pk})
         self.assertEqual(resp.status_code, 401)
+
+    def test_package_size_returned_when_set(self) -> None:
+        ArticleMeta.objects.filter(source_id=101, period=self.period).delete()
+        ArticleMeta.objects.create(source_id=101, period=self.period, package_size='6.0000')
+        resp = self.client.get('/api/stock-count/articles/', {'period_id': self.period.pk})
+        self.assertEqual(resp.status_code, 200)
+        by_id = {r['article_id']: r for r in resp.data}
+        self.assertEqual(float(by_id['101']['package_size']), 6.0)
+
+    def test_package_size_null_when_not_set(self) -> None:
+        resp = self.client.get('/api/stock-count/articles/', {'period_id': self.period.pk})
+        self.assertEqual(resp.status_code, 200)
+        by_id = {r['article_id']: r for r in resp.data}
+        # Bier has no ArticleMeta → package_size should be null
+        self.assertIsNone(by_id['101']['package_size'])
+
+    def test_package_size_propagated_to_sub_articles(self) -> None:
+        ArticleMeta.objects.filter(source_id=102, period=self.period).update(package_size='12.0000')
+        resp = self.client.get('/api/stock-count/articles/', {'period_id': self.period.pk})
+        self.assertEqual(resp.status_code, 200)
+        by_id = {r['article_id']: r for r in resp.data}
+        self.assertEqual(float(by_id['102-lemon']['package_size']), 12.0)
+        self.assertEqual(float(by_id['102-orange']['package_size']), 12.0)

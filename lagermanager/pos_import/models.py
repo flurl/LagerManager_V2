@@ -373,6 +373,9 @@ class ArticleMeta(models.Model):
     )
     is_hidden = models.BooleanField(default=False)
     sub_articles = models.TextField(blank=True)   # comma-separated, e.g. "lemon,orange"
+    package_size = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True
+    )
     extra = models.JSONField(default=dict, blank=True)
 
     class Meta:

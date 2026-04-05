@@ -26,6 +26,11 @@
         <span v-else class="text-disabled">—</span>
       </template>
 
+      <template #item.package_size="{ item }">
+        <span v-if="item.meta?.package_size != null">{{ item.meta.package_size }}</span>
+        <span v-else class="text-disabled">—</span>
+      </template>
+
       <template #item.actions="{ item }">
         <v-icon size="small" @click="openEdit(item)">mdi-pencil</v-icon>
       </template>
@@ -44,6 +49,17 @@
             multiple
             chips
             closable-chips
+            class="mb-4"
+          />
+          <v-text-field
+            v-model="form.package_size"
+            label="Packungsgröße"
+            type="number"
+            min="0"
+            step="any"
+            clearable
+            density="compact"
+            hide-details
           />
         </v-card-text>
         <v-card-actions>
@@ -71,12 +87,13 @@ const loading = ref(false)
 const dialog = ref(false)
 const saving = ref(false)
 const editingArticle = ref(null)
-const form = ref({ is_hidden: false, sub_articles: [] })
+const form = ref({ is_hidden: false, sub_articles: [], package_size: null })
 
 const headers = [
   { title: 'Artikel', key: 'name' },
   { title: 'Versteckt', key: 'is_hidden', sortable: false },
   { title: 'Unter-Artikel', key: 'sub_articles', sortable: false },
+  { title: 'Packungsgröße', key: 'package_size', sortable: false },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
 
@@ -102,7 +119,7 @@ async function fetchData() {
 }
 
 async function toggleHidden(row, value) {
-  await saveMeta(row, { is_hidden: value, sub_articles: row.meta?.sub_articles ?? [] })
+  await saveMeta(row, { is_hidden: value, sub_articles: row.meta?.sub_articles ?? [], package_size: row.meta?.package_size ?? null })
 }
 
 function openEdit(row) {
@@ -110,6 +127,7 @@ function openEdit(row) {
   form.value = {
     is_hidden: row.meta?.is_hidden ?? false,
     sub_articles: row.meta?.sub_articles ? [...row.meta.sub_articles] : [],
+    package_size: row.meta?.package_size ?? null,
   }
   dialog.value = true
 }
@@ -126,7 +144,13 @@ async function save() {
 
 async function saveMeta(row, data) {
   const existing = metaMap.value[row.source_id]
-  const payload = { source_id: row.source_id, period: periodId.value, ...data }
+  const packageSize = data.package_size === '' || data.package_size === null ? null : Number(data.package_size)
+  const payload = {
+    source_id: row.source_id,
+    period: periodId.value,
+    ...data,
+    package_size: packageSize,
+  }
   let res
   if (existing) {
     res = await api.put(`/article-meta/${existing.id}/`, payload)

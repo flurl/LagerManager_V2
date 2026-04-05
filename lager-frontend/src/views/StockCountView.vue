@@ -79,8 +79,8 @@
                   variant="outlined"
                   color="error"
                   class="counter-btn"
-                  @click="adjust(article.article_id, -10)"
-                >-10</v-btn>
+                  @click="adjust(article.article_id, -packageStep(article))"
+                >-{{ packageStep(article) }}</v-btn>
                 <v-btn
                   size="small"
                   variant="outlined"
@@ -110,8 +110,8 @@
                   variant="outlined"
                   color="success"
                   class="counter-btn"
-                  @click="adjust(article.article_id, 10)"
-                >+10</v-btn>
+                  @click="adjust(article.article_id, packageStep(article))"
+                >+{{ packageStep(article) }}</v-btn>
               </div>
             </template>
           </v-list-item>
@@ -190,6 +190,11 @@ function adjust(articleId, delta) {
 function setQty(articleId, value) {
   const n = parseFloat(value)
   quantities.value[articleId] = isNaN(n) || n < 0 ? 0 : n
+}
+
+function packageStep(article) {
+  const s = parseFloat(article.package_size)
+  return isNaN(s) || s <= 0 ? 10 : s
 }
 
 function showSnack(message, color = 'success') {
