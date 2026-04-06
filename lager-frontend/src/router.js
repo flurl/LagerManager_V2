@@ -28,6 +28,11 @@ const routes = [
     meta: { title: 'Bestandszählung', fullscreen: true },
   },
   {
+    path: '/stock-count-entries',
+    component: () => import('./views/StockCountEntriesView.vue'),
+    meta: { title: 'Zählergebnisse' },
+  },
+  {
     path: '/reports/stock-level',
     component: () => import('./views/reports/StockLevelChartReport.vue'),
     meta: { title: 'Lagerstand Bericht' },

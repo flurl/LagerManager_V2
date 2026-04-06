@@ -111,6 +111,7 @@ const navGroups = [
       { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand' },
       { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand' },
       { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung' },
+      { to: '/stock-count-entries', icon: 'mdi-table-edit', title: 'Zählergebnisse' },
     ],
   },
   {

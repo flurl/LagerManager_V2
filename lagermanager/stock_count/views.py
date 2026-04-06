@@ -57,7 +57,7 @@ class BulkStockCountView(APIView):
         return Response({'saved': len(saved)}, status=status.HTTP_200_OK)
 
 
-class StockCountEntryViewSet(viewsets.ReadOnlyModelViewSet[StockCountEntry]):
+class StockCountEntryViewSet(viewsets.ModelViewSet[StockCountEntry]):
     serializer_class = StockCountEntrySerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None

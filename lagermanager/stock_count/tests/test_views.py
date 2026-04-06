@@ -209,3 +209,66 @@ class StockCountTestCase(APITestCase):
         by_id = {r['article_id']: r for r in resp.data}
         self.assertEqual(float(by_id['102-lemon']['package_size']), 12.0)
         self.assertEqual(float(by_id['102-orange']['package_size']), 12.0)
+
+    # --- StockCountEntry CRUD (ModelViewSet) ---
+
+    def _make_entry(self) -> StockCountEntry:
+        return StockCountEntry.objects.create(
+            count_date=self.count_date,
+            article_id='101',
+            article_name='Bier',
+            location_id=self.location.pk,
+            location_name=self.location.name,
+            quantity='5.000',
+        )
+
+    def test_entry_create(self) -> None:
+        payload = {
+            'count_date': self.count_date.isoformat(),
+            'article_id': '101',
+            'article_name': 'Bier',
+            'location_id': self.location.pk,
+            'location_name': self.location.name,
+            'quantity': '3.000',
+        }
+        resp = self.client.post('/api/stock-count/entries/', payload, format='json')
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(StockCountEntry.objects.count(), 1)
+        self.assertEqual(float(StockCountEntry.objects.get().quantity), 3.0)
+
+    def test_entry_update(self) -> None:
+        entry = self._make_entry()
+        payload = {
+            'count_date': self.count_date.isoformat(),
+            'article_id': '101',
+            'article_name': 'Bier',
+            'location_id': self.location.pk,
+            'location_name': self.location.name,
+            'quantity': '12.000',
+        }
+        resp = self.client.put(f'/api/stock-count/entries/{entry.pk}/', payload, format='json')
+        self.assertEqual(resp.status_code, 200)
+        entry.refresh_from_db()
+        self.assertEqual(float(entry.quantity), 12.0)
+
+    def test_entry_partial_update(self) -> None:
+        entry = self._make_entry()
+        resp = self.client.patch(
+            f'/api/stock-count/entries/{entry.pk}/',
+            {'quantity': '7.500'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        entry.refresh_from_db()
+        self.assertEqual(float(entry.quantity), 7.5)
+
+    def test_entry_delete(self) -> None:
+        entry = self._make_entry()
+        resp = self.client.delete(f'/api/stock-count/entries/{entry.pk}/')
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(StockCountEntry.objects.count(), 0)
+
+    def test_entry_crud_requires_auth(self) -> None:
+        self.client.force_authenticate(user=None)
+        resp = self.client.post('/api/stock-count/entries/', {}, format='json')
+        self.assertEqual(resp.status_code, 401)
