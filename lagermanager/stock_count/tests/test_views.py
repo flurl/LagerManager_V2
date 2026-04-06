@@ -103,7 +103,7 @@ class StockCountTestCase(APITestCase):
 
     def test_include_base_false_omits_base_article(self) -> None:
         resp = self.client.get('/api/stock-count/articles/', {
-            'period_id': self.period.pk,
+            'period_id': str(self.period.pk),
             'include_base': 'false',
         })
         self.assertEqual(resp.status_code, 200)
@@ -121,7 +121,6 @@ class StockCountTestCase(APITestCase):
 
     def test_bulk_save_creates_entries(self) -> None:
         payload = {
-            'period_id': self.period.pk,
             'location_id': self.location.pk,
             'location_name': self.location.name,
             'count_date': self.count_date.isoformat(),
@@ -137,7 +136,6 @@ class StockCountTestCase(APITestCase):
 
     def test_bulk_save_upsert(self) -> None:
         payload: dict[str, Any] = {
-            'period_id': self.period.pk,
             'location_id': self.location.pk,
             'location_name': self.location.name,
             'count_date': self.count_date.isoformat(),
@@ -157,16 +155,15 @@ class StockCountTestCase(APITestCase):
             count_date=self.count_date,
             article_id='101', article_name='Bier',
             location_id=self.location.pk, location_name=self.location.name,
-            quantity=5, period_id_value=self.period.pk,
+            quantity=5,
         )
         StockCountEntry.objects.create(
             count_date=self.count_date,
             article_id='102', article_name='Cola',
             location_id=999, location_name='Other',
-            quantity=2, period_id_value=self.period.pk,
+            quantity=2,
         )
         resp = self.client.get('/api/stock-count/entries/', {
-            'period_id': self.period.pk,
             'location_id': self.location.pk,
         })
         self.assertEqual(resp.status_code, 200)
@@ -175,7 +172,6 @@ class StockCountTestCase(APITestCase):
 
     def test_bulk_save_empty_entries(self) -> None:
         payload = {
-            'period_id': self.period.pk,
             'location_id': self.location.pk,
             'location_name': self.location.name,
             'count_date': self.count_date.isoformat(),

@@ -133,9 +133,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import api from '../api'
-import { usePeriodStore } from '../stores/period'
-
-const periodStore = usePeriodStore()
 
 // --- State ---
 const step = ref(1)
@@ -286,18 +283,15 @@ async function loadLocations() {
 }
 
 async function loadArticles() {
-  const periodId = periodStore.currentPeriodId
-  if (!periodId) {
-    showSnack('Keine Periode ausgewählt.', 'warning')
-    return
-  }
   loadingArticles.value = true
   try {
+    const periodRes = await api.get('/periods/by-date/', { params: { date: countDateInput.value } })
+    const periodId = periodRes.data.id
+
     const [articlesRes, entriesRes] = await Promise.allSettled([
       api.get('/stock-count/articles/', { params: { period_id: periodId, include_base: 'false' } }),
       api.get('/stock-count/entries/', {
         params: {
-          period_id: periodId,
           location_id: selectedLocation.value.id,
           count_date: countDateInput.value,
         },
@@ -322,6 +316,12 @@ async function loadArticles() {
         }
       }
     }
+  } catch (err) {
+    if (err.response?.status === 404) {
+      showSnack('Keine Periode für das gewählte Datum gefunden.', 'warning')
+    } else {
+      showSnack('Laden fehlgeschlagen.', 'error')
+    }
   } finally {
     loadingArticles.value = false
   }
@@ -329,8 +329,6 @@ async function loadArticles() {
 
 // --- Saving ---
 function buildPayload() {
-  const periodId = periodStore.currentPeriodId
-  const periodName = periodStore.currentPeriod?.name ?? ''
   const entries = articles.value
     .map(article => {
       const total = getTotal(article.article_id, article)
@@ -343,8 +341,6 @@ function buildPayload() {
     })
     .filter(Boolean)
   return {
-    period_id: periodId,
-    period_name: periodName,
     location_id: selectedLocation.value.id,
     location_name: selectedLocation.value.name,
     count_date: new Date(countDateInput.value + 'T12:00:00').toISOString(),

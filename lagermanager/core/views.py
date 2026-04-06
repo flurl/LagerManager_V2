@@ -3,12 +3,13 @@ from typing import Any
 from constance import config as constance_cfg
 from django.conf import settings
 from django.db.models.query import QuerySet
+from pos_import.models import ArticleMeta
 from rest_framework import status, viewsets
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
-
-from pos_import.models import ArticleMeta
 
 from .models import Location, Period
 from .serializers import LocationSerializer, PeriodSerializer
@@ -18,7 +19,7 @@ class PeriodViewSet(viewsets.ModelViewSet[Period]):
     queryset: QuerySet[Period, Period] = Period.objects.all()
     serializer_class = PeriodSerializer
 
-    def perform_create(self, serializer: PeriodSerializer) -> None:
+    def perform_create(self, serializer: BaseSerializer[Period]) -> None:
         new_period: Period = serializer.save()
         source_period: Period | None = Period.objects.exclude(pk=new_period.pk).order_by('-start').first()
         if source_period is not None:
@@ -38,6 +39,24 @@ class PeriodViewSet(viewsets.ModelViewSet[Period]):
 class LocationViewSet(viewsets.ModelViewSet[Location]):
     queryset: QuerySet[Location, Location] = Location.objects.all()
     serializer_class = LocationSerializer
+
+
+class PeriodByDateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        date_str = request.query_params.get('date')
+        if not date_str:
+            return Response({'error': 'date required'}, status=status.HTTP_400_BAD_REQUEST)
+        period: Period | None = (
+            Period.objects
+            .filter(start__date__lte=date_str, end__date__gte=date_str)
+            .order_by('-start')
+            .first()
+        )
+        if period is None:
+            return Response({'error': 'No period found for date'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(PeriodSerializer(period).data)
 
 
 class ConfigView(APIView):

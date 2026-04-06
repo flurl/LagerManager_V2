@@ -8,7 +8,7 @@ class StockCountEntrySerializer(serializers.ModelSerializer[StockCountEntry]):
         model = StockCountEntry
         fields = [
             'id', 'count_date', 'article_id', 'article_name',
-            'location_id', 'location_name', 'quantity', 'period_id_value', 'created_at',
+            'location_id', 'location_name', 'quantity', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -26,7 +26,6 @@ class BulkEntrySerializer(serializers.Serializer[dict]):  # type: ignore[type-ar
 
 
 class BulkStockCountSerializer(serializers.Serializer[dict]):  # type: ignore[type-arg]
-    period_id = serializers.IntegerField()
     location_id = serializers.IntegerField()
     location_name = serializers.CharField(max_length=255)
     count_date = serializers.DateTimeField()

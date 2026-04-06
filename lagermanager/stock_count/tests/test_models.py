@@ -1,11 +1,17 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from core.models import Period
 from django.db import IntegrityError
 from django.test import TestCase
+from pos_import.models import (
+    Article,
+    ArticleGroup,
+    ArticleMeta,
+    WarehouseArticle,
+    WarehouseUnit,
+)
 
-from core.models import Location, Period
-from pos_import.models import Article, ArticleGroup, ArticleMeta, WarehouseArticle, WarehouseUnit
 from stock_count.models import StockCountEntry
 from stock_count.services import get_expanded_articles
 
@@ -15,15 +21,14 @@ class StockCountEntryModelTest(TestCase):
         self.count_date = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
 
     def _make_entry(self, **kwargs: Any) -> StockCountEntry:
-        defaults = dict(
-            count_date=self.count_date,
-            article_id='101',
-            article_name='Bier',
-            location_id=1,
-            location_name='Bar',
-            quantity=5,
-            period_id_value=1,
-        )
+        defaults: dict[str, Any] = {
+            'count_date': self.count_date,
+            'article_id': '101',
+            'article_name': 'Bier',
+            'location_id': 1,
+            'location_name': 'Bar',
+            'quantity': 5,
+        }
         defaults.update(kwargs)
         return StockCountEntry.objects.create(**defaults)
 
@@ -35,7 +40,6 @@ class StockCountEntryModelTest(TestCase):
         self.assertEqual(entry.location_id, 1)
         self.assertEqual(entry.location_name, 'Bar')
         self.assertEqual(float(entry.quantity), 5.0)
-        self.assertEqual(entry.period_id_value, 1)
         self.assertEqual(entry.count_date, self.count_date)
 
     def test_created_at_auto_set(self) -> None:
@@ -52,7 +56,7 @@ class StockCountEntryModelTest(TestCase):
     def test_unique_together_enforced(self) -> None:
         self._make_entry()
         with self.assertRaises(IntegrityError):
-            # Same article_id / location_id / count_date / period_id_value
+            # Same article_id / location_id / count_date
             self._make_entry()
 
     def test_unique_together_allows_different_location(self) -> None:

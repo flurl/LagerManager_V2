@@ -36,7 +36,6 @@ class BulkStockCountView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        period_id: int = data['period_id']
         location_id: int = data['location_id']
         location_name: str = data['location_name']
         count_date = data['count_date']
@@ -47,7 +46,6 @@ class BulkStockCountView(APIView):
                 article_id=entry['article_id'],
                 location_id=location_id,
                 count_date=count_date,
-                period_id_value=period_id,
                 defaults={
                     'article_name': entry['article_name'],
                     'location_name': location_name,
@@ -66,11 +64,8 @@ class StockCountEntryViewSet(viewsets.ReadOnlyModelViewSet[StockCountEntry]):
 
     def get_queryset(self) -> QuerySet[StockCountEntry]:
         qs = StockCountEntry.objects.all()
-        period_id = self.request.query_params.get('period_id')
         location_id = self.request.query_params.get('location_id')
         count_date = self.request.query_params.get('count_date')
-        if period_id:
-            qs = qs.filter(period_id_value=period_id)
         if location_id:
             qs = qs.filter(location_id=location_id)
         if count_date:

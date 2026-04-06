@@ -1,13 +1,19 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
+from deliveries.models import Partner, StockMovement, StockMovementDetail, TaxRate
 from django.test import TestCase
 from django.utils import timezone
+from pos_import.models import (
+    Article,
+    ArticleGroup,
+    Recipe,
+    WarehouseArticle,
+    WarehouseUnit,
+)
 
 from core.models import Period
 from core.services.purchase_price import get_purchase_price
-from deliveries.models import Partner, StockMovement, StockMovementDetail, TaxRate
-from pos_import.models import Article, ArticleGroup, Recipe, WarehouseArticle, WarehouseUnit
 
 
 class PurchasePriceTests(TestCase):

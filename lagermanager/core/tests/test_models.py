@@ -1,7 +1,9 @@
+from datetime import timedelta
+
 from django.test import TestCase
 from django.utils import timezone
-from core.models import Period, Location
-from datetime import timedelta
+
+from core.models import Location, Period
 
 
 class CoreModelTests(TestCase):
