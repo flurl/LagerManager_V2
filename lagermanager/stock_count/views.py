@@ -13,7 +13,7 @@ from .serializers import (
     ExpandedArticleSerializer,
     StockCountEntrySerializer,
 )
-from .services import get_expanded_articles, import_stock_count_entries
+from .services import get_expanded_articles, import_stock_count_entries, import_stock_count_entries_for_date
 
 
 class ExpandedArticleListView(APIView):
@@ -65,12 +65,16 @@ class ImportStockCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
-        entry_ids = request.data.get('entry_ids')
-        if not entry_ids or not isinstance(entry_ids, list):
-            return Response({'error': 'entry_ids required'}, status=status.HTTP_400_BAD_REQUEST)
         force = bool(request.data.get('force', False))
+        cumulative_date = request.data.get('cumulative_date')
 
-        result: dict[str, Any] = import_stock_count_entries(entry_ids, force=force)
+        if cumulative_date:
+            result: dict[str, Any] = import_stock_count_entries_for_date(cumulative_date, force=force)
+        else:
+            entry_ids = request.data.get('entry_ids')
+            if not entry_ids or not isinstance(entry_ids, list):
+                return Response({'error': 'entry_ids required'}, status=status.HTTP_400_BAD_REQUEST)
+            result = import_stock_count_entries(entry_ids, force=force)
 
         if result.get('status') == 'conflict':
             return Response(result, status=status.HTTP_409_CONFLICT)

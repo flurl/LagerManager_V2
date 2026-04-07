@@ -118,6 +118,9 @@
           <v-btn color="primary" variant="tonal" block :loading="importing" @click="doImport('batch')">
             Gesamte Zählung ({{ batchCount }} Einträge)
           </v-btn>
+          <v-btn color="secondary" variant="tonal" block :loading="importing" class="cumulative-btn" @click="doImport('cumulative')">
+            Tagesakkumuliert (alle Standorte, {{ importDateStr }})
+          </v-btn>
           <v-btn variant="text" block @click="importDialog = false">Abbrechen</v-btn>
         </v-card-actions>
       </v-card>
@@ -131,6 +134,15 @@
           Es existieren bereits <strong>{{ conflictInfo?.existing_count }}</strong> Einträge für
           den <strong>{{ conflictInfo?.date }}</strong> in der Bestandszählung.
           Sollen diese überschrieben werden?
+          <v-alert
+            v-if="conflictInfo?.warnings?.length"
+            type="warning"
+            variant="tonal"
+            class="mt-3"
+            density="compact"
+          >
+            <div v-for="w in conflictInfo.warnings" :key="w">{{ w }}</div>
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -171,6 +183,11 @@ const conflictInfo = ref(null)
 const batchCount = computed(() => {
   if (!importItem.value) return 0
   return items.value.filter(i => i.count_date === importItem.value.count_date).length
+})
+
+const importDateStr = computed(() => {
+  if (!importItem.value) return ''
+  return importItem.value.count_date.substring(0, 10)
 })
 
 const form = ref({
@@ -315,11 +332,21 @@ function openImportDialog(item) {
   importDialog.value = true
 }
 
-function collectEntryIds(mode) {
-  if (mode === 'single') return [importItem.value.id]
-  return items.value
-    .filter(i => i.count_date === importItem.value.count_date)
-    .map(i => i.id)
+function buildImportPayload(mode, force = false) {
+  if (mode === 'cumulative') {
+    return { cumulative_date: importDateStr.value, ...(force ? { force: true } : {}) }
+  }
+  const entry_ids = mode === 'single'
+    ? [importItem.value.id]
+    : items.value.filter(i => i.count_date === importItem.value.count_date).map(i => i.id)
+  return { entry_ids, ...(force ? { force: true } : {}) }
+}
+
+function buildSuccessMsg(data) {
+  let msg = `${data.created} erstellt, ${data.updated} aktualisiert.`
+  if (data.not_found?.length) msg += ` ${data.not_found.length} Artikel nicht gefunden.`
+  if (data.warnings?.length) msg += ` Warnung: ${data.warnings.join('; ')}`
+  return msg
 }
 
 async function doImport(mode) {
@@ -327,10 +354,8 @@ async function doImport(mode) {
   importMode.value = mode
   importing.value = true
   try {
-    const res = await api.post('/stock-count/entries/import/', { entry_ids: collectEntryIds(mode) })
-    let msg = `${res.data.created} erstellt, ${res.data.updated} aktualisiert.`
-    if (res.data.not_found?.length) msg += ` ${res.data.not_found.length} Artikel nicht gefunden.`
-    showSnack(msg)
+    const res = await api.post('/stock-count/entries/import/', buildImportPayload(mode))
+    showSnack(buildSuccessMsg(res.data), res.data.warnings?.length ? 'warning' : 'success')
   } catch (err) {
     if (err.response?.status === 409) {
       conflictInfo.value = err.response.data
@@ -347,13 +372,8 @@ async function forceImport() {
   conflictDialog.value = false
   importing.value = true
   try {
-    const res = await api.post('/stock-count/entries/import/', {
-      entry_ids: collectEntryIds(importMode.value),
-      force: true,
-    })
-    let msg = `${res.data.created} erstellt, ${res.data.updated} aktualisiert.`
-    if (res.data.not_found?.length) msg += ` ${res.data.not_found.length} Artikel nicht gefunden.`
-    showSnack(msg)
+    const res = await api.post('/stock-count/entries/import/', buildImportPayload(importMode.value, true))
+    showSnack(buildSuccessMsg(res.data), res.data.warnings?.length ? 'warning' : 'success')
   } catch {
     showSnack('Import fehlgeschlagen.', 'error')
   } finally {
@@ -366,3 +386,11 @@ onMounted(async () => {
   await fetchItems()
 })
 </script>
+
+<style scoped>
+.cumulative-btn :deep(.v-btn__content) {
+  white-space: normal;
+  word-break: break-word;
+  padding: 6px 0;
+}
+</style>
