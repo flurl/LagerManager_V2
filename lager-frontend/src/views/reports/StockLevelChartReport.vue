@@ -54,41 +54,80 @@ const loading = ref(false)
 const rawData = ref(null)
 const activeArticles = ref([])
 
-const allArticles = computed(() =>
-  (rawData.value?.datasets || [])
-    .filter((d) => !d.label.endsWith('-gezaehlt'))
-    .map((d) => d.label)
-)
-
-function toggleAll() {
-  activeArticles.value = activeArticles.value.length === allArticles.value.length ? [] : [...allArticles.value]
-}
-
 const COLORS = [
   '#1565C0', '#E53935', '#43A047', '#FB8C00', '#8E24AA',
   '#00ACC1', '#6D4C41', '#F06292', '#546E7A', '#26A69A',
 ]
 
+const allArticles = computed(() =>
+  (rawData.value?.datasets || [])
+    .map((d) => d.label)
+)
+
+// Stable color map keyed by article name so colors don't shift when filtering
+const colorMap = computed(() => {
+  const map = {}
+  allArticles.value.forEach((name, i) => { map[name] = COLORS[i % COLORS.length] })
+  return map
+})
+
+function toggleAll() {
+  activeArticles.value = activeArticles.value.length === allArticles.value.length ? [] : [...allArticles.value]
+}
+
 const chartData = computed(() => {
   if (!rawData.value) return null
-  const datasets = rawData.value.datasets
+
+  const stockDatasets = rawData.value.datasets
     .filter((d) => activeArticles.value.includes(d.label))
-    .map((d, i) => ({
+    .map((d) => ({
       label: d.label,
       data: d.data,
-      borderColor: COLORS[i % COLORS.length],
+      borderColor: colorMap.value[d.label],
       backgroundColor: 'transparent',
       tension: 0.1,
       pointRadius: 2,
     }))
-  return { labels: rawData.value.labels, datasets }
+
+  const countedDatasets = (rawData.value.counted_datasets || [])
+    .filter((d) => activeArticles.value.includes(d.label.replace('-gezaehlt', '')))
+    .map((d) => {
+      const articleName = d.label.replace('-gezaehlt', '')
+      return {
+        label: d.label,
+        data: d.data,
+        borderColor: colorMap.value[articleName],
+        backgroundColor: colorMap.value[articleName],
+        showLine: false,
+        pointRadius: 6,
+        pointStyle: 'rectRot',
+      }
+    })
+
+  return { labels: rawData.value.labels, datasets: [...stockDatasets, ...countedDatasets] }
 })
 
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
-    legend: { position: 'top' },
+    legend: {
+      position: 'top',
+      labels: { filter: (item) => !item.text.endsWith('-gezaehlt') },
+    },
+    tooltip: {
+      callbacks: {
+        afterLabel: (context) => {
+          if (context.dataset.label.endsWith('-gezaehlt')) return []
+          const movements = rawData.value?.movement_meta?.[context.label]?.[context.dataset.label]
+          if (!movements?.length) return []
+          return movements.map((m) => {
+            const typeLabel = m.type === 'delivery' ? 'Lieferung' : 'Verbrauch'
+            return `  ${typeLabel}: ${m.partner} (${m.quantity})`
+          })
+        },
+      },
+    },
     zoom: {
       zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' },
       pan: { enabled: true, mode: 'xy' },

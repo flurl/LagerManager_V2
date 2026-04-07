@@ -9,6 +9,38 @@ from inventory.services.stock_calculation import compute_running_stock
 # TODO: this report is just plain wrong, must be fixed
 
 
+def _get_movement_meta(period_id: int) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """
+    Returns {date_str: {article_name: [{partner, type, quantity}, ...]}} for all
+    StockMovements (deliveries and consumptions) in the period.
+    Used to enrich the chart tooltip with movement details.
+    """
+    from core.models import Period
+    from deliveries.models import StockMovement
+
+    period = Period.objects.get(pk=period_id)
+    movements = (
+        StockMovement.objects
+        .filter(period=period)
+        .select_related('partner')
+        .prefetch_related('details__article')
+    )
+
+    meta: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for movement in movements:
+        date_str: str = movement.date.isoformat()
+        partner_name: str = movement.partner.name
+        movement_type: str = movement.movement_type
+        for detail in movement.details.all():
+            article_name: str = detail.article.name
+            meta.setdefault(date_str, {}).setdefault(article_name, []).append({
+                'partner': partner_name,
+                'type': movement_type,
+                'quantity': float(detail.quantity),
+            })
+    return meta
+
+
 def get_stock_level_chart_data(period_id: int) -> dict[str, Any]:
     """
     Returns Chart.js dataset structure:
@@ -46,6 +78,7 @@ def get_stock_level_chart_data(period_id: int) -> dict[str, Any]:
         'labels': dates,
         'datasets': datasets,
         'counted_datasets': counted_datasets,
+        'movement_meta': _get_movement_meta(period_id),
     }
 
 
