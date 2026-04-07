@@ -45,7 +45,12 @@
       <template #item.count_date="{ item }">
         {{ formatDate(item.count_date) }}
       </template>
-      <template #item.quantity="{ item }">{{ item.quantity }}</template>
+      <template #item.quantity="{ item }">
+        <span v-if="item.package_count > 0 || item.unit_count > 0">
+          {{ item.package_count }}&nbsp;#&nbsp;+&nbsp;{{ item.unit_count }}&nbsp;=&nbsp;{{ item.quantity }}
+        </span>
+        <span v-else>{{ item.quantity }}</span>
+      </template>
       <template #item.actions="{ item }">
         <v-icon size="small" @click="openEdit(item)">mdi-pencil</v-icon>
         <v-icon size="small" class="ml-1" color="error" @click="deleteItem(item)">mdi-delete</v-icon>
@@ -69,7 +74,24 @@
           />
           <v-text-field v-model="form.article_id" label="Artikel-ID" class="mb-2" />
           <v-text-field v-model="form.article_name" label="Artikelname" class="mb-2" />
-          <v-text-field v-model="form.quantity" label="Menge" type="number" step="0.001" />
+          <v-row dense>
+            <v-col cols="4">
+              <v-text-field v-model.number="form.package_count" label="Pakete" type="number" min="0" step="1" hide-details />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field v-model.number="form.units_per_package" label="Stk/Paket" type="number" min="0" step="1" hide-details />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field v-model.number="form.unit_count" label="Einzeln" type="number" min="0" step="1" hide-details />
+            </v-col>
+          </v-row>
+          <v-text-field
+            :model-value="form.package_count * form.units_per_package + form.unit_count"
+            label="Menge (gesamt)"
+            readonly
+            class="mt-2"
+            hide-details
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -106,7 +128,9 @@ const form = ref({
   article_name: '',
   location_id: null,
   location_name: '',
-  quantity: '',
+  package_count: 0,
+  units_per_package: 0,
+  unit_count: 0,
 })
 
 const headers = [
@@ -170,7 +194,9 @@ function openNew() {
     article_name: '',
     location_id: null,
     location_name: '',
-    quantity: '',
+    package_count: 0,
+    units_per_package: 0,
+    unit_count: 0,
   }
   selectedLocation.value = null
   dialog.value = true
@@ -201,7 +227,9 @@ async function save() {
       article_name: form.value.article_name,
       location_id: form.value.location_id,
       location_name: form.value.location_name,
-      quantity: form.value.quantity,
+      package_count: form.value.package_count ?? 0,
+      units_per_package: form.value.units_per_package ?? 0,
+      unit_count: form.value.unit_count ?? 0,
     }
     if (form.value.id) {
       await api.put(`/stock-count/entries/${form.value.id}/`, payload)

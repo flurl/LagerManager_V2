@@ -125,8 +125,8 @@ class StockCountTestCase(APITestCase):
             'location_name': self.location.name,
             'count_date': self.count_date.isoformat(),
             'entries': [
-                {'article_id': '101', 'article_name': 'Bier', 'quantity': '5.000'},
-                {'article_id': '102-lemon', 'article_name': 'Cola-lemon', 'quantity': '3.000'},
+                {'article_id': '101', 'article_name': 'Bier', 'unit_count': 5},
+                {'article_id': '102-lemon', 'article_name': 'Cola-lemon', 'unit_count': 3},
             ],
         }
         resp = self.client.post('/api/stock-count/entries/bulk/', payload, format='json')
@@ -140,28 +140,28 @@ class StockCountTestCase(APITestCase):
             'location_name': self.location.name,
             'count_date': self.count_date.isoformat(),
             'entries': [
-                {'article_id': '101', 'article_name': 'Bier', 'quantity': '5.000'},
+                {'article_id': '101', 'article_name': 'Bier', 'unit_count': 5},
             ],
         }
         self.client.post('/api/stock-count/entries/bulk/', payload, format='json')
-        payload['entries'][0]['quantity'] = '10.000'
+        payload['entries'][0]['unit_count'] = 10
         self.client.post('/api/stock-count/entries/bulk/', payload, format='json')
         self.assertEqual(StockCountEntry.objects.count(), 1)
         entry = StockCountEntry.objects.get(article_id='101')
-        self.assertEqual(float(entry.quantity), 10.0)
+        self.assertEqual(entry.quantity, 10)
 
     def test_get_entries_filtered(self) -> None:
         StockCountEntry.objects.create(
             count_date=self.count_date,
             article_id='101', article_name='Bier',
             location_id=self.location.pk, location_name=self.location.name,
-            quantity=5,
+            unit_count=5,
         )
         StockCountEntry.objects.create(
             count_date=self.count_date,
             article_id='102', article_name='Cola',
             location_id=999, location_name='Other',
-            quantity=2,
+            unit_count=2,
         )
         resp = self.client.get('/api/stock-count/entries/', {
             'location_id': self.location.pk,
@@ -219,7 +219,7 @@ class StockCountTestCase(APITestCase):
             article_name='Bier',
             location_id=self.location.pk,
             location_name=self.location.name,
-            quantity='5.000',
+            unit_count=5,
         )
 
     def test_entry_create(self) -> None:
@@ -229,12 +229,12 @@ class StockCountTestCase(APITestCase):
             'article_name': 'Bier',
             'location_id': self.location.pk,
             'location_name': self.location.name,
-            'quantity': '3.000',
+            'unit_count': 3,
         }
         resp = self.client.post('/api/stock-count/entries/', payload, format='json')
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(StockCountEntry.objects.count(), 1)
-        self.assertEqual(float(StockCountEntry.objects.get().quantity), 3.0)
+        self.assertEqual(StockCountEntry.objects.get().quantity, 3)
 
     def test_entry_update(self) -> None:
         entry = self._make_entry()
@@ -244,23 +244,25 @@ class StockCountTestCase(APITestCase):
             'article_name': 'Bier',
             'location_id': self.location.pk,
             'location_name': self.location.name,
-            'quantity': '12.000',
+            'package_count': 2,
+            'units_per_package': 6,
+            'unit_count': 0,
         }
         resp = self.client.put(f'/api/stock-count/entries/{entry.pk}/', payload, format='json')
         self.assertEqual(resp.status_code, 200)
         entry.refresh_from_db()
-        self.assertEqual(float(entry.quantity), 12.0)
+        self.assertEqual(entry.quantity, 12)
 
     def test_entry_partial_update(self) -> None:
         entry = self._make_entry()
         resp = self.client.patch(
             f'/api/stock-count/entries/{entry.pk}/',
-            {'quantity': '7.500'},
+            {'unit_count': 7},
             format='json',
         )
         self.assertEqual(resp.status_code, 200)
         entry.refresh_from_db()
-        self.assertEqual(float(entry.quantity), 7.5)
+        self.assertEqual(entry.quantity, 7)
 
     def test_entry_delete(self) -> None:
         entry = self._make_entry()
@@ -272,3 +274,92 @@ class StockCountTestCase(APITestCase):
         self.client.force_authenticate(user=None)
         resp = self.client.post('/api/stock-count/entries/', {}, format='json')
         self.assertEqual(resp.status_code, 401)
+
+    def test_bulk_save_stores_breakdown(self) -> None:
+        payload = {
+            'location_id': self.location.pk,
+            'location_name': self.location.name,
+            'count_date': self.count_date.isoformat(),
+            'entries': [
+                {
+                    'article_id': '101', 'article_name': 'Bier',
+                    'package_count': 2, 'units_per_package': 10, 'unit_count': 3,
+                },
+            ],
+        }
+        resp = self.client.post('/api/stock-count/entries/bulk/', payload, format='json')
+        self.assertEqual(resp.status_code, 200)
+        entry = StockCountEntry.objects.get(article_id='101')
+        self.assertEqual(entry.package_count, 2)
+        self.assertEqual(entry.units_per_package, 10)
+        self.assertEqual(entry.unit_count, 3)
+        self.assertEqual(entry.quantity, 23)
+
+    def test_bulk_save_defaults_breakdown_to_zero(self) -> None:
+        payload = {
+            'location_id': self.location.pk,
+            'location_name': self.location.name,
+            'count_date': self.count_date.isoformat(),
+            'entries': [
+                {'article_id': '101', 'article_name': 'Bier'},
+            ],
+        }
+        resp = self.client.post('/api/stock-count/entries/bulk/', payload, format='json')
+        self.assertEqual(resp.status_code, 200)
+        entry = StockCountEntry.objects.get(article_id='101')
+        self.assertEqual(entry.package_count, 0)
+        self.assertEqual(entry.units_per_package, 0)
+        self.assertEqual(entry.unit_count, 0)
+        self.assertEqual(entry.quantity, 0)
+
+    def test_bulk_save_upsert_updates_breakdown(self) -> None:
+        payload: dict[str, Any] = {
+            'location_id': self.location.pk,
+            'location_name': self.location.name,
+            'count_date': self.count_date.isoformat(),
+            'entries': [
+                {'article_id': '101', 'article_name': 'Bier', 'package_count': 1, 'units_per_package': 10, 'unit_count': 4},
+            ],
+        }
+        self.client.post('/api/stock-count/entries/bulk/', payload, format='json')
+        payload['entries'][0].update({'package_count': 3, 'units_per_package': 10, 'unit_count': 0})
+        self.client.post('/api/stock-count/entries/bulk/', payload, format='json')
+        self.assertEqual(StockCountEntry.objects.count(), 1)
+        entry = StockCountEntry.objects.get(article_id='101')
+        self.assertEqual(entry.package_count, 3)
+        self.assertEqual(entry.unit_count, 0)
+        self.assertEqual(entry.quantity, 30)
+
+    def test_get_entries_returns_breakdown_fields(self) -> None:
+        StockCountEntry.objects.create(
+            count_date=self.count_date,
+            article_id='101', article_name='Bier',
+            location_id=self.location.pk, location_name=self.location.name,
+            package_count=2, units_per_package=10, unit_count=3,
+        )
+        resp = self.client.get('/api/stock-count/entries/')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.data[0]
+        self.assertEqual(data['package_count'], 2)
+        self.assertEqual(data['units_per_package'], 10)
+        self.assertEqual(data['unit_count'], 3)
+        self.assertEqual(data['quantity'], 23)
+
+    def test_entry_create_with_breakdown(self) -> None:
+        payload = {
+            'count_date': self.count_date.isoformat(),
+            'article_id': '101',
+            'article_name': 'Bier',
+            'location_id': self.location.pk,
+            'location_name': self.location.name,
+            'package_count': 4,
+            'units_per_package': 10,
+            'unit_count': 1,
+        }
+        resp = self.client.post('/api/stock-count/entries/', payload, format='json')
+        self.assertEqual(resp.status_code, 201)
+        entry = StockCountEntry.objects.get()
+        self.assertEqual(entry.package_count, 4)
+        self.assertEqual(entry.units_per_package, 10)
+        self.assertEqual(entry.unit_count, 1)
+        self.assertEqual(entry.quantity, 41)

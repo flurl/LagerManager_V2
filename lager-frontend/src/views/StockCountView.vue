@@ -1,14 +1,10 @@
 <template>
   <div>
-    <!-- Step 1: Location + Date Selection -->
+    <!-- Step 1: Location Selection -->
     <div v-if="step === 1">
       <v-card class="mb-4" flat>
         <v-card-title class="text-h6 pb-0">Bestandszählung</v-card-title>
-        <v-card-subtitle>Datum und Standort wählen</v-card-subtitle>
-        <v-card-text>
-          <v-text-field v-model="countDateInput" label="Datum" type="date" prepend-inner-icon="mdi-calendar"
-            class="mb-4" hide-details />
-        </v-card-text>
+        <v-card-subtitle>Standort wählen</v-card-subtitle>
       </v-card>
 
       <v-progress-linear v-if="loadingLocations" indeterminate color="primary" class="mb-2" />
@@ -142,9 +138,6 @@ const loadingArticles = ref(false)
 const saving = ref(false)
 const isOnline = ref(navigator.onLine)
 const headerRef = ref(null)
-
-const today = new Date().toISOString().split('T')[0]
-const countDateInput = ref(today)
 
 const selectedLocation = ref(null)
 const articles = ref([])
@@ -285,37 +278,14 @@ async function loadLocations() {
 async function loadArticles() {
   loadingArticles.value = true
   try {
-    const periodRes = await api.get('/periods/by-date/', { params: { date: countDateInput.value } })
+    const today = new Date().toISOString().split('T')[0]
+    const periodRes = await api.get('/periods/by-date/', { params: { date: today } })
     const periodId = periodRes.data.id
 
-    const [articlesRes, entriesRes] = await Promise.allSettled([
-      api.get('/stock-count/articles/', { params: { period_id: periodId, include_base: 'false' } }),
-      api.get('/stock-count/entries/', {
-        params: {
-          location_id: selectedLocation.value.id,
-          count_date: countDateInput.value,
-        },
-      }),
-    ])
-
-    if (articlesRes.status === 'fulfilled') {
-      articles.value = articlesRes.value.data
-    } else {
-      showSnack('Artikel konnten nicht geladen werden.', 'error')
-    }
-
-    // Pre-fill existing counts as initial sessions
-    if (entriesRes.status === 'fulfilled') {
-      for (const entry of entriesRes.value.data) {
-        const qty = parseFloat(entry.quantity)
-        if (qty !== 0) {
-          if (!articleSessions.value[entry.article_id]) {
-            articleSessions.value[entry.article_id] = []
-          }
-          articleSessions.value[entry.article_id].push({ pkgCount: 0, unitCount: qty })
-        }
-      }
-    }
+    const articlesRes = await api.get('/stock-count/articles/', {
+      params: { period_id: periodId, include_base: 'false' },
+    })
+    articles.value = articlesRes.data
   } catch (err) {
     if (err.response?.status === 404) {
       showSnack('Keine Periode für das gewählte Datum gefunden.', 'warning')
@@ -336,14 +306,16 @@ function buildPayload() {
       return {
         article_id: article.article_id,
         article_name: article.article_name,
-        quantity: total,
+        package_count: totalPkgCount(article.article_id),
+        units_per_package: packageStep(article),
+        unit_count: totalUnitCount(article.article_id),
       }
     })
     .filter(Boolean)
   return {
     location_id: selectedLocation.value.id,
     location_name: selectedLocation.value.name,
-    count_date: new Date(countDateInput.value + 'T12:00:00').toISOString(),
+    count_date: new Date().toISOString(),
     entries,
   }
 }
@@ -358,6 +330,7 @@ async function save() {
   try {
     await api.post('/stock-count/entries/bulk/', payload)
     showSnack(`${payload.entries.length} Einträge gespeichert.`)
+    goBack()
   } catch (err) {
     if (!navigator.onLine || err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
       queuePendingSave(payload)

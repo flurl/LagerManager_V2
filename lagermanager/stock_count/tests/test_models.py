@@ -27,7 +27,7 @@ class StockCountEntryModelTest(TestCase):
             'article_name': 'Bier',
             'location_id': 1,
             'location_name': 'Bar',
-            'quantity': 5,
+            'unit_count': 5,
         }
         defaults.update(kwargs)
         return StockCountEntry.objects.create(**defaults)
@@ -39,7 +39,7 @@ class StockCountEntryModelTest(TestCase):
         self.assertEqual(entry.article_name, 'Bier')
         self.assertEqual(entry.location_id, 1)
         self.assertEqual(entry.location_name, 'Bar')
-        self.assertEqual(float(entry.quantity), 5.0)
+        self.assertEqual(entry.quantity, 5)
         self.assertEqual(entry.count_date, self.count_date)
 
     def test_created_at_auto_set(self) -> None:
@@ -47,7 +47,7 @@ class StockCountEntryModelTest(TestCase):
         self.assertIsNotNone(entry.created_at)
 
     def test_str(self) -> None:
-        entry = self._make_entry(article_name='Bier', location_name='Bar', quantity=5)
+        entry = self._make_entry(article_name='Bier', location_name='Bar', unit_count=5)
         self.assertIn('Bier', str(entry))
         self.assertIn('Bar', str(entry))
         self.assertIn('2024-06-15', str(entry))
@@ -79,6 +79,24 @@ class StockCountEntryModelTest(TestCase):
         entry = self._make_entry(article_id='101-lemon', article_name='Bier-lemon')
         self.assertEqual(entry.article_id, '101-lemon')
         self.assertEqual(entry.article_name, 'Bier-lemon')
+
+    def test_breakdown_fields_default_to_zero(self) -> None:
+        entry = self._make_entry(unit_count=0)
+        self.assertEqual(entry.package_count, 0)
+        self.assertEqual(entry.units_per_package, 0)
+        self.assertEqual(entry.unit_count, 0)
+
+    def test_quantity_computed_from_breakdown(self) -> None:
+        entry = self._make_entry(package_count=2, units_per_package=10, unit_count=3)
+        self.assertEqual(entry.quantity, 23)
+
+    def test_quantity_recomputed_on_update(self) -> None:
+        entry = self._make_entry(package_count=1, units_per_package=6, unit_count=0)
+        self.assertEqual(entry.quantity, 6)
+        entry.unit_count = 2
+        entry.save()
+        entry.refresh_from_db()
+        self.assertEqual(entry.quantity, 8)
 
 
 class GetExpandedArticlesServiceTest(TestCase):

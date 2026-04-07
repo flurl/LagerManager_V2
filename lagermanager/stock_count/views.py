@@ -49,7 +49,9 @@ class BulkStockCountView(APIView):
                 defaults={
                     'article_name': entry['article_name'],
                     'location_name': location_name,
-                    'quantity': entry['quantity'],
+                    'package_count': entry['package_count'],
+                    'units_per_package': entry['units_per_package'],
+                    'unit_count': entry['unit_count'],
                 },
             )
             saved.append(obj.pk)

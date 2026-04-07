@@ -8,9 +8,10 @@ class StockCountEntrySerializer(serializers.ModelSerializer[StockCountEntry]):
         model = StockCountEntry
         fields = [
             'id', 'count_date', 'article_id', 'article_name',
-            'location_id', 'location_name', 'quantity', 'created_at',
+            'location_id', 'location_name', 'package_count', 'units_per_package', 'unit_count',
+            'quantity', 'created_at',
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'quantity', 'created_at']
 
 
 class ExpandedArticleSerializer(serializers.Serializer[dict]):  # type: ignore[type-arg]
@@ -22,7 +23,9 @@ class ExpandedArticleSerializer(serializers.Serializer[dict]):  # type: ignore[t
 class BulkEntrySerializer(serializers.Serializer[dict]):  # type: ignore[type-arg]
     article_id = serializers.CharField(max_length=100)
     article_name = serializers.CharField(max_length=200)
-    quantity = serializers.DecimalField(max_digits=10, decimal_places=3)
+    package_count = serializers.IntegerField(min_value=0, default=0)
+    units_per_package = serializers.IntegerField(min_value=0, default=0)
+    unit_count = serializers.IntegerField(min_value=0, default=0)
 
 
 class BulkStockCountSerializer(serializers.Serializer[dict]):  # type: ignore[type-arg]
