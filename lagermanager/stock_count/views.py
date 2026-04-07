@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.db.models import QuerySet
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -11,7 +13,7 @@ from .serializers import (
     ExpandedArticleSerializer,
     StockCountEntrySerializer,
 )
-from .services import get_expanded_articles
+from .services import get_expanded_articles, import_stock_count_entries
 
 
 class ExpandedArticleListView(APIView):
@@ -57,6 +59,24 @@ class BulkStockCountView(APIView):
             saved.append(obj.pk)
 
         return Response({'saved': len(saved)}, status=status.HTTP_200_OK)
+
+
+class ImportStockCountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        entry_ids = request.data.get('entry_ids')
+        if not entry_ids or not isinstance(entry_ids, list):
+            return Response({'error': 'entry_ids required'}, status=status.HTTP_400_BAD_REQUEST)
+        force = bool(request.data.get('force', False))
+
+        result: dict[str, Any] = import_stock_count_entries(entry_ids, force=force)
+
+        if result.get('status') == 'conflict':
+            return Response(result, status=status.HTTP_409_CONFLICT)
+        if result.get('status') == 'error':
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class StockCountEntryViewSet(viewsets.ModelViewSet[StockCountEntry]):

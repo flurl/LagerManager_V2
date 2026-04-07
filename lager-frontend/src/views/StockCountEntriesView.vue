@@ -54,6 +54,7 @@
       <template #item.actions="{ item }">
         <v-icon size="small" @click="openEdit(item)">mdi-pencil</v-icon>
         <v-icon size="small" class="ml-1" color="error" @click="deleteItem(item)">mdi-delete</v-icon>
+        <v-icon size="small" class="ml-1" color="primary" @click="openImportDialog(item)">mdi-import</v-icon>
       </template>
     </v-data-table>
 
@@ -101,6 +102,44 @@
       </v-card>
     </v-dialog>
 
+    <!-- Import dialog -->
+    <v-dialog v-model="importDialog" max-width="400">
+      <v-card>
+        <v-card-title>In Gezählten Stand importieren</v-card-title>
+        <v-card-text>
+          <p class="mb-1"><strong>{{ importItem?.article_name }}</strong></p>
+          <p class="text-caption text-medium-emphasis">{{ formatDate(importItem?.count_date) }}</p>
+          <p class="mt-3">Was soll importiert werden?</p>
+        </v-card-text>
+        <v-card-actions class="flex-column align-stretch pa-3" style="gap: 8px">
+          <v-btn color="primary" variant="tonal" block :loading="importing" @click="doImport('single')">
+            Nur diesen Eintrag
+          </v-btn>
+          <v-btn color="primary" variant="tonal" block :loading="importing" @click="doImport('batch')">
+            Gesamte Zählung ({{ batchCount }} Einträge)
+          </v-btn>
+          <v-btn variant="text" block @click="importDialog = false">Abbrechen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Conflict confirmation dialog -->
+    <v-dialog v-model="conflictDialog" max-width="400">
+      <v-card>
+        <v-card-title>Bereits vorhanden</v-card-title>
+        <v-card-text>
+          Es existieren bereits <strong>{{ conflictInfo?.existing_count }}</strong> Einträge für
+          den <strong>{{ conflictInfo?.date }}</strong> in der Bestandszählung.
+          Sollen diese überschrieben werden?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="conflictDialog = false">Abbrechen</v-btn>
+          <v-btn color="warning" :loading="importing" @click="forceImport">Überschreiben</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
       {{ snackbar.message }}
     </v-snackbar>
@@ -108,7 +147,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../api'
 
 const items = ref([])
@@ -120,6 +159,19 @@ const filterLocationId = ref(null)
 const filterDate = ref(null)
 const selectedLocation = ref(null)
 const snackbar = reactive({ show: false, message: '', color: 'success' })
+
+// Import state
+const importDialog = ref(false)
+const conflictDialog = ref(false)
+const importItem = ref(null)
+const importMode = ref(null)
+const importing = ref(false)
+const conflictInfo = ref(null)
+
+const batchCount = computed(() => {
+  if (!importItem.value) return 0
+  return items.value.filter(i => i.count_date === importItem.value.count_date).length
+})
 
 const form = ref({
   id: null,
@@ -255,6 +307,57 @@ async function deleteItem(item) {
     await fetchItems()
   } catch {
     showSnack('Fehler beim Löschen.', 'error')
+  }
+}
+
+function openImportDialog(item) {
+  importItem.value = item
+  importDialog.value = true
+}
+
+function collectEntryIds(mode) {
+  if (mode === 'single') return [importItem.value.id]
+  return items.value
+    .filter(i => i.count_date === importItem.value.count_date)
+    .map(i => i.id)
+}
+
+async function doImport(mode) {
+  importDialog.value = false
+  importMode.value = mode
+  importing.value = true
+  try {
+    const res = await api.post('/stock-count/entries/import/', { entry_ids: collectEntryIds(mode) })
+    let msg = `${res.data.created} erstellt, ${res.data.updated} aktualisiert.`
+    if (res.data.not_found?.length) msg += ` ${res.data.not_found.length} Artikel nicht gefunden.`
+    showSnack(msg)
+  } catch (err) {
+    if (err.response?.status === 409) {
+      conflictInfo.value = err.response.data
+      conflictDialog.value = true
+      return
+    }
+    showSnack('Import fehlgeschlagen.', 'error')
+  } finally {
+    importing.value = false
+  }
+}
+
+async function forceImport() {
+  conflictDialog.value = false
+  importing.value = true
+  try {
+    const res = await api.post('/stock-count/entries/import/', {
+      entry_ids: collectEntryIds(importMode.value),
+      force: true,
+    })
+    let msg = `${res.data.created} erstellt, ${res.data.updated} aktualisiert.`
+    if (res.data.not_found?.length) msg += ` ${res.data.not_found.length} Artikel nicht gefunden.`
+    showSnack(msg)
+  } catch {
+    showSnack('Import fehlgeschlagen.', 'error')
+  } finally {
+    importing.value = false
   }
 }
 
