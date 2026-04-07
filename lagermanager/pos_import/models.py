@@ -103,6 +103,7 @@ class TischAktiv(models.Model):
     class Meta:
         db_table = 'tische_aktiv'
         unique_together = [('source_id', 'period')]
+        indexes = [models.Index(fields=['checkpoint_tag'], name='tische_aktiv_chkpt_tag_idx')]
 
 
 class TischBon(models.Model):
