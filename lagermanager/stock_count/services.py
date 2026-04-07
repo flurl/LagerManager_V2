@@ -1,7 +1,8 @@
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from core.models import Period
+from core.services.period import get_period_for_datetime
 from inventory.models import PhysicalCount
 from pos_import.models import Article, ArticleMeta, WarehouseArticle
 
@@ -57,7 +58,7 @@ def get_expanded_articles(period_id: int, include_base: bool = True) -> list[dic
                     'package_size': package_size,
                 })
 
-    rows.sort(key=lambda r: r['article_name'].lower())
+    rows.sort(key=lambda r: cast(str, r['article_name']).lower())
     return rows
 
 
@@ -82,10 +83,7 @@ def import_stock_count_entries(
 
     count_date = entries[0].count_date
 
-    period: Period | None = Period.objects.filter(
-        start__lte=count_date,
-        end__gte=count_date,
-    ).first()
+    period: Period | None = get_period_for_datetime(count_date)
     if period is None:
         return {'status': 'error', 'error': f'No period found for date {count_date.date()}'}
 

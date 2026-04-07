@@ -1,5 +1,6 @@
 import csv
 
+from core.services.period import get_period_for_datetime
 from django.db.models import QuerySet
 from django.http import HttpResponse
 from rest_framework import status, viewsets
@@ -9,11 +10,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from .models import InitialInventory, PhysicalCount, PeriodStartStockLevel
+from .models import InitialInventory, PeriodStartStockLevel, PhysicalCount
 from .serializers import (
     InitialInventorySerializer,
-    PhysicalCountSerializer,
     PeriodStartStockLevelSerializer,
+    PhysicalCountSerializer,
 )
 from .services.init_period import (
     init_initial_inventory,
@@ -102,10 +103,7 @@ class PhysicalCountViewSet(viewsets.ModelViewSet[PhysicalCount]):
         obj = serializer.save()
         # Auto-assign period from date
         if not obj.period_id:
-            from core.models import Period
-            period = Period.objects.filter(
-                start__lte=obj.date, end__gte=obj.date
-            ).first()
+            period = get_period_for_datetime(obj.date)
             if period:
                 obj.period = period
                 obj.save(update_fields=['period'])
