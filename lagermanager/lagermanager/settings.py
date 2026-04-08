@@ -12,6 +12,7 @@ SECRET_KEY: str = config(
 DEBUG: bool = config('DJANGO_DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS: list[str] = ['*']
+CSRF_TRUSTED_ORIGINS: list[str] = ['http://localhost:5173', 'http://localhost:8000']
 
 INSTALLED_APPS: list[str] = [
     'django.contrib.admin',

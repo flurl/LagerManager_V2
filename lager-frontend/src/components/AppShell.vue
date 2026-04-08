@@ -38,7 +38,8 @@
                 :title="sub.title" />
             </v-list>
           </v-menu>
-          <v-list-item v-else :to="item.to" :prepend-icon="item.icon" :title="item.title" />
+          <v-list-item v-else :to="item.to" :href="item.href" :target="item.href ? '_blank' : undefined"
+            :prepend-icon="item.icon" :title="item.title" />
         </template>
       </v-list>
     </v-menu>
@@ -140,6 +141,7 @@ const navGroups = [
     items: [
       { to: '/import', icon: 'mdi-database-import', title: 'Daten importieren' },
       { to: '/settings', icon: 'mdi-tune', title: 'Einstellungen' },
+      { href: '/admin/', icon: 'mdi-shield-account', title: 'Django Admin' },
     ],
   },
 ]
