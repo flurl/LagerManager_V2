@@ -17,6 +17,7 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import AppShell from './components/AppShell.vue'
@@ -24,6 +25,16 @@ import LoginView from './views/LoginView.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
+
+onMounted(async () => {
+  if (auth.isAuthenticated && !auth.user) {
+    try {
+      await auth.fetchMe()
+    } catch {
+      await auth.logout()
+    }
+  }
+})
 </script>
 
 <style>

@@ -1,5 +1,6 @@
 from typing import Any
 
+from core.permissions import DjangoModelPermissionsWithView, require_perm
 from django.db.models import QuerySet
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -15,9 +16,12 @@ from .serializers import (
 )
 from .services import get_expanded_articles, import_stock_count_entries, import_stock_count_entries_for_date
 
+_view_stock_count = require_perm('stock_count.view_stockcountentry')
+_add_stock_count = require_perm('stock_count.add_stockcountentry')
+
 
 class ExpandedArticleListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_stock_count]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
@@ -30,7 +34,7 @@ class ExpandedArticleListView(APIView):
 
 
 class BulkStockCountView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _add_stock_count]
 
     def post(self, request: Request) -> Response:
         serializer = BulkStockCountSerializer(data=request.data)
@@ -62,7 +66,7 @@ class BulkStockCountView(APIView):
 
 
 class ImportStockCountView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _add_stock_count]
 
     def post(self, request: Request) -> Response:
         force = bool(request.data.get('force', False))
@@ -85,7 +89,7 @@ class ImportStockCountView(APIView):
 
 class StockCountEntryViewSet(viewsets.ModelViewSet[StockCountEntry]):
     serializer_class = StockCountEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
     pagination_class = None
 
     def get_queryset(self) -> QuerySet[StockCountEntry]:

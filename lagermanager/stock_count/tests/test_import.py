@@ -11,7 +11,7 @@ from stock_count.models import StockCountEntry
 
 class ImportStockCountTestCase(APITestCase):
     def setUp(self) -> None:
-        self.user = User.objects.create_user(username='tester', password='pass')
+        self.user = User.objects.create_superuser(username='tester', password='pass')
         self.client.force_authenticate(user=self.user)
 
         self.period = Period.objects.create(
@@ -177,7 +177,7 @@ class ImportStockCountTestCase(APITestCase):
 
 class CumulativeImportTestCase(APITestCase):
     def setUp(self) -> None:
-        self.user = User.objects.create_user(username='tester', password='pass')
+        self.user = User.objects.create_superuser(username='tester', password='pass')
         self.client.force_authenticate(user=self.user)
 
         self.period = Period.objects.create(

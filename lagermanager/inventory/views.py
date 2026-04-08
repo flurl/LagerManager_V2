@@ -1,5 +1,6 @@
 import csv
 
+from core.permissions import DjangoModelPermissionsWithView
 from core.services.period import get_period_for_datetime
 from django.db.models import QuerySet
 from django.http import HttpResponse
@@ -25,7 +26,7 @@ from .services.init_period import (
 
 class PeriodStartStockLevelViewSet(viewsets.ModelViewSet[PeriodStartStockLevel]):
     serializer_class = PeriodStartStockLevelSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[PeriodStartStockLevel]:
         qs = PeriodStartStockLevel.objects.select_related('article', 'period')
@@ -45,7 +46,7 @@ class PeriodStartStockLevelViewSet(viewsets.ModelViewSet[PeriodStartStockLevel])
 
 class InitialInventoryViewSet(viewsets.ModelViewSet[InitialInventory]):
     serializer_class = InitialInventorySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[InitialInventory]:
         qs = InitialInventory.objects.select_related(
@@ -87,7 +88,7 @@ class InitialInventoryViewSet(viewsets.ModelViewSet[InitialInventory]):
 
 class PhysicalCountViewSet(viewsets.ModelViewSet[PhysicalCount]):
     serializer_class = PhysicalCountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[PhysicalCount]:
         qs = PhysicalCount.objects.select_related('article', 'period')

@@ -1,3 +1,4 @@
+from core.permissions import require_perm
 from core.services.purchase_price import get_purchase_price
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -11,9 +12,11 @@ from .services.stock_level_report import get_current_stock_levels, get_stock_lev
 from .services.total_movements_report import DateGrouping, get_total_movements_report
 from deliveries.models import StockMovement
 
+_view_reports = require_perm('core.view_reports')
+
 
 class StockLevelReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_reports]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
@@ -24,7 +27,7 @@ class StockLevelReportView(APIView):
 
 
 class CurrentStockLevelReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_reports]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
@@ -35,7 +38,7 @@ class CurrentStockLevelReportView(APIView):
 
 
 class InventoryReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_reports]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
@@ -46,7 +49,7 @@ class InventoryReportView(APIView):
 
 
 class ConsumptionReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_reports]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
@@ -57,7 +60,7 @@ class ConsumptionReportView(APIView):
 
 
 class ConsumptionTotalsReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_reports]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
@@ -68,7 +71,7 @@ class ConsumptionTotalsReportView(APIView):
 
 
 class TotalMovementsReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_reports]
 
     def get(self, request: Request) -> Response:
         period_id = request.query_params.get('period_id')
@@ -94,7 +97,7 @@ class TotalMovementsReportView(APIView):
 
 
 class PurchasePriceView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _view_reports]
 
     def get(self, request: Request) -> Response:
         article_id = request.query_params.get('article')

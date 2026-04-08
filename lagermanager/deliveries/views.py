@@ -1,3 +1,4 @@
+from core.permissions import DjangoModelPermissionsWithView
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Count, QuerySet
 from django.http import HttpResponse
@@ -29,7 +30,7 @@ from .serializers import (
 class PartnerViewSet(viewsets.ModelViewSet[Partner]):
     queryset = Partner.objects.all()
     serializer_class = PartnerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[Partner]:
         qs = Partner.objects.all()
@@ -42,11 +43,11 @@ class PartnerViewSet(viewsets.ModelViewSet[Partner]):
 class TaxRateViewSet(viewsets.ModelViewSet[TaxRate]):
     queryset = TaxRate.objects.all()
     serializer_class = TaxRateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
 
 class StockMovementViewSet(viewsets.ModelViewSet[StockMovement]):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_serializer_class(self) -> type[BaseSerializer[StockMovement]]:
         if self.action == 'list':
@@ -90,7 +91,7 @@ class StockMovementViewSet(viewsets.ModelViewSet[StockMovement]):
 
 class StockMovementDetailViewSet(viewsets.ModelViewSet[StockMovementDetail]):
     serializer_class = StockMovementDetailSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[StockMovementDetail]:
         movement_pk = self.kwargs.get('movement_pk')
@@ -105,7 +106,7 @@ ACCEPTED_MIME_TYPES = ('application/pdf',)
 
 class AttachmentViewSet(viewsets.ModelViewSet[Attachment]):
     serializer_class = AttachmentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self) -> QuerySet[Attachment]:

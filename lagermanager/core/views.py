@@ -2,6 +2,7 @@ from typing import Any
 
 from constance import config as constance_cfg
 from django.conf import settings
+from django.contrib.auth.models import AbstractBaseUser
 from django.db.models.query import QuerySet
 from pos_import.models import ArticleMeta
 from rest_framework import status, viewsets
@@ -11,13 +12,15 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
-from .models import Location, Period
-from .serializers import LocationSerializer, PeriodSerializer
+from .models import Location, Period, UserPreferences
+from .permissions import DjangoModelPermissionsWithView
+from .serializers import LocationSerializer, PeriodSerializer, UserPreferencesSerializer
 
 
 class PeriodViewSet(viewsets.ModelViewSet[Period]):
     queryset: QuerySet[Period, Period] = Period.objects.all()
     serializer_class = PeriodSerializer
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def perform_create(self, serializer: BaseSerializer[Period]) -> None:
         new_period: Period = serializer.save()
@@ -39,6 +42,7 @@ class PeriodViewSet(viewsets.ModelViewSet[Period]):
 class LocationViewSet(viewsets.ModelViewSet[Location]):
     queryset: QuerySet[Location, Location] = Location.objects.all()
     serializer_class = LocationSerializer
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
 
 class PeriodByDateView(APIView):
@@ -89,3 +93,30 @@ class ConfigView(APIView):
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
         return Response({'success': True})
+
+
+class MeView(APIView):
+    """Returns the current user's profile, permissions, and preferences.
+    PATCH updates preferences only.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        user: AbstractBaseUser = request.user
+        prefs, _ = UserPreferences.objects.get_or_create(user=user)
+        return Response({
+            'id': user.pk,
+            'username': user.username,  # type: ignore[attr-defined]
+            'first_name': user.first_name,  # type: ignore[attr-defined]
+            'last_name': user.last_name,  # type: ignore[attr-defined]
+            'groups': list(user.groups.values_list('name', flat=True)),  # type: ignore[attr-defined]
+            'permissions': sorted(user.get_all_permissions()),
+            'preferences': UserPreferencesSerializer(prefs).data,
+        })
+
+    def patch(self, request: Request) -> Response:
+        prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
+        serializer = UserPreferencesSerializer(prefs, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

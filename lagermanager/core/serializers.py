@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Location, Period
+from .models import Location, Period, UserPreferences
 
 
 class PeriodSerializer(serializers.ModelSerializer):
@@ -13,3 +13,9 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields: list[str] = ['id', 'name']
+
+
+class UserPreferencesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserPreferences
+        fields: list[str] = ['language', 'period_colors']

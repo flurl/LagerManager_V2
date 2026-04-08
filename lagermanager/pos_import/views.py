@@ -1,3 +1,4 @@
+from core.permissions import DjangoModelPermissionsWithView, require_perm
 from django.db.models import QuerySet
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -20,7 +21,7 @@ from .services.mssql_import import run_import
 class ArticleMetaViewSet(viewsets.ModelViewSet[ArticleMeta]):
     """CRUD for per-article metadata scoped to a period."""
     serializer_class = ArticleMetaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[ArticleMeta]:
         qs = ArticleMeta.objects.all()
@@ -32,7 +33,7 @@ class ArticleMetaViewSet(viewsets.ModelViewSet[ArticleMeta]):
 
 class ArticleGroupViewSet(viewsets.ReadOnlyModelViewSet[ArticleGroup]):
     serializer_class = ArticleGroupSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[ArticleGroup]:
         qs = ArticleGroup.objects.all()
@@ -44,7 +45,7 @@ class ArticleGroupViewSet(viewsets.ReadOnlyModelViewSet[ArticleGroup]):
 
 class ArticleViewSet(viewsets.ReadOnlyModelViewSet[Article]):
     serializer_class = ArticleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[Article]:
         qs = Article.objects.all()
@@ -56,7 +57,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet[Article]):
 
 class RecipeViewSet(viewsets.ReadOnlyModelViewSet[Recipe]):
     serializer_class = RecipeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[Recipe]:
         qs = Recipe.objects.all()
@@ -68,7 +69,7 @@ class RecipeViewSet(viewsets.ReadOnlyModelViewSet[Recipe]):
 
 class WarehouseUnitViewSet(viewsets.ReadOnlyModelViewSet[WarehouseUnit]):
     serializer_class = WarehouseUnitSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[WarehouseUnit]:
         qs = WarehouseUnit.objects.all()
@@ -80,7 +81,7 @@ class WarehouseUnitViewSet(viewsets.ReadOnlyModelViewSet[WarehouseUnit]):
 
 class WarehouseArticleViewSet(viewsets.ReadOnlyModelViewSet[WarehouseArticle]):
     serializer_class = WarehouseArticleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> QuerySet[WarehouseArticle]:
         qs = WarehouseArticle.objects.all()
@@ -96,7 +97,7 @@ class ImportRunView(APIView):
     Body: {period_id, host, database, user, password}
     Runs the MSSQL import synchronously; returns when complete.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, require_perm('core.run_import')]
 
     def post(self, request: Request) -> Response:
         period_id = request.data.get('period_id')
