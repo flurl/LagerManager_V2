@@ -512,7 +512,7 @@ function onOffline() {
 
 // --- Lifecycle ---
 onMounted(async () => {
-  document.body.style.overscrollBehaviorY = 'none'
+  document.documentElement.classList.add('no-pull-to-refresh')
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
   await loadLocations()
@@ -521,11 +521,18 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  document.body.style.overscrollBehaviorY = ''
+  document.documentElement.classList.remove('no-pull-to-refresh')
   window.removeEventListener('online', onOnline)
   window.removeEventListener('offline', onOffline)
 })
 </script>
+
+<style>
+/* Applied globally while this view is mounted — prevents Chrome Android pull-to-refresh */
+html.no-pull-to-refresh {
+  overscroll-behavior: contain;
+}
+</style>
 
 <style scoped>
 .sticky-header {
