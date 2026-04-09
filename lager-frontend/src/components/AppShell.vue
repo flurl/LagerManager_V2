@@ -6,22 +6,10 @@
     </v-app-bar-title>
 
     <!-- Nav groups -->
-    <v-menu
-      v-for="(group, i) in visibleNavGroups"
-      :key="group.label"
-      v-model="openMenus[i]"
-      :open-delay="0"
-      :close-delay="0"
-      transition="false"
-    >
+    <v-menu v-for="(group, i) in visibleNavGroups" :key="group.label" v-model="openMenus[i]" :open-delay="0"
+      :close-delay="0" transition="false">
       <template #activator="{ props }">
-        <v-btn
-          v-bind="props"
-          :prepend-icon="group.icon"
-          variant="text"
-          class="text-none"
-          @mouseenter="onNavHover(i)"
-        >
+        <v-btn v-bind="props" :prepend-icon="group.icon" variant="text" class="text-none" @mouseenter="onNavHover(i)">
           {{ group.label }}
           <v-icon end>mdi-chevron-down</v-icon>
         </v-btn>
@@ -93,24 +81,15 @@
     <v-card>
       <v-card-title>Benutzereinstellungen</v-card-title>
       <v-card-text>
-        <v-select
-          v-model="prefsForm.language"
-          :items="languageOptions"
-          item-title="label"
-          item-value="value"
-          label="Sprache"
-          class="mb-4"
-        />
+        <v-select v-model="prefsForm.language" :items="languageOptions" item-title="label" item-value="value"
+          label="Sprache" class="mb-4" />
         <div class="text-subtitle-2 mb-2">Periodenfarben</div>
         <v-row v-for="period in periodStore.periods" :key="period.id" align="center" class="mb-1">
           <v-col>{{ period.name }}</v-col>
           <v-col cols="auto">
-            <input
-              type="color"
-              :value="prefsForm.period_colors[String(period.id)] ?? '#1565C0'"
+            <input type="color" :value="prefsForm.period_colors[String(period.id)] ?? '#1565C0'"
               style="width: 40px; height: 32px; cursor: pointer; border: none; padding: 0"
-              @input="prefsForm.period_colors[String(period.id)] = $event.target.value"
-            />
+              @input="prefsForm.period_colors[String(period.id)] = $event.target.value" />
           </v-col>
         </v-row>
         <v-alert v-if="prefsError" type="error" class="mt-3" density="compact">{{ prefsError }}</v-alert>
@@ -158,8 +137,14 @@ const allNavGroups = [
       { to: '/period-start-stock', icon: 'mdi-format-list-numbered', title: 'Periode Start-Stand', permission: 'inventory.view_periodstartstocklevel' },
       { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand', permission: 'inventory.view_initialinventory' },
       { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand', permission: 'inventory.view_physicalcount' },
-      { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung', permission: 'stock_count.view_stockcountentry' },
-      { to: '/stock-count-entries', icon: 'mdi-table-edit', title: 'Zählergebnisse', permission: 'stock_count.view_stockcountentry' },
+      {
+        title: 'Bestandszählung',
+        icon: 'mdi-cellphone-check',
+        permission: 'stock_count.view_stockcountentry',
+        items: [
+          { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung', permission: 'stock_count.view_stockcountentry' },
+          { to: '/stock-count-entries', icon: 'mdi-table-edit', title: 'Zählergebnisse', permission: 'stock_count.view_stockcountentry' },]
+      }
     ],
   },
   {
