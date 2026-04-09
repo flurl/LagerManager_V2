@@ -24,6 +24,7 @@ media/
 # Node
 lager-frontend/node_modules/
 lager-frontend/dist/
+lager-frontend/dev-dist/
 
 # Ruff / linting
 .ruff_cache/
