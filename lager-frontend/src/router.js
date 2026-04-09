@@ -105,10 +105,18 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (!auth.isAuthenticated) return true  // App.vue handles the login wall
   if (to.meta.public) return true
+  if (!auth.ready) {
+    try {
+      await auth.fetchMe()
+    } catch {
+      await auth.logout()
+      return true  // App.vue will show the login wall
+    }
+  }
   const perm = to.meta.permission
   if (!perm || !auth.hasPermission(perm)) {
     return { path: '/forbidden' }
