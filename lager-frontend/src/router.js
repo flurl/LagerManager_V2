@@ -113,6 +113,10 @@ router.beforeEach(async (to) => {
     try {
       await auth.fetchMe()
     } catch {
+      if (!navigator.onLine) {
+        // Network unavailable — token is still valid, don't log out
+        return true  // App.vue will show the login wall (no cached user data)
+      }
       await auth.logout()
       return true  // App.vue will show the login wall
     }

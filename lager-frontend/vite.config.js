@@ -23,11 +23,33 @@ export default defineConfig({
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}'],
+        navigateFallback: 'index.html',
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/locations\//,
+            urlPattern: ({ url }) => /\.(woff2?|ttf|eot)(\?.*)?$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'font-cache',
+              expiration: { maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 },
+            },
+          },
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'navigation-cache',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 10, maxAgeSeconds: 86400 },
+            },
+          },
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/locations/'),
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'locations-cache',
@@ -35,7 +57,7 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^\/api\/stock-count\/articles\//,
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/stock-count/articles/'),
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'stock-count-articles-cache',
@@ -43,7 +65,7 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^\/api\/stock-count\/entries\//,
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/stock-count/entries/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'stock-count-entries-cache',
@@ -57,22 +79,19 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/media': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/admin': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/static': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
+      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      '/media': { target: 'http://localhost:8000', changeOrigin: true },
+      '/admin': { target: 'http://localhost:8000', changeOrigin: true },
+      '/static': { target: 'http://localhost:8000', changeOrigin: true },
+    },
+  },
+  preview: {
+    port: 5171,
+    proxy: {
+      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      '/media': { target: 'http://localhost:8000', changeOrigin: true },
+      '/admin': { target: 'http://localhost:8000', changeOrigin: true },
+      '/static': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 })

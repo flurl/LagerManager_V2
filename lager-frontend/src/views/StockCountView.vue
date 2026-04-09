@@ -7,6 +7,16 @@
         <v-card-subtitle>Standort wählen</v-card-subtitle>
       </v-card>
 
+      <v-text-field
+        v-model="countDate"
+        label="Zähldatum"
+        type="date"
+        variant="outlined"
+        density="compact"
+        class="mx-2 mb-3"
+        hide-details
+      />
+
       <v-progress-linear v-if="loadingLocations" indeterminate color="primary" class="mb-2" />
 
       <v-row dense>
@@ -119,6 +129,19 @@
       </div>
     </div>
 
+    <!-- Offline stale-cache confirmation dialog -->
+    <v-dialog v-model="offlineFallbackDialog.show" max-width="420" persistent>
+      <v-card>
+        <v-card-title class="text-subtitle-1">Offline – Veralteter Cache</v-card-title>
+        <v-card-text>{{ offlineFallbackDialog.message }}</v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="cancelOfflineFallback">Abbrechen</v-btn>
+          <v-spacer />
+          <v-btn color="primary" @click="confirmOfflineFallback">Verwenden</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
       {{ snackbar.message }}
@@ -139,6 +162,7 @@ const saving = ref(false)
 const isOnline = ref(navigator.onLine)
 const headerRef = ref(null)
 
+const countDate = ref(new Date().toISOString().split('T')[0])
 const selectedLocation = ref(null)
 const articles = ref([])
 
@@ -151,6 +175,11 @@ const articleSessions = ref({})
 const lastTouchedId = ref(null)
 
 const snackbar = reactive({ show: false, message: '', color: 'success' })
+const offlineFallbackDialog = reactive({
+  show: false,
+  message: '',
+  resolve: /** @type {((v: boolean) => void) | null} */ (null),
+})
 
 // --- Alphabet ---
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -208,6 +237,24 @@ function showSnack(message, color = 'success') {
   snackbar.show = true
 }
 
+function askOfflineFallback(message) {
+  return new Promise((resolve) => {
+    offlineFallbackDialog.message = message
+    offlineFallbackDialog.resolve = resolve
+    offlineFallbackDialog.show = true
+  })
+}
+
+function confirmOfflineFallback() {
+  offlineFallbackDialog.show = false
+  offlineFallbackDialog.resolve?.(true)
+}
+
+function cancelOfflineFallback() {
+  offlineFallbackDialog.show = false
+  offlineFallbackDialog.resolve?.(false)
+}
+
 // --- Session management ---
 function touchArticle(articleId) {
   if (!articleSessions.value[articleId]) {
@@ -260,9 +307,13 @@ function goBack() {
   articles.value = []
   articleSessions.value = {}
   lastTouchedId.value = null
+  countDate.value = new Date().toISOString().split('T')[0]
 }
 
 // --- Data loading ---
+/** Cache key for article lists. Value: { [periodId]: { start, end, articles } } */
+const ARTICLES_CACHE_KEY = 'stockcount_articles_cache'
+
 async function loadLocations() {
   loadingLocations.value = true
   try {
@@ -275,22 +326,86 @@ async function loadLocations() {
   }
 }
 
+function isNetworkError(err) {
+  return !navigator.onLine || err.code === 'ERR_NETWORK' || err.message === 'Network Error'
+}
+
+/**
+ * Fetch articles for the period containing `date`, persist them into the per-period
+ * localStorage cache, and return the article list.
+ */
+async function fetchAndCacheArticles(date) {
+  const periodRes = await api.get('/periods/by-date/', { params: { date } })
+  const period = periodRes.data
+  const start = period.start.split('T')[0]
+  const end = period.end.split('T')[0]
+
+  const articlesRes = await api.get('/stock-count/articles/', {
+    params: { period_id: period.id, include_base: 'false' },
+  })
+  const cache = JSON.parse(localStorage.getItem(ARTICLES_CACHE_KEY) || '{}')
+  cache[period.id] = { start, end, articles: articlesRes.data }
+  localStorage.setItem(ARTICLES_CACHE_KEY, JSON.stringify(cache))
+  return articlesRes.data
+}
+
+/** Silently prefetch today's articles while online so the offline cache stays warm. */
+async function prefetchArticles() {
+  if (!navigator.onLine) return
+  try {
+    await fetchAndCacheArticles(new Date().toISOString().split('T')[0])
+  } catch {
+    // Background prefetch — ignore errors silently
+  }
+}
+
 async function loadArticles() {
   loadingArticles.value = true
   try {
-    const today = new Date().toISOString().split('T')[0]
-    const periodRes = await api.get('/periods/by-date/', { params: { date: today } })
-    const periodId = periodRes.data.id
-
-    const articlesRes = await api.get('/stock-count/articles/', {
-      params: { period_id: periodId, include_base: 'false' },
-    })
-    articles.value = articlesRes.data
+    articles.value = await fetchAndCacheArticles(countDate.value)
   } catch (err) {
-    if (err.response?.status === 404) {
-      showSnack('Keine Periode für das gewählte Datum gefunden.', 'warning')
+    if (!isNetworkError(err)) {
+      showSnack(
+        err.response?.status === 404
+          ? 'Keine Periode für das gewählte Datum gefunden.'
+          : 'Laden fehlgeschlagen.',
+        'error',
+      )
+      return
+    }
+
+    // Offline path — look up the per-period cache
+    const cache = JSON.parse(localStorage.getItem(ARTICLES_CACHE_KEY) || '{}')
+    const entries = Object.values(cache)
+
+    // Exact match: a cached period whose range contains the selected count date
+    const exact = entries.find(c => countDate.value >= c.start && countDate.value <= c.end)
+    if (exact) {
+      articles.value = exact.articles
+      showSnack('Offline – Artikelliste aus Cache.', 'warning')
+      return
+    }
+
+    if (!entries.length) {
+      showSnack('Offline und kein Artikel-Cache vorhanden.', 'error')
+      return
+    }
+
+    // No exact match — find the period whose end date is closest to the count date
+    const closest = entries.sort((a, b) =>
+      Math.abs(new Date(countDate.value) - new Date(a.end)) -
+      Math.abs(new Date(countDate.value) - new Date(b.end)),
+    )[0]
+
+    const confirmed = await askOfflineFallback(
+      `Offline – kein Cache für den gewählten Zeitraum (${countDate.value}).\n` +
+      `Nächstbester Cache: Artikel für ${closest.start} bis ${closest.end}.\n` +
+      `Trotzdem verwenden?`,
+    )
+    if (confirmed) {
+      articles.value = closest.articles
     } else {
-      showSnack('Laden fehlgeschlagen.', 'error')
+      goBack()
     }
   } finally {
     loadingArticles.value = false
@@ -315,7 +430,11 @@ function buildPayload() {
   return {
     location_id: selectedLocation.value.id,
     location_name: selectedLocation.value.name,
-    count_date: new Date().toISOString(),
+    count_date: (() => {
+      const now = new Date()
+      const [y, m, d] = countDate.value.split('-').map(Number)
+      return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds()).toISOString()
+    })(),
     entries,
   }
 }
@@ -384,6 +503,7 @@ async function syncPending() {
 function onOnline() {
   isOnline.value = true
   syncPending()
+  prefetchArticles()
 }
 
 function onOffline() {
@@ -397,6 +517,7 @@ onMounted(async () => {
   window.addEventListener('offline', onOffline)
   await loadLocations()
   syncPending()
+  prefetchArticles()
 })
 
 onUnmounted(() => {
@@ -469,9 +590,7 @@ onUnmounted(() => {
   margin-bottom: 2px;
 }
 
-.formula-sum-line {
-  /* same style as regular lines; underline on the preceding row provides visual separation */
-}
+/* .formula-sum-line — same style as regular lines; underline on the preceding row provides visual separation */
 
 .f-pkg {
   color: #3949ab;

@@ -2,16 +2,23 @@ import { defineStore } from 'pinia'
 import api from '../api'
 
 export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    token: localStorage.getItem('token') || null,
-    refreshToken: localStorage.getItem('refreshToken') || null,
-    user: null,
-    permissions: /** @type {string[]} */ ([]),
-    preferences: /** @type {{ language: string, period_colors: Record<string, string> }} */ (
-      { language: 'de', period_colors: {} }
-    ),
-    ready: false,
-  }),
+  state: () => {
+    const cachedUser = JSON.parse(localStorage.getItem('authUser') || 'null')
+    const cachedPermissions = /** @type {string[]} */ (
+      JSON.parse(localStorage.getItem('authPermissions') || 'null') || []
+    )
+    const cachedPreferences = /** @type {{ language: string, period_colors: Record<string, string> }} */ (
+      JSON.parse(localStorage.getItem('authPreferences') || 'null') || { language: 'de', period_colors: {} }
+    )
+    return {
+      token: localStorage.getItem('token') || null,
+      refreshToken: localStorage.getItem('refreshToken') || null,
+      user: cachedUser,
+      permissions: cachedPermissions,
+      preferences: cachedPreferences,
+      ready: !!cachedUser,
+    }
+  },
   getters: {
     isAuthenticated: (state) => !!state.token,
     hasPermission: (state) => (/** @type {string} */ perm) => state.permissions.includes(perm),
@@ -32,6 +39,9 @@ export const useAuthStore = defineStore('auth', {
       this.permissions = res.data.permissions
       this.preferences = res.data.preferences
       this.ready = true
+      localStorage.setItem('authUser', JSON.stringify(res.data))
+      localStorage.setItem('authPermissions', JSON.stringify(res.data.permissions))
+      localStorage.setItem('authPreferences', JSON.stringify(res.data.preferences))
     },
     async updatePreferences(prefs) {
       const res = await api.patch('/me/', prefs)
@@ -46,6 +56,9 @@ export const useAuthStore = defineStore('auth', {
       this.ready = false
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
+      localStorage.removeItem('authUser')
+      localStorage.removeItem('authPermissions')
+      localStorage.removeItem('authPreferences')
     },
   },
 })
