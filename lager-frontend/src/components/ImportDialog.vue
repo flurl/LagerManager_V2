@@ -164,7 +164,7 @@ function parseImportJson() {
     const wa = a.ID != null ? props.warehouseArticles.find((w) => w.source_article_id === a.ID) : null
     const tr = props.taxRates.find((t) => Number(t.percent) === a.tax)
       ?? props.taxRates.find((t) => t.id === props.config?.DEFAULT_TAX_RATE_ID?.value)
-    const net = (a.total_price ?? 0) - (a.discount ?? 0)
+    const net = (a.total_price ?? 0) - (a.discount ?? 0) + (a.beer_tax ?? 0)
     const unit_price = a.quantity ? +(net / a.quantity).toFixed(4) : 0
     return {
       name: a.Name,

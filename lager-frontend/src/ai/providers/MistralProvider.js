@@ -35,7 +35,9 @@ const ANNOTATION_SCHEMA = {
             quantity: { type: 'integer', minimum: 0, description: 'The quantity of the article' },
             total_price: { type: 'number', minimum: 0, description: 'The total price of the article' },
             discount: { type: ['number', 'null'], minimum: 0, description: 'The discount applied to the article, can be null' },
+            beer_tax: { type: ['number', 'null'], minimum: 0, description: 'The beer tax applied to the article, can be null' },
             tax: { type: 'integer', minimum: 0, maximum: 100, description: 'The tax rate applied to the article in percent' },
+
           },
           required: ['Name', 'quantity', 'total_price', 'tax'],
         },
