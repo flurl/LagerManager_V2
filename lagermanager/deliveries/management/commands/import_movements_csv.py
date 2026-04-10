@@ -28,8 +28,6 @@ REQUIRED ARGUMENTS
     --tax-rate            Django TaxRate ID applied to every detail line
 """
 
-from __future__ import annotations
-
 import csv
 from argparse import ArgumentParser
 from decimal import Decimal, InvalidOperation
@@ -38,9 +36,9 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from pos_import.models import Article
 
 from deliveries.models import StockMovement, StockMovementDetail
-from pos_import.models import Article
 
 
 def _parse_price(value: str) -> Decimal:
