@@ -92,14 +92,22 @@
             <!-- Count buttons -->
             <div class="btn-row pa-2 pt-1">
               <v-btn class="count-btn" color="success" variant="tonal" rounded="lg"
-                @click="adjustUnit(article.article_id, 1)">+1</v-btn>
+                @click="handleBtnClick(article, 'unit', 1)"
+                @pointerdown="startLongPress(article, 'unit', 1)"
+                @pointerup="endLongPress" @pointercancel="endLongPress" @pointerleave="endLongPress">+1</v-btn>
               <v-btn class="count-btn" color="error" variant="tonal" rounded="lg"
-                @click="adjustUnit(article.article_id, -1)">-1</v-btn>
+                @click="handleBtnClick(article, 'unit', -1)"
+                @pointerdown="startLongPress(article, 'unit', -1)"
+                @pointerup="endLongPress" @pointercancel="endLongPress" @pointerleave="endLongPress">-1</v-btn>
               <v-btn class="count-btn" color="success" variant="tonal" rounded="lg"
-                @click="adjustPkg(article.article_id, 1)">+{{
+                @click="handleBtnClick(article, 'pkg', 1)"
+                @pointerdown="startLongPress(article, 'pkg', 1)"
+                @pointerup="endLongPress" @pointercancel="endLongPress" @pointerleave="endLongPress">+{{
                   packageStep(article) }}</v-btn>
               <v-btn class="count-btn" color="warning" variant="tonal" rounded="lg"
-                @click="adjustPkg(article.article_id, -1)">-{{
+                @click="handleBtnClick(article, 'pkg', -1)"
+                @pointerdown="startLongPress(article, 'pkg', -1)"
+                @pointerup="endLongPress" @pointercancel="endLongPress" @pointerleave="endLongPress">-{{
                   packageStep(article) }}</v-btn>
             </div>
           </v-card>
@@ -128,6 +136,30 @@
         </v-btn>
       </div>
     </div>
+
+    <!-- Long-press number input dialog -->
+    <v-dialog v-model="longPressDialog.show" max-width="300" persistent>
+      <v-card>
+        <v-card-title class="text-subtitle-1">{{ longPressDialog.label }}</v-card-title>
+        <v-card-text class="pb-0">
+          <v-text-field
+            v-model="longPressDialog.inputValue"
+            type="number"
+            min="1"
+            label="Anzahl"
+            variant="outlined"
+            density="compact"
+            autofocus
+            @keyup.enter="confirmLongPress"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="longPressDialog.show = false">Abbrechen</v-btn>
+          <v-spacer />
+          <v-btn color="primary" @click="confirmLongPress">OK</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Offline stale-cache confirmation dialog -->
     <v-dialog v-model="offlineFallbackDialog.show" max-width="420" persistent>
@@ -253,6 +285,56 @@ function confirmOfflineFallback() {
 function cancelOfflineFallback() {
   offlineFallbackDialog.show = false
   offlineFallbackDialog.resolve?.(false)
+}
+
+// --- Long press ---
+const longPressDialog = reactive({
+  show: false,
+  label: '',
+  article: /** @type {object | null} */ (null),
+  operation: /** @type {'unit' | 'pkg'} */ ('unit'),
+  delta: 1,
+  inputValue: '',
+})
+const longPressActive = ref(false)
+let longPressTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null)
+
+function startLongPress(article, operation, delta) {
+  longPressTimer = setTimeout(() => {
+    longPressActive.value = true
+    longPressDialog.label = `${delta > 0 ? '+' : '-'} ${operation === 'unit' ? 'Einheiten' : 'Pakete'}`
+    longPressDialog.article = article
+    longPressDialog.operation = operation
+    longPressDialog.delta = delta
+    longPressDialog.inputValue = ''
+    longPressDialog.show = true
+  }, 500)
+}
+
+function endLongPress() {
+  if (longPressTimer !== null) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+
+function handleBtnClick(article, operation, delta) {
+  if (longPressActive.value) {
+    longPressActive.value = false
+    return
+  }
+  if (operation === 'unit') adjustUnit(article.article_id, delta)
+  else adjustPkg(article.article_id, delta)
+}
+
+function confirmLongPress() {
+  const val = parseInt(longPressDialog.inputValue, 10)
+  if (!isNaN(val) && val > 0) {
+    const id = longPressDialog.article.article_id
+    if (longPressDialog.operation === 'unit') adjustUnit(id, longPressDialog.delta * val)
+    else adjustPkg(id, longPressDialog.delta * val)
+  }
+  longPressDialog.show = false
 }
 
 // --- Session management ---
