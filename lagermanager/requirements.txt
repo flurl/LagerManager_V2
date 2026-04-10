@@ -5,6 +5,8 @@ django-cors-headers==4.4.0
 psycopg2-binary==2.9.9
 dj-database-url==2.2.0
 pymssql==2.3.1
+pymysql>=1.1
+types-PyMySQL
 python-decouple==3.8
 django-constance
 django-stubs
