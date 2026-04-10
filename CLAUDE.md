@@ -119,7 +119,6 @@ German/Austria (`de-at`), timezone `Europe/Vienna`.
   ```bash
   docker compose exec backend python manage.py test --verbosity=2
   ```
-- Always run the full test suite before committing. Do not commit if any tests fail.
 
 ## Legacy Reference
 `lagerManager/` — Original PyQt4/Python 2 desktop app. Read-only reference for business logic. Do not modify.
