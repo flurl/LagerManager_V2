@@ -320,7 +320,7 @@ class Command(BaseCommand):
                 detail = StockMovementDetail.objects.create(
                     stock_movement=movement,
                     article=article,
-                    quantity=Decimal(str(drow['anzahl'])),
+                    quantity=abs(Decimal(str(drow['anzahl']))),
                     unit_price=Decimal(str(drow['einkaufspreis'])),
                     tax_rate_id=tax_rate_pk,
                 )
