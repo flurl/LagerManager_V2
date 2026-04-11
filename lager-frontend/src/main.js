@@ -30,7 +30,7 @@ const vuetify = createVuetify({
     },
   },
   defaults: {
-    VDataTable: { density: 'compact' },
+    VDataTable: { density: 'compact', itemsPerPage: 100 },
     VTextField: { density: 'compact', variant: 'outlined' },
     VSelect: { density: 'compact', variant: 'outlined' },
   },
