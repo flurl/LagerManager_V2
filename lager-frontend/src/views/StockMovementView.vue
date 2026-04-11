@@ -15,29 +15,25 @@
 
     <v-row dense class="mb-2">
       <v-col cols="3">
-        <v-autocomplete v-model="filterPartner" :items="partnerOptions" label="Partner" clearable
-          density="compact" hide-details />
+        <v-autocomplete v-model="filterPartner" :items="partnerOptions" label="Partner" clearable density="compact"
+          hide-details />
       </v-col>
       <v-col cols="5">
         <v-autocomplete v-model="filterArticles" :items="warehouseArticles" multiple chips closable-chips
-          item-title="article_name" item-value="article" label="Artikel" clearable
-          density="compact" hide-details />
+          item-title="article_name" item-value="article" label="Artikel" clearable density="compact" hide-details />
       </v-col>
       <v-col cols="4">
         <v-text-field v-model="filterComment" label="Kommentar" clearable density="compact" hide-details />
       </v-col>
     </v-row>
 
-    <v-data-table :headers="headers" :items="filteredMovements" :loading="loading" density="compact" :items-per-page="100" :sort-by="[{ key: 'date', order: 'desc' }]"
-      @click:row="(_, { item }) => openDetail(item)">
+    <v-data-table :headers="headers" :items="filteredMovements" :loading="loading" density="compact"
+      :items-per-page="100" :sort-by="[{ key: 'date', order: 'desc' }]" @click:row="(_, { item }) => openDetail(item)">
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
-          :style="hoveredRowId === item.id ? { backgroundColor: HIGHLIGHT_COLOR } : {}"
-          @click="openDetail(item)"
-          @mouseenter="onRowEnter(item, $event)"
-          @mouseleave="onRowLeave">
-          <td v-for="col in columns" :key="col.key"
-            :class="col.align ? `text-${col.align}` : ''"
+          :style="hoveredRowId === item.id ? { backgroundColor: HIGHLIGHT_COLOR } : {}" @click="openDetail(item)"
+          @mouseenter="onRowEnter(item, $event)" @mouseleave="onRowLeave">
+          <td v-for="col in columns" :key="col.key" :class="col.align ? `text-${col.align}` : ''"
             class="v-data-table__td">
             <template v-if="col.key === 'date'">{{ formatDate(item.date) }}</template>
             <template v-else-if="col.key === 'total_net'">{{ formatCurrency(item.total_net) }}</template>
@@ -53,23 +49,19 @@
     </v-data-table>
 
     <Teleport to="body">
-      <div v-if="detailOverlay && hoveredItem"
-        :style="overlayStyle">
-        <v-card min-width="400" max-width="600" :color="HIGHLIGHT_COLOR"
-          :style="{
-            pointerEvents: 'auto',
-            borderLeft: `2px solid ${HIGHLIGHT_COLOR}`,
-            borderRight: `2px solid ${HIGHLIGHT_COLOR}`,
-            borderTop: overlayAbove ? `2px solid ${HIGHLIGHT_COLOR}` : 'none',
-            borderBottom: overlayAbove ? 'none' : `2px solid ${HIGHLIGHT_COLOR}`,
-            borderTopLeftRadius: overlayAbove ? undefined : 0,
-            borderTopRightRadius: overlayAbove ? undefined : 0,
-            borderBottomLeftRadius: overlayAbove ? 0 : undefined,
-            borderBottomRightRadius: overlayAbove ? 0 : undefined,
-            boxShadow: 'none',
-          }"
-          @mouseenter="onOverlayEnter" @mouseleave="onOverlayLeave">
-          <v-card-title class="text-subtitle-2 pb-1">Positionen</v-card-title>
+      <div v-if="detailOverlay && hoveredItem" :style="overlayStyle">
+        <v-card min-width="400" max-width="600" :color="HIGHLIGHT_COLOR" :style="{
+          pointerEvents: 'auto',
+          borderLeft: `2px solid ${HIGHLIGHT_COLOR}`,
+          borderRight: `2px solid ${HIGHLIGHT_COLOR}`,
+          borderTop: overlayAbove ? `2px solid ${HIGHLIGHT_COLOR}` : 'none',
+          borderBottom: overlayAbove ? 'none' : `2px solid ${HIGHLIGHT_COLOR}`,
+          borderTopLeftRadius: overlayAbove ? undefined : 0,
+          borderTopRightRadius: overlayAbove ? undefined : 0,
+          borderBottomLeftRadius: overlayAbove ? 0 : undefined,
+          borderBottomRightRadius: overlayAbove ? 0 : undefined,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+        }" @mouseenter="onOverlayEnter" @mouseleave="onOverlayLeave">
           <v-card-text class="pa-0">
             <template v-if="detailsLoading[hoveredItem.id]">
               <div class="pa-4 text-center"><v-progress-circular indeterminate size="24" /></div>
@@ -78,11 +70,11 @@
               <v-table density="compact">
                 <thead>
                   <tr>
-                    <th>Artikel</th>
-                    <th class="text-end">Menge</th>
-                    <th class="text-end">EP</th>
-                    <th class="text-end">Netto</th>
-                    <th class="text-end">Brutto</th>
+                    <th class="text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Artikel</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Menge</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">EP</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Netto</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Brutto</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -131,7 +123,6 @@ const detailsLoading = ref({})
 const detailOverlay = ref(false)
 const hoveredItem = ref(null)
 const hoveredRowId = ref(null)
-let showTimer = null
 let hideTimer = null
 const HIGHLIGHT_COLOR = '#dbeafe'
 const rowBottom = ref(0)
@@ -207,17 +198,14 @@ function onRowEnter(item, event) {
   clearTimeout(hideTimer)
   hoveredRowId.value = item.id
   const rect = event.currentTarget.getBoundingClientRect()
-  showTimer = setTimeout(() => {
-    rowBottom.value = rect.bottom
-    rowTop.value = rect.top
-    hoveredItem.value = item
-    detailOverlay.value = true
-    loadDetails(item.id)
-  }, 1000)
+  rowBottom.value = rect.bottom
+  rowTop.value = rect.top
+  hoveredItem.value = item
+  detailOverlay.value = true
+  loadDetails(item.id)
 }
 
 function onRowLeave() {
-  clearTimeout(showTimer)
   hideTimer = setTimeout(() => {
     detailOverlay.value = false
     hoveredRowId.value = null
