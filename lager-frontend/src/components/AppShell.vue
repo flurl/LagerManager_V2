@@ -134,7 +134,7 @@ const allNavGroups = [
     icon: 'mdi-warehouse',
     items: [
       { to: '/stock-movements', icon: 'mdi-receipt-text', title: 'Lagerbewegungen', permission: 'deliveries.view_stockmovement' },
-      { to: '/period-start-stock', icon: 'mdi-format-list-numbered', title: 'Periode Start-Stand', permission: 'inventory.view_periodstartstocklevel' },
+      { to: '/period-start-stock', icon: 'mdi-format-list-numbered', title: 'Periode Anfangs-Stand', permission: 'inventory.view_periodstartstocklevel' },
       { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand', permission: 'inventory.view_initialinventory' },
       { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand', permission: 'inventory.view_physicalcount' },
       {
