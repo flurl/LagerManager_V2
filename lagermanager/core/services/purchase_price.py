@@ -85,6 +85,7 @@ def get_purchase_price(article_pk: int, period_id: int, max_date: date | None = 
                 WHERE ld.artikel_id = %s
                   AND l.datum BETWEEN %s AND %s
                   AND ld.anzahl > 0
+                  AND l.movement_type = 'delivery'
                   {date_filter}
                 """,
                 params,
