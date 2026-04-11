@@ -208,10 +208,8 @@ class ImportLegacyCommandTest(TestCase):
         self._call_command(conn)
 
         self.assertEqual(Partner.objects.count(), 2)
-        supplier = Partner.objects.get(name='Lieferant GmbH')
-        self.assertEqual(supplier.partner_type, Partner.Type.SUPPLIER)
-        consumer = Partner.objects.get(name='Bar Intern')
-        self.assertEqual(consumer.partner_type, Partner.Type.CONSUMER)
+        self.assertTrue(Partner.objects.filter(name='Lieferant GmbH').exists())
+        self.assertTrue(Partner.objects.filter(name='Bar Intern').exists())
 
     def test_imports_tax_rates(self) -> None:
         conn = _build_mock_conn(
@@ -267,7 +265,7 @@ class ImportLegacyCommandTest(TestCase):
 
     def test_deletes_existing_data_before_import(self) -> None:
         # Pre-create some data that should be wiped
-        partner = Partner.objects.create(name='Old Partner', partner_type=Partner.Type.SUPPLIER)
+        partner = Partner.objects.create(name='Old Partner')
         tax_rate = TaxRate.objects.create(name='Old Rate', percent=Decimal('5.00'))
         movement = StockMovement.objects.create(
             partner=partner,

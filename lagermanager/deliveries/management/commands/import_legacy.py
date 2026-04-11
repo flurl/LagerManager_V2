@@ -189,10 +189,7 @@ class Command(BaseCommand):
             rows = cast(list[dict[str, Any]], cur.fetchall())
 
         for row in rows:
-            partner_type = (
-                Partner.Type.CONSUMER if row['lft_ist_verbraucher'] else Partner.Type.SUPPLIER
-            )
-            partner = Partner.objects.create(name=row['lieferant_name'], partner_type=partner_type)
+            partner = Partner.objects.create(name=row['lieferant_name'])
             partner_map[row['lieferant_id']] = partner.pk
 
         self.stdout.write(f"  {len(partner_map)} partners imported.")

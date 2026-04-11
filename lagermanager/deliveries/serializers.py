@@ -25,7 +25,7 @@ class PartnerSerializer(serializers.ModelSerializer[Partner]):
 
     class Meta:
         model = Partner
-        fields = ['id', 'name', 'partner_type', 'ai_instructions']
+        fields = ['id', 'name', 'ai_instructions']
 
     def create(self, validated_data: dict[str, Any]) -> Partner:
         ai_instructions: list[dict[str, Any]] = validated_data.pop('ai_instructions', [])

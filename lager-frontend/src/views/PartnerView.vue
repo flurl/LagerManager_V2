@@ -8,9 +8,6 @@
     </v-row>
 
     <v-data-table :headers="headers" :items="items" :loading="loading" density="compact">
-      <template #item.partner_type="{ item }">
-        {{ partnerTypeLabel(item.partner_type) }}
-      </template>
       <template #item.actions="{ item }">
         <v-icon size="small" @click="openEdit(item)">mdi-pencil</v-icon>
         <v-icon size="small" class="ml-1" color="error" @click="deleteItem(item)">mdi-delete</v-icon>
@@ -22,13 +19,6 @@
         <v-card-title>{{ form.id ? 'Bearbeiten' : 'Neu' }}</v-card-title>
         <v-card-text>
           <v-text-field v-model="form.name" label="Name" />
-          <v-select
-            v-model="form.partner_type"
-            :items="partnerTypeOptions"
-            item-title="label"
-            item-value="value"
-            label="Typ"
-          />
           <div v-for="p in AI_PROVIDERS" :key="p.id">
             <v-textarea
               v-model="instructionFor(p.id).instructions"
@@ -61,22 +51,12 @@ import { AI_PROVIDERS } from '../ai/index.js'
 const items = ref([])
 const loading = ref(false)
 const dialog = ref(false)
-const form = ref({ name: '', partner_type: 'supplier' })
-
-const partnerTypeOptions = [
-  { value: 'supplier', label: 'Lieferant' },
-  { value: 'consumer', label: 'Verbraucher' },
-]
+const form = ref({ name: '' })
 
 const headers = [
   { title: 'Name', key: 'name' },
-  { title: 'Typ', key: 'partner_type' },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
-
-function partnerTypeLabel(type) {
-  return partnerTypeOptions.find((o) => o.value === type)?.label ?? type
-}
 
 async function fetchItems() {
   loading.value = true
@@ -97,7 +77,7 @@ function instructionFor(providerId) {
 }
 
 function openNew() {
-  form.value = { name: '', partner_type: 'supplier', ai_instructions: blankInstructions() }
+  form.value = { name: '', ai_instructions: blankInstructions() }
   dialog.value = true
 }
 

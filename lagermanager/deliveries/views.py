@@ -32,13 +32,6 @@ class PartnerViewSet(viewsets.ModelViewSet[Partner]):
     serializer_class = PartnerSerializer
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
-    def get_queryset(self) -> QuerySet[Partner]:
-        qs = Partner.objects.all()
-        partner_type = self.request.query_params.get('partner_type')
-        if partner_type:
-            qs = qs.filter(partner_type=partner_type)
-        return qs
-
 
 class TaxRateViewSet(viewsets.ModelViewSet[TaxRate]):
     queryset = TaxRate.objects.all()

@@ -10,16 +10,7 @@ from pos_import.models import Article
 class Partner(models.Model):
     """partner — suppliers and consumers."""
 
-    class Type(models.TextChoices):
-        SUPPLIER = 'supplier', 'Lieferant'
-        CONSUMER = 'consumer', 'Verbraucher'
-
     name = models.CharField(max_length=255, db_column='lieferant_name')
-    partner_type = models.CharField(
-        max_length=20,
-        choices=Type.choices,
-        default=Type.SUPPLIER,
-    )
 
     class Meta:
         db_table = 'partner'

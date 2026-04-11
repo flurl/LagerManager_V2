@@ -19,7 +19,7 @@ class DeliveriesModelTests(TestCase):
             start=timezone.now() - timedelta(days=10),
             end=timezone.now() + timedelta(days=10)
         )
-        self.partner = Partner.objects.create(name="Supplier A", partner_type=Partner.Type.SUPPLIER)
+        self.partner = Partner.objects.create(name="Supplier A")
         self.tax_rate = TaxRate.objects.create(name="Standard", percent=Decimal("20.00"))
         self.article_group = ArticleGroup.objects.create(
             source_id=1, name="Drinks", is_revenue=True,

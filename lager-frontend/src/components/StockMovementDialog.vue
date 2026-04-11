@@ -210,7 +210,6 @@ const typeConfig = computed(() => {
       icon: 'mdi-package-down',
       color: 'deep-orange',
       bgClass: 'bg-deep-orange-lighten-5',
-      partnerType: 'consumer',
     }
   }
   return {
@@ -218,7 +217,6 @@ const typeConfig = computed(() => {
     icon: 'mdi-truck-delivery',
     color: 'blue',
     bgClass: 'bg-blue-lighten-5',
-    partnerType: 'supplier',
   }
 })
 
@@ -251,7 +249,7 @@ async function initForm() {
 }
 
 async function loadPartners() {
-  const res = await api.get('/partners/', { params: { partner_type: typeConfig.value.partnerType } })
+  const res = await api.get('/partners/')
   partners.value = res.data.results || res.data
 }
 
