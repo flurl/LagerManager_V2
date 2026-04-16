@@ -13,6 +13,9 @@
         <v-col cols="12" sm="auto">
           <v-checkbox v-model="includeLmData" label="LM Daten einbeziehen" density="compact" hide-details />
         </v-col>
+        <v-col cols="12" sm="auto">
+          <v-checkbox v-model="showTableCode" label="Tischcode anzeigen" density="compact" hide-details />
+        </v-col>
       </v-row>
     </template>
     <template #item.total="{ item }">{{ item.total.toFixed(3) }}</template>
@@ -23,7 +26,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePeriodStore } from '../../stores/period'
 import api from '../../api'
 import ReportTable from '../../components/ReportTable.vue'
@@ -33,8 +36,9 @@ const items = ref([])
 const loading = ref(false)
 const revenueFilter = ref('all')
 const includeLmData = ref(true)
+const showTableCode = ref(false)
 
-const headers = [
+const baseHeaders = [
   { title: 'Artikel', key: 'article' },
   { title: 'Gesamtmenge', key: 'total', align: 'end' },
   { title: 'EK-Preis', key: 'purchase_price', align: 'end' },
@@ -42,6 +46,14 @@ const headers = [
   { title: 'Einheit', key: 'warehouse_unit' },
   { title: 'Multiplikator', key: 'warehouse_unit_multiplier', align: 'end' },
 ]
+
+const tableCodeHeader = { title: 'Tisch', key: 'table_code' }
+
+const headers = computed(() =>
+  showTableCode.value
+    ? [baseHeaders[0], tableCodeHeader, ...baseHeaders.slice(1)]
+    : baseHeaders
+)
 
 async function fetchData() {
   if (!periodStore.currentPeriodId) return
@@ -52,6 +64,7 @@ async function fetchData() {
         period_id: periodStore.currentPeriodId,
         revenue_filter: revenueFilter.value,
         include_lm_data: includeLmData.value ? '1' : '0',
+        show_table_code: showTableCode.value ? '1' : '0',
       },
     })
     items.value = res.data
@@ -61,6 +74,6 @@ async function fetchData() {
 }
 
 watch(() => periodStore.currentPeriodId, fetchData)
-watch([revenueFilter, includeLmData], fetchData)
+watch([revenueFilter, includeLmData, showTableCode], fetchData)
 onMounted(fetchData)
 </script>

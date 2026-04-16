@@ -1,5 +1,6 @@
 """
-Tests for get_consumption_totals() with revenue_filter and include_lm_data parameters.
+Tests for get_consumption_totals() with revenue_filter, include_lm_data, and
+show_table_code parameters.
 
 The POS SQL query is mocked (too complex to set up the full POS import schema in tests).
 Manual StockMovement consumption is tested via real Django ORM objects.
@@ -65,7 +66,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_default_params_includes_pos_and_lm(self, mock_conn: MagicMock) -> None:
         """Default call (revenue_filter='all', include_lm_data=True) sums both sources."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = [('Beer', 5.0)]
 
@@ -80,7 +81,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_include_lm_data_false_excludes_manual_movements(self, mock_conn: MagicMock) -> None:
         """include_lm_data=False omits manual StockMovement consumption."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = [('Beer', 5.0)]
 
@@ -95,7 +96,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_include_lm_data_true_includes_manual_movements(self, mock_conn: MagicMock) -> None:
         """include_lm_data=True (default) adds StockMovement consumption to POS total."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = []
 
@@ -110,7 +111,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_revenue_filter_umsatz_adds_filter_clause(self, mock_conn: MagicMock) -> None:
         """revenue_filter='umsatz' passes the ist_umsatz=TRUE filter in the SQL."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = [('Beer', 2.0)]
 
@@ -126,7 +127,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_revenue_filter_aufwand_adds_filter_clause(self, mock_conn: MagicMock) -> None:
         """revenue_filter='aufwand' passes the ist_umsatz=FALSE filter in the SQL."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = [('Wine', 1.5)]
 
@@ -141,7 +142,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_revenue_filter_all_has_no_umsatz_clause(self, mock_conn: MagicMock) -> None:
         """revenue_filter='all' does not add an istUmsatz filter to the SQL."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = []
 
@@ -154,7 +155,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_no_lm_data_no_pos_returns_empty(self, mock_conn: MagicMock) -> None:
         """No POS data and no LM data returns an empty list."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = []
 
@@ -166,7 +167,7 @@ class ConsumptionTotalsFilterTests(TestCase):
     def test_multiple_lm_movements_same_article_summed(self, mock_conn: MagicMock) -> None:
         """Multiple manual consumption movements for same article are summed."""
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchall.return_value = []
 
@@ -177,3 +178,74 @@ class ConsumptionTotalsFilterTests(TestCase):
 
         totals = {r['article']: r['total'] for r in result}
         self.assertAlmostEqual(totals['Beer'], 5.5)
+
+    @patch('reports.services.consumption_report.connection')
+    def test_show_table_code_adds_join_and_group_to_sql(self, mock_conn: MagicMock) -> None:
+        """show_table_code=True includes tische_bereiche JOIN and GROUP BY in SQL."""
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = []
+
+        get_consumption_totals(self.period.pk, show_table_code=True, include_lm_data=False)
+
+        executed_sql: str = mock_cursor.execute.call_args[0][0]
+        self.assertIn('tische_bereiche', executed_sql)
+        self.assertIn('tischbereich_kurzName', executed_sql)
+        self.assertIn('tisch_pri_nummer', executed_sql)
+
+    @patch('reports.services.consumption_report.connection')
+    def test_show_table_code_false_no_join_in_sql(self, mock_conn: MagicMock) -> None:
+        """show_table_code=False (default) does not include tische_bereiche JOIN."""
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = []
+
+        get_consumption_totals(self.period.pk, show_table_code=False, include_lm_data=False)
+
+        executed_sql: str = mock_cursor.execute.call_args[0][0]
+        self.assertNotIn('tische_bereiche', executed_sql)
+
+    @patch('reports.services.consumption_report.connection')
+    def test_show_table_code_returns_table_code_field(self, mock_conn: MagicMock) -> None:
+        """show_table_code=True returns rows with a 'table_code' field."""
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = [('Beer', 'BAR-1', 3.0), ('Beer', 'DINING-5', 2.0)]
+
+        result = get_consumption_totals(self.period.pk, show_table_code=True, include_lm_data=False)
+
+        self.assertEqual(len(result), 2)
+        self.assertIn('table_code', result[0])
+        table_codes = {r['table_code'] for r in result}
+        self.assertEqual(table_codes, {'BAR-1', 'DINING-5'})
+
+    @patch('reports.services.consumption_report.connection')
+    def test_show_table_code_false_no_table_code_field(self, mock_conn: MagicMock) -> None:
+        """show_table_code=False (default) returns rows without a 'table_code' field."""
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = [('Beer', 5.0)]
+
+        result = get_consumption_totals(self.period.pk, show_table_code=False, include_lm_data=False)
+
+        self.assertNotIn('table_code', result[0])
+
+    @patch('reports.services.consumption_report.connection')
+    def test_show_table_code_lm_data_labelled_lm(self, mock_conn: MagicMock) -> None:
+        """With show_table_code=True, manual LM movements get table_code='LM'."""
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda _: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = []
+
+        self._make_consumption_movement(Decimal('4.000'))
+
+        result = get_consumption_totals(self.period.pk, show_table_code=True, include_lm_data=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['table_code'], 'LM')
+        self.assertAlmostEqual(result[0]['total'], 4.0)

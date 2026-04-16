@@ -80,10 +80,12 @@ class ConsumptionTotalsReportView(APIView):
             return Response({'error': 'invalid revenue_filter'}, status=status.HTTP_400_BAD_REQUEST)
         revenue_filter = cast(RevenueFilter, raw_revenue_filter)
         include_lm_data = request.query_params.get('include_lm_data', '1') != '0'
+        show_table_code = request.query_params.get('show_table_code') == '1'
         data = get_consumption_totals(
             int(period_id),
             revenue_filter=revenue_filter,
             include_lm_data=include_lm_data,
+            show_table_code=show_table_code,
         )
         return Response(data)
 
