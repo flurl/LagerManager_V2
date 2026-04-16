@@ -116,6 +116,48 @@ def get_daily_movements(
     return result
 
 
+def get_daily_stock_delta(
+    period_id: int,
+    movement_types: Sequence[str] = (),
+) -> dict[datetime.date, dict[str, float]]:
+    """
+    Returns {date: {article_name: stock_delta}} where positive means stock increases
+    (delivery) and negative means stock decreases (consumption).
+
+    POS/Wiffzack consumption is always included as a negative base.
+    DELIVERY movements add to the delta; CONSUMPTION movements subtract.
+
+    Pass movement_types=() for POS consumption only.
+    """
+    from deliveries.models import StockMovement
+
+    _SIGNS: dict[str, float] = {
+        StockMovement.Type.CONSUMPTION: -1.0,
+        StockMovement.Type.DELIVERY: 1.0,
+    }
+    for mt in movement_types:
+        if mt not in _SIGNS:
+            raise ValueError(
+                f"Unsupported movement_type {mt!r} for get_daily_stock_delta. "
+                f"Allowed: {list(_SIGNS)}"
+            )
+
+    pos = get_daily_pos_consumption(period_id)
+    result: dict[datetime.date, dict[str, float]] = {
+        day: {article: -amount for article, amount in articles.items()}
+        for day, articles in pos.items()
+    }
+
+    for movement_type in movement_types:
+        sign = _SIGNS[movement_type]
+        for day, articles in get_daily_movements(period_id, (movement_type,)).items():
+            day_data = result.setdefault(day, {})
+            for article, amount in articles.items():
+                day_data[article] = day_data.get(article, 0.0) + sign * amount
+
+    return result
+
+
 def compute_running_stock(period_id: int) -> list[dict[str, object]]:
     """
     Compute day-by-day running stock for all articles in the period.
@@ -134,14 +176,8 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
     for sl in PeriodStartStockLevel.objects.filter(period=period).select_related('article'):
         initial[sl.article.name] = float(sl.quantity)
 
-    daily_deliveries: dict[datetime.date, dict[str, float]] = get_daily_movements(
-        period_id, (StockMovement.Type.DELIVERY,)
-    )
-    daily_manual_consumption: dict[datetime.date, dict[str, float]] = get_daily_movements(
-        period_id, (StockMovement.Type.CONSUMPTION,)
-    )
-    daily_pos_consumption: dict[datetime.date, dict[str, float]] = get_daily_pos_consumption(
-        period_id
+    daily_delta: dict[datetime.date, dict[str, float]] = get_daily_stock_delta(
+        period_id, (StockMovement.Type.CONSUMPTION, StockMovement.Type.DELIVERY)
     )
 
     # Physical counts keyed by (date, article_name)
@@ -150,12 +186,8 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
         counts[(pc.date.date(), pc.article.name)] = float(pc.quantity)
 
     # Build set of all articles
-    all_articles = set(initial.keys())
-    for day_data in daily_deliveries.values():
-        all_articles.update(day_data.keys())
-    for day_data in daily_manual_consumption.values():
-        all_articles.update(day_data.keys())
-    for day_data in daily_pos_consumption.values():
+    all_articles: set[str] = set(initial.keys())
+    for day_data in daily_delta.values():
         all_articles.update(day_data.keys())
 
     # Iterate day by day
@@ -166,12 +198,7 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
 
     while current_date <= end_date:
         for article in all_articles:
-            running[article] = (
-                running[article]
-                + daily_deliveries.get(current_date, {}).get(article, 0.0)
-                - daily_manual_consumption.get(current_date, {}).get(article, 0.0)
-                - daily_pos_consumption.get(current_date, {}).get(article, 0.0)
-            )
+            running[article] += daily_delta.get(current_date, {}).get(article, 0.0)
             counted = counts.get((current_date, article))
             result.append({
                 'date': current_date.isoformat(),

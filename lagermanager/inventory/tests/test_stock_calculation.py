@@ -9,7 +9,11 @@ from django.utils import timezone
 from core.models import Period
 from deliveries.models import Partner, StockMovement, StockMovementDetail, TaxRate
 from inventory.models import PeriodStartStockLevel, PhysicalCount
-from inventory.services.stock_calculation import compute_running_stock, get_daily_movements
+from inventory.services.stock_calculation import (
+    compute_running_stock,
+    get_daily_movements,
+    get_daily_stock_delta,
+)
 from pos_import.models import Article, ArticleGroup
 
 
@@ -277,3 +281,97 @@ class ComputeRunningStockExtendedTests(TestCase):
         self.assertEqual(beer[0]['stock'], 10.0)   # day 0
         self.assertEqual(beer[1]['stock'], 7.0)    # day 1: 10 - 3 POS
         self.assertEqual(beer[2]['stock'], 7.0)    # day 2: no more POS
+
+
+class GetDailyStockDeltaTests(TestCase):
+    """Unit tests for get_daily_stock_delta()."""
+
+    period: Period
+    partner: Partner
+    tax_rate: TaxRate
+    article_group: ArticleGroup
+    article: Article
+
+    def setUp(self) -> None:
+        self.start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        self.end = self.start + timedelta(days=3)
+        self.period = Period.objects.create(
+            name="Delta Test Period",
+            start=self.start,
+            end=self.end,
+        )
+        self.partner = Partner.objects.create(name="Supplier Z")
+        self.tax_rate = TaxRate.objects.create(name="Standard", percent=Decimal("20.00"))
+        self.article_group = ArticleGroup.objects.create(
+            source_id=1, name="Drinks", is_revenue=True,
+            show_on_receipt=True, print_recipe=False,
+            no_cancellation=False, period=self.period,
+            standard_course=1,
+        )
+        self.article = Article.objects.create(
+            source_id=101, name="Beer", group=self.article_group, period=self.period,
+            price_popup=False, ep_price_popup=False, rksv=False, external_receipt=False,
+        )
+        self.day1 = self.start.date() + timedelta(days=1)
+
+    def _make_movement(self, movement_type: str, quantity: Decimal, day_offset: int = 1) -> None:
+        m = StockMovement.objects.create(
+            partner=self.partner,
+            date=self.start.date() + timedelta(days=day_offset),
+            movement_type=movement_type,
+            period=self.period,
+        )
+        StockMovementDetail.objects.create(
+            stock_movement=m, article=self.article,
+            quantity=quantity, unit_price=Decimal("1.0000"), tax_rate=self.tax_rate,
+        )
+
+    @patch('inventory.services.stock_calculation.get_daily_pos_consumption')
+    def test_empty_movement_types_returns_pos_only(self, mock_pos: MagicMock) -> None:
+        """movement_types=() returns negated POS consumption (stock decreases)."""
+        mock_pos.return_value = {self.day1: {"Beer": 5.0}}
+        result = get_daily_stock_delta(self.period.pk, ())
+        self.assertAlmostEqual(result[self.day1]["Beer"], -5.0)
+
+    @patch('inventory.services.stock_calculation.get_daily_pos_consumption')
+    def test_consumption_subtracts_from_pos(self, mock_pos: MagicMock) -> None:
+        """CONSUMPTION movements add to the negative POS base."""
+        mock_pos.return_value = {self.day1: {"Beer": 5.0}}
+        self._make_movement(StockMovement.Type.CONSUMPTION, Decimal("3.0"))
+        result = get_daily_stock_delta(self.period.pk, (StockMovement.Type.CONSUMPTION,))
+        # -5 (POS) - 3 (manual) = -8
+        self.assertAlmostEqual(result[self.day1]["Beer"], -8.0)
+
+    @patch('inventory.services.stock_calculation.get_daily_pos_consumption')
+    def test_delivery_adds_to_pos(self, mock_pos: MagicMock) -> None:
+        """DELIVERY movements add positively, partially offsetting POS consumption."""
+        mock_pos.return_value = {self.day1: {"Beer": 5.0}}
+        self._make_movement(StockMovement.Type.DELIVERY, Decimal("2.0"))
+        result = get_daily_stock_delta(self.period.pk, (StockMovement.Type.DELIVERY,))
+        # -5 (POS) + 2 (delivery) = -3
+        self.assertAlmostEqual(result[self.day1]["Beer"], -3.0)
+
+    @patch('inventory.services.stock_calculation.get_daily_pos_consumption')
+    def test_consumption_and_delivery_net_delta(self, mock_pos: MagicMock) -> None:
+        """With both types: delta = delivery - POS - consumption."""
+        mock_pos.return_value = {self.day1: {"Beer": 5.0}}
+        self._make_movement(StockMovement.Type.CONSUMPTION, Decimal("4.0"))
+        self._make_movement(StockMovement.Type.DELIVERY, Decimal("6.0"))
+        result = get_daily_stock_delta(
+            self.period.pk, (StockMovement.Type.CONSUMPTION, StockMovement.Type.DELIVERY)
+        )
+        # -5 (POS) - 4 (consumption) + 6 (delivery) = -3
+        self.assertAlmostEqual(result[self.day1]["Beer"], -3.0)
+
+    @patch('inventory.services.stock_calculation.get_daily_pos_consumption')
+    def test_delivery_only_on_day_with_no_pos(self, mock_pos: MagicMock) -> None:
+        """Delivery on a day with no POS consumption yields a positive delta."""
+        mock_pos.return_value = {}
+        self._make_movement(StockMovement.Type.DELIVERY, Decimal("10.0"))
+        result = get_daily_stock_delta(self.period.pk, (StockMovement.Type.DELIVERY,))
+        self.assertAlmostEqual(result[self.day1]["Beer"], 10.0)
+
+    def test_invalid_movement_type_raises(self) -> None:
+        """Unsupported movement type raises ValueError immediately."""
+        with self.assertRaises(ValueError):
+            get_daily_stock_delta(self.period.pk, ("INVALID_TYPE",))

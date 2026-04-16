@@ -1,16 +1,25 @@
+from typing import cast
+
 from core.permissions import require_perm
 from core.services.purchase_price import get_purchase_price
+from deliveries.models import StockMovement
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .services.consumption_report import get_consumption_chart_data, get_consumption_totals
+from .services.consumption_report import (
+    RevenueFilter,
+    get_consumption_chart_data,
+    get_consumption_totals,
+)
 from .services.inventory_report import get_inventory_report
-from .services.stock_level_report import get_current_stock_levels, get_stock_level_chart_data
+from .services.stock_level_report import (
+    get_current_stock_levels,
+    get_stock_level_chart_data,
+)
 from .services.total_movements_report import DateGrouping, get_total_movements_report
-from deliveries.models import StockMovement
 
 _view_reports = require_perm('core.view_reports')
 
@@ -66,7 +75,16 @@ class ConsumptionTotalsReportView(APIView):
         period_id = request.query_params.get('period_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        data = get_consumption_totals(int(period_id))
+        raw_revenue_filter = request.query_params.get('revenue_filter', 'all')
+        if raw_revenue_filter not in ('all', 'umsatz', 'aufwand'):
+            return Response({'error': 'invalid revenue_filter'}, status=status.HTTP_400_BAD_REQUEST)
+        revenue_filter = cast(RevenueFilter, raw_revenue_filter)
+        include_lm_data = request.query_params.get('include_lm_data', '1') != '0'
+        data = get_consumption_totals(
+            int(period_id),
+            revenue_filter=revenue_filter,
+            include_lm_data=include_lm_data,
+        )
         return Response(data)
 
 
