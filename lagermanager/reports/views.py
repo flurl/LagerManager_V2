@@ -1,8 +1,9 @@
-from typing import cast
+from typing import Any, cast
 
 from core.permissions import require_perm
 from core.services.purchase_price import get_purchase_price
 from deliveries.models import StockMovement
+from pos_import.models import Article, ArticleMeta
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -113,6 +114,26 @@ class TotalMovementsReportView(APIView):
             date_grouping=date_grouping,
             group_by_partner=group_by_partner,
         )
+        return Response(data)
+
+
+class ArticleHiddenStatusView(APIView):
+    """Returns [{name, is_hidden}] for all articles in a period."""
+    permission_classes = [IsAuthenticated, _view_reports]
+
+    def get(self, request: Request) -> Response:
+        period_id = request.query_params.get('period_id')
+        if not period_id:
+            return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        articles = Article.objects.filter(period_id=int(period_id)).only('source_id', 'name')
+        metas: dict[int, bool] = {
+            m.source_id: m.is_hidden
+            for m in ArticleMeta.objects.filter(period_id=int(period_id)).only('source_id', 'is_hidden')
+        }
+        data: list[dict[str, Any]] = [
+            {'name': a.name, 'is_hidden': metas.get(a.source_id, False)}
+            for a in articles
+        ]
         return Response(data)
 
 

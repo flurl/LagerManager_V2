@@ -10,6 +10,17 @@
       </v-col>
     </v-row>
 
+    <v-row v-if="hasHiddenArticles" class="mb-2" align="center">
+      <v-col cols="auto">
+        <v-chip color="warning" size="small" prepend-icon="mdi-eye-off">
+          {{ hiddenCount }} Artikel ausgeblendet
+        </v-chip>
+      </v-col>
+      <v-col cols="auto">
+        <v-checkbox v-model="showHidden" label="Ausgeblendete anzeigen" density="compact" hide-details />
+      </v-col>
+    </v-row>
+
     <v-row class="mb-2">
       <v-col>
         <v-autocomplete v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips clearable
@@ -44,6 +55,7 @@ import {
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { usePeriodStore } from '../../stores/period'
+import { useHiddenArticles } from '../../composables/useHiddenArticles'
 import api from '../../api'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, zoomPlugin)
@@ -54,6 +66,8 @@ const loading = ref(false)
 const rawData = ref(null)
 const activeArticles = ref([])
 
+const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenArticles()
+
 const COLORS = [
   '#1565C0', '#E53935', '#43A047', '#FB8C00', '#8E24AA',
   '#00ACC1', '#6D4C41', '#F06292', '#546E7A', '#26A69A',
@@ -62,6 +76,7 @@ const COLORS = [
 const allArticles = computed(() =>
   (rawData.value?.datasets || [])
     .map((d) => d.label)
+    .filter((label) => shouldInclude(label))
 )
 
 // Stable color map keyed by article name so colors don't shift when filtering
@@ -79,7 +94,7 @@ const chartData = computed(() => {
   if (!rawData.value) return null
 
   const stockDatasets = rawData.value.datasets
-    .filter((d) => activeArticles.value.includes(d.label))
+    .filter((d) => shouldInclude(d.label) && activeArticles.value.includes(d.label))
     .map((d) => ({
       label: d.label,
       data: d.data,
@@ -90,7 +105,10 @@ const chartData = computed(() => {
     }))
 
   const countedDatasets = (rawData.value.counted_datasets || [])
-    .filter((d) => activeArticles.value.includes(d.label.replace('-gezaehlt', '')))
+    .filter((d) => {
+      const articleName = d.label.replace('-gezaehlt', '')
+      return shouldInclude(articleName) && activeArticles.value.includes(articleName)
+    })
     .map((d) => {
       const articleName = d.label.replace('-gezaehlt', '')
       return {

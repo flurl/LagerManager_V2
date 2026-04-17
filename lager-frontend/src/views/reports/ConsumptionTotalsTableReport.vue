@@ -1,5 +1,5 @@
 <template>
-  <ReportTable :headers="headers" :items="items" :loading="loading" title="Gesamtverbrauch"
+  <ReportTable :headers="headers" :items="filteredItems" :loading="loading" title="Gesamtverbrauch"
     csv-filename="gesamtverbrauch.csv">
     <template #controls>
       <v-row class="mb-2" align="center">
@@ -16,6 +16,16 @@
         <v-col cols="12" sm="auto">
           <v-checkbox v-model="showTableCode" label="Tischcode anzeigen" density="compact" hide-details />
         </v-col>
+        <template v-if="hasHiddenArticles">
+          <v-col cols="12" sm="auto">
+            <v-chip color="warning" size="small" prepend-icon="mdi-eye-off">
+              {{ hiddenCount }} Artikel ausgeblendet
+            </v-chip>
+          </v-col>
+          <v-col cols="12" sm="auto">
+            <v-checkbox v-model="showHidden" label="Ausgeblendete anzeigen" density="compact" hide-details />
+          </v-col>
+        </template>
       </v-row>
     </template>
     <template #item.total="{ item }">{{ item.total.toFixed(3) }}</template>
@@ -28,6 +38,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { usePeriodStore } from '../../stores/period'
+import { useHiddenArticles } from '../../composables/useHiddenArticles'
 import api from '../../api'
 import ReportTable from '../../components/ReportTable.vue'
 
@@ -37,6 +48,10 @@ const loading = ref(false)
 const revenueFilter = ref('all')
 const includeLmData = ref(true)
 const showTableCode = ref(false)
+
+const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenArticles()
+
+const filteredItems = computed(() => items.value.filter((item) => shouldInclude(item.article)))
 
 const baseHeaders = [
   { title: 'Artikel', key: 'article' },

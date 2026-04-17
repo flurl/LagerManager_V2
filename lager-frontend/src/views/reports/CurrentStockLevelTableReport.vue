@@ -1,6 +1,18 @@
 <template>
-  <ReportTable :headers="headers" :items="items" :loading="loading" title="Aktueller Lagerstand"
+  <ReportTable :headers="headers" :items="filteredItems" :loading="loading" title="Aktueller Lagerstand"
     csv-filename="aktueller-lagerstand.csv">
+    <template v-if="hasHiddenArticles" #controls>
+      <v-row class="mb-2" align="center">
+        <v-col cols="auto">
+          <v-chip color="warning" size="small" prepend-icon="mdi-eye-off">
+            {{ hiddenCount }} Artikel ausgeblendet
+          </v-chip>
+        </v-col>
+        <v-col cols="auto">
+          <v-checkbox v-model="showHidden" label="Ausgeblendete anzeigen" density="compact" hide-details />
+        </v-col>
+      </v-row>
+    </template>
     <template #item.stock="{ item }">{{ item.stock.toFixed(3) }}</template>
     <template #item.purchase_price="{ item }">{{ item.purchase_price?.toFixed(4) ?? '—' }}</template>
     <template #item.total_value="{ item }">{{ item.total_value?.toFixed(2) ?? '—' }}</template>
@@ -9,14 +21,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePeriodStore } from '../../stores/period'
+import { useHiddenArticles } from '../../composables/useHiddenArticles'
 import api from '../../api'
 import ReportTable from '../../components/ReportTable.vue'
 
 const periodStore = usePeriodStore()
 const items = ref([])
 const loading = ref(false)
+
+const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenArticles()
+
+const filteredItems = computed(() => items.value.filter((item) => shouldInclude(item.article)))
 
 const headers = [
   { title: 'Artikel', key: 'article' },

@@ -10,6 +10,17 @@
       </v-col>
     </v-row>
 
+    <v-row v-if="hasHiddenArticles" class="mb-2" align="center">
+      <v-col cols="auto">
+        <v-chip color="warning" size="small" prepend-icon="mdi-eye-off">
+          {{ hiddenCount }} Artikel ausgeblendet
+        </v-chip>
+      </v-col>
+      <v-col cols="auto">
+        <v-checkbox v-model="showHidden" label="Ausgeblendete anzeigen" density="compact" hide-details />
+      </v-col>
+    </v-row>
+
     <v-row class="mb-2">
       <v-col>
         <v-autocomplete v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips clearable
@@ -44,6 +55,7 @@ import {
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { usePeriodStore } from '../../stores/period'
+import { useHiddenArticles } from '../../composables/useHiddenArticles'
 import api from '../../api'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, zoomPlugin)
@@ -54,7 +66,13 @@ const loading = ref(false)
 const rawData = ref(null)
 const activeArticles = ref([])
 
-const allArticles = computed(() => (rawData.value?.datasets || []).map((d) => d.label))
+const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenArticles()
+
+const allArticles = computed(() =>
+  (rawData.value?.datasets || [])
+    .map((d) => d.label)
+    .filter((label) => shouldInclude(label))
+)
 
 function toggleAll() {
   activeArticles.value = activeArticles.value.length === allArticles.value.length ? [] : [...allArticles.value]
@@ -68,7 +86,7 @@ const COLORS = [
 const chartData = computed(() => {
   if (!rawData.value) return null
   const datasets = rawData.value.datasets
-    .filter((d) => activeArticles.value.includes(d.label))
+    .filter((d) => shouldInclude(d.label) && activeArticles.value.includes(d.label))
     .map((d, i) => ({
       label: d.label,
       data: d.data,
