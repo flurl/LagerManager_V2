@@ -89,6 +89,11 @@ const routes = [
     meta: { title: 'Standorte', permission: 'core.view_location' },
   },
   {
+    path: '/departments',
+    component: () => import('./views/DepartmentView.vue'),
+    meta: { title: 'Abteilungen', permission: 'core.view_department' },
+  },
+  {
     path: '/settings',
     component: () => import('./views/SystemSettingsView.vue'),
     meta: { title: 'Einstellungen', permission: 'constance.change_config' },

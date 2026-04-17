@@ -46,6 +46,18 @@ class GlobalPermission(models.Model):
         ]
 
 
+class Department(models.Model):
+    """Abteilung / Kostenstelle"""
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'departments'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Location(models.Model):
     """Standort / Arbeitsplatz / Bar / Lager / Abteilung"""
     name = models.CharField(

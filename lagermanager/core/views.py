@@ -12,9 +12,9 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
-from .models import Location, Period, UserPreferences
+from .models import Department, Location, Period, UserPreferences
 from .permissions import DjangoModelPermissionsWithView
-from .serializers import LocationSerializer, PeriodSerializer, UserPreferencesSerializer
+from .serializers import DepartmentSerializer, LocationSerializer, PeriodSerializer, UserPreferencesSerializer
 
 
 class PeriodViewSet(viewsets.ModelViewSet[Period]):
@@ -37,6 +37,12 @@ class PeriodViewSet(viewsets.ModelViewSet[Period]):
                 )
                 for m in metas
             ])
+
+
+class DepartmentViewSet(viewsets.ModelViewSet[Department]):
+    queryset: QuerySet[Department, Department] = Department.objects.all()
+    serializer_class = DepartmentSerializer
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
 
 class LocationViewSet(viewsets.ModelViewSet[Location]):
