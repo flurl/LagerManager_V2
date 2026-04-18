@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <template v-if="auth.isAuthenticated">
+    <template v-if="auth.isAuthenticated || route.meta.public">
       <template v-if="route.meta.fullscreen">
         <v-main>
           <router-view />

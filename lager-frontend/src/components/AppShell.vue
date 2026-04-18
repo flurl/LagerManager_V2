@@ -145,7 +145,8 @@ const allNavGroups = [
         items: [
           { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung', permission: 'stock_count.view_stockcountentry' },
           { to: '/stock-count-entries', icon: 'mdi-table-edit', title: 'Zählergebnisse', permission: 'stock_count.view_stockcountentry' },]
-      }
+      },
+      { to: '/staff-consumption', icon: 'mdi-glass-mug-variant', title: 'Personalverbrauch' },
     ],
   },
   {

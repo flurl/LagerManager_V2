@@ -99,6 +99,11 @@ const routes = [
     meta: { title: 'Einstellungen', permission: 'constance.change_config' },
   },
   {
+    path: '/staff-consumption',
+    component: () => import('./views/StaffConsumptionView.vue'),
+    meta: { title: 'Personalverbrauch', fullscreen: true, public: true },
+  },
+  {
     path: '/forbidden',
     component: () => import('./views/ForbiddenView.vue'),
     meta: { title: 'Kein Zugriff', public: true },
