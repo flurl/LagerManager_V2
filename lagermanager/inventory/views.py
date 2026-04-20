@@ -1,7 +1,11 @@
 import csv
+import re
+from pathlib import Path
 
+from core.models import Location
 from core.permissions import DjangoModelPermissionsWithView
 from core.services.period import get_period_for_datetime
+from django.conf import settings
 from django.db.models import QuerySet
 from django.http import HttpResponse
 from rest_framework import status, viewsets
@@ -88,6 +92,45 @@ class InitialInventoryViewSet(viewsets.ModelViewSet[InitialInventory]):
             writer.writerow(
                 [obj.article.name, obj.location.name, obj.quantity, obj.period.name])
         return response
+
+    @action(detail=False, methods=['post'])
+    def wz_export(self, request: Request) -> Response:
+        period_id = request.data.get('period_id')
+        location_id = request.data.get('location_id')
+        if not period_id or not location_id:
+            return Response(
+                {'error': 'period_id and location_id required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            location = Location.objects.get(pk=int(location_id))
+        except Location.DoesNotExist:
+            return Response({'error': 'Location not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        qs: QuerySet[InitialInventory] = (
+            InitialInventory.objects
+            .select_related('article')
+            .filter(period_id=int(period_id), location_id=int(location_id))
+            .order_by('article__name')
+        )
+
+        location_slug = re.sub(r'\s+', '_', location.name.lower())
+        location_slug = re.sub(r'[^\w]', '', location_slug)
+        export_dir: Path = settings.BASE_DIR / 'exports' / 'wz'
+        export_dir.mkdir(parents=True, exist_ok=True)
+        file_path = export_dir / f'{location_slug}.csv'
+
+        with file_path.open('w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f, delimiter=';', quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
+            writer.writerow(['article_id', 'amount', 'name'])
+            for obj in qs:
+                qty: int | float = (
+                    int(obj.quantity) if obj.quantity % 1 == 0 else float(obj.quantity)
+                )
+                writer.writerow([obj.article.source_id, qty, obj.article.name])
+
+        return Response({'file': str(file_path), 'count': qs.count()})
 
 
 class PhysicalCountViewSet(viewsets.ModelViewSet[PhysicalCount]):

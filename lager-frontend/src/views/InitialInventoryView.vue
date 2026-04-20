@@ -14,6 +14,8 @@
         <v-btn class="ml-2" color="secondary" :loading="initLoading" :disabled="!locationId || busy"
           @click="initPeriod">Periode init.</v-btn>
         <v-btn class="ml-2" prepend-icon="mdi-download" :disabled="busy" @click="exportCsvAction">CSV</v-btn>
+        <v-btn class="ml-2" prepend-icon="mdi-export" :loading="wzExportLoading" :disabled="!locationId || busy"
+          @click="wzExportAction">WZ Export</v-btn>
       </v-col>
     </v-row>
 
@@ -43,6 +45,11 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Snackbar -->
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
+      {{ snackbar.message }}
+    </v-snackbar>
 
     <!-- Delete confirmation dialog -->
     <v-dialog v-model="deleteDialog" max-width="350">
@@ -79,6 +86,7 @@ const loading = ref(false)
 const initLoading = ref(false)
 const addLoading = ref(false)
 const deleteLoading = ref(false)
+const wzExportLoading = ref(false)
 
 const addDialog = ref(false)
 const newArticleId = ref(null)
@@ -87,8 +95,14 @@ const newQuantity = ref(0)
 const deleteDialog = ref(false)
 const deleteTarget = ref(null)
 
+const snackbar = ref({ show: false, message: '', color: 'success' })
+
+function showSnackbar(message, color = 'success') {
+  snackbar.value = { show: true, message, color }
+}
+
 const busy = computed(() =>
-  loading.value || initLoading.value || addLoading.value || deleteLoading.value
+  loading.value || initLoading.value || addLoading.value || deleteLoading.value || wzExportLoading.value
 )
 
 const headers = [
@@ -186,6 +200,22 @@ async function confirmDelete() {
 
 function exportCsvAction() {
   exportCsv(['article_name', 'location_name', 'quantity'], items.value, 'initialer_stand.csv')
+}
+
+async function wzExportAction() {
+  if (!locationId.value) return
+  wzExportLoading.value = true
+  try {
+    const res = await api.post('/initial-inventory/wz_export/', {
+      period_id: periodStore.currentPeriodId,
+      location_id: locationId.value,
+    })
+    showSnackbar(`Export erfolgreich (${res.data.count} Artikel): ${res.data.file}`)
+  } catch {
+    showSnackbar('Export fehlgeschlagen', 'error')
+  } finally {
+    wzExportLoading.value = false
+  }
 }
 
 onMounted(async () => {
