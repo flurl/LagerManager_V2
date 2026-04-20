@@ -104,6 +104,11 @@ const routes = [
     meta: { title: 'Personalverbrauch', fullscreen: true, public: true },
   },
   {
+    path: '/staff-consumption-import',
+    component: () => import('./views/StaffConsumptionImportView.vue'),
+    meta: { title: 'Personalverbrauch Import', permission: 'deliveries.add_stockmovement' },
+  },
+  {
     path: '/forbidden',
     component: () => import('./views/ForbiddenView.vue'),
     meta: { title: 'Kein Zugriff', public: true },
