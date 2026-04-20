@@ -169,6 +169,32 @@ class InitInitialInventoryTests(InitPeriodFixtureMixin, TestCase):
         self.assertEqual(count, 0)
         self.assertEqual(InitialInventory.objects.filter(period=self.period).count(), 0)
 
+    def test_location_id_limits_to_single_location(self) -> None:
+        """When location_id is given, only that location gets entries."""
+        count = init_initial_inventory(self.period.pk, location_id=self.location_a.pk)
+        self.assertEqual(count, 2)
+        entries = InitialInventory.objects.filter(period=self.period)
+        self.assertEqual(entries.count(), 2)
+        self.assertTrue(all(e.location_id == self.location_a.pk for e in entries))
+
+    def test_location_id_skips_other_locations(self) -> None:
+        """Entries for other locations are not created when location_id is supplied."""
+        init_initial_inventory(self.period.pk, location_id=self.location_a.pk)
+        self.assertEqual(
+            InitialInventory.objects.filter(period=self.period, location=self.location_b).count(),
+            0,
+        )
+
+    def test_location_id_idempotent(self) -> None:
+        """Calling twice with the same location_id creates no duplicates."""
+        init_initial_inventory(self.period.pk, location_id=self.location_a.pk)
+        count2 = init_initial_inventory(self.period.pk, location_id=self.location_a.pk)
+        self.assertEqual(count2, 0)
+        self.assertEqual(
+            InitialInventory.objects.filter(period=self.period, location=self.location_a).count(),
+            2,
+        )
+
 
 class InitPhysicalCountDateTests(InitPeriodFixtureMixin, TestCase):
     """Tests for init_physical_count_date()."""

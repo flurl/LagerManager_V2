@@ -11,7 +11,8 @@ class PeriodStartStockLevel(models.Model):
         related_name='stock_levels',
         db_column='artikel_id',
     )
-    quantity = models.DecimalField(max_digits=10, decimal_places=3, db_column='anzahl')
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=3, db_column='anzahl')
     period = models.ForeignKey(
         Period,
         on_delete=models.CASCADE,
@@ -36,7 +37,8 @@ class InitialInventory(models.Model):
         related_name='initial_inventories',
         db_column='ist_artikel_id',
     )
-    quantity = models.DecimalField(max_digits=10, decimal_places=3, db_column='ist_anzahl')
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=3, db_column='ist_anzahl')
     location = models.ForeignKey(
         Location,
         on_delete=models.CASCADE,
@@ -55,7 +57,7 @@ class InitialInventory(models.Model):
         unique_together = [('article', 'location', 'period')]
 
     def __str__(self) -> str:
-        return f"IS {self.article_id}/{self.location_id}/{self.period_id}"
+        return f"IS {self.article.name} @ {self.location.name} {self.period.name}"
 
 
 class PhysicalCount(models.Model):
@@ -67,7 +69,8 @@ class PhysicalCount(models.Model):
         related_name='physical_counts',
         db_column='gst_artikel_id',
     )
-    quantity = models.DecimalField(max_digits=10, decimal_places=3, db_column='gst_anzahl')
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=3, db_column='gst_anzahl')
     period = models.ForeignKey(
         Period,
         on_delete=models.CASCADE,
@@ -78,7 +81,8 @@ class PhysicalCount(models.Model):
 
     class Meta:
         db_table = 'gezaehlter_stand'
-        indexes = [models.Index(fields=['date'], name='gezaehlter_stand_datum_idx')]
+        indexes = [models.Index(
+            fields=['date'], name='gezaehlter_stand_datum_idx')]
 
     def __str__(self) -> str:
         return f"PC {self.article_id} @ {self.date:%Y-%m-%d}: {self.quantity}"

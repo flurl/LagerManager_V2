@@ -41,11 +41,16 @@ def init_stock_levels(period_id: int) -> int:
     return len(to_create)
 
 
-def init_initial_inventory(period_id: int, source_period_id: int | None = None) -> int:
+def init_initial_inventory(
+    period_id: int,
+    source_period_id: int | None = None,
+    location_id: int | None = None,
+) -> int:
     """
     Create InitialInventory entries for the given period.
     If source_period_id is provided, copies quantities from that period.
     Otherwise creates zero entries for all article/location combinations.
+    If location_id is given, only creates entries for that specific location.
     Returns the number of entries created.
     """
     from inventory.models import InitialInventory
@@ -55,7 +60,10 @@ def init_initial_inventory(period_id: int, source_period_id: int | None = None) 
     warehouse_articles = WarehouseArticle.objects.filter(
         period=period
     ).select_related('article')
-    locations = list(Location.objects.all())
+    if location_id is not None:
+        locations = list(Location.objects.filter(pk=location_id))
+    else:
+        locations = list(Location.objects.all())
     existing = set(
         InitialInventory.objects.filter(period=period).values_list(
             'article__source_id', 'location_id'

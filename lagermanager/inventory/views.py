@@ -63,10 +63,14 @@ class InitialInventoryViewSet(viewsets.ModelViewSet[InitialInventory]):
     def init_period(self, request: Request) -> Response:
         period_id = request.data.get('period_id')
         source_period_id = request.data.get('source_period_id')
+        location_id = request.data.get('location_id')
         if not period_id:
             return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        count = init_initial_inventory(int(period_id), int(
-            source_period_id) if source_period_id else None)
+        count = init_initial_inventory(
+            int(period_id),
+            int(source_period_id) if source_period_id else None,
+            int(location_id) if location_id else None,
+        )
         return Response({'created': count})
 
     @action(detail=False, methods=['get'])
