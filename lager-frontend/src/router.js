@@ -124,6 +124,7 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (!auth.isAuthenticated) return true  // App.vue handles the login wall
   if (to.meta.public) return true
+  if (!to.matched.length) return { path: '/' }  // unknown path — redirect home, don't fake a 403
   if (!auth.ready) {
     try {
       await auth.fetchMe()

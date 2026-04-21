@@ -19,6 +19,7 @@ ALLOWED_HOSTS: list[str] = cast(
     list[str],
     config('DJANGO_ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=_parse_list),
 )
+SECURE_PROXY_SSL_HEADER: tuple[str, str] = ('HTTP_X_FORWARDED_PROTO', 'https')
 CSRF_TRUSTED_ORIGINS: list[str] = cast(
     list[str],
     config(
