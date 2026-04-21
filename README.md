@@ -10,13 +10,38 @@ Web-based rewrite of the LagerManager desktop application. Manages warehouse inv
 
 - Docker + Docker Compose
 - Node.js (v18+)
-- Python 3.12 (for running backend outside Docker)
+- Python 3.12 (only needed for running the backend outside Docker)
 
 ---
 
-## Startup
+## Install
 
-### 1. Start the database and backend
+### 1. Clone and configure
+
+```bash
+git clone <repo-url>
+cd LagerManager_V2
+cp .env.example .env
+```
+
+Edit `.env` and set at minimum:
+- `POSTGRES_PASSWORD` — strong database password
+- `DJANGO_SECRET_KEY` — long random string
+- `DJANGO_ALLOWED_HOSTS` — your domain(s)
+- `CSRF_TRUSTED_ORIGINS` / `CORS_ALLOWED_ORIGINS` — your origin(s)
+
+### 2. Install frontend dependencies
+
+```bash
+cd lager-frontend
+npm install
+```
+
+---
+
+## Development
+
+### Start database and backend
 
 ```bash
 docker compose up -d
@@ -24,7 +49,7 @@ docker compose up -d
 
 This starts:
 - **PostgreSQL 16** on `localhost:5432`
-- **Django backend** on `localhost:8000`
+- **Django backend** on `localhost:8000` (via `runserver`)
 
 First run — apply migrations and create an admin user:
 
@@ -33,20 +58,44 @@ docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
 ```
 
-### 2. Start the frontend
+### Start the frontend dev server
 
 ```bash
 cd lager-frontend
-npm install
 npm run dev
 ```
 
-Frontend is available at **http://localhost:5173**.
+Frontend is available at **http://localhost:5173**.  
 Vite proxies all `/api/*` requests to the Django backend.
 
 ---
 
+## Production
+
+Uses `docker-compose.prod.yml` with Gunicorn, Nginx (HTTPS), and a built frontend bundle.
+
+### Build frontend
+
+```bash
+cd lager-frontend
+npm run build
+```
+
+### Start production stack
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Migrations and `collectstatic` run automatically on backend startup.  
+Nginx serves the frontend bundle and static files, and terminates TLS.  
+Place your certificates in `./certs/` (referenced in `nginx.conf`).
+
+---
+
 ## URLs
+
+### Development
 
 | Service | URL |
 |---------|-----|
@@ -59,19 +108,17 @@ Vite proxies all `/api/*` requests to the Django backend.
 
 ## Accessing the database
 
-Connect via the running Docker container:
+Via Docker:
 
 ```bash
 docker compose exec db psql -U lagermanager
 ```
 
-Or connect directly from the host (requires `psql` installed locally):
+Or directly from the host (requires `psql`):
 
 ```bash
 psql -h localhost -p 5432 -U lagermanager -d lagermanager
 ```
-
-Password: `lagermanager`
 
 ---
 
@@ -105,3 +152,18 @@ Requires the Docker backend to be running (`docker compose up -d`).
 ```bash
 docker compose exec backend python manage.py test --verbosity=2
 ```
+
+---
+
+## Backend Apps
+
+| App | Purpose |
+|-----|---------|
+| `core` | `Period` (accounting periods), `Location` (bars/warehouses), `Config` |
+| `inventory` | Stock tracking: `PeriodStartStockLevel`, `InitialInventory`, `PhysicalCount` |
+| `deliveries` | `Partner`, `StockMovement`, `StockMovementDetail`, `TaxRate`, `Attachment` |
+| `stock_count` | Physical inventory counts |
+| `staff_consumption` | Staff consumption tracking — kiosk UI with offline IndexedDB support |
+| `exports` | WZ export — writes semicolon-delimited CSV to the server export directory |
+| `pos_import` | Read-only POS mirror from MSSQL (Wiffzack): articles, recipes, receipts |
+| `reports` | Aggregated analytics, CSV exports, chart data endpoints |
