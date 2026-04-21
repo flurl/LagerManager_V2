@@ -21,6 +21,9 @@ media/
 .env.*
 !.env.example
 
+# TLS certificates
+certs/
+
 # Node
 lager-frontend/node_modules/
 lager-frontend/dist/

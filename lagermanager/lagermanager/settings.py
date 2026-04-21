@@ -11,8 +11,22 @@ SECRET_KEY: str = config(
     'DJANGO_SECRET_KEY', default='dev-secret-key-change-in-production')
 DEBUG: bool = config('DJANGO_DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS: list[str] = ['*']
-CSRF_TRUSTED_ORIGINS: list[str] = ['http://localhost:5173', 'http://localhost:8000']
+def _parse_list(v: str) -> list[str]:
+    return [s.strip() for s in v.split(',') if s.strip()]
+
+
+ALLOWED_HOSTS: list[str] = cast(
+    list[str],
+    config('DJANGO_ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=_parse_list),
+)
+CSRF_TRUSTED_ORIGINS: list[str] = cast(
+    list[str],
+    config(
+        'CSRF_TRUSTED_ORIGINS',
+        default='http://localhost:5173,http://localhost:8000',
+        cast=_parse_list,
+    ),
+)
 
 INSTALLED_APPS: list[str] = [
     'django.contrib.admin',
@@ -86,7 +100,8 @@ TIME_ZONE: str = 'Europe/Vienna'
 USE_I18N: bool = True
 USE_TZ: bool = True
 
-STATIC_URL: str = 'static/'
+STATIC_URL: str = '/static/'
+STATIC_ROOT: Path = BASE_DIR / 'staticfiles'
 MEDIA_URL: str = '/media/'
 MEDIA_ROOT: Path = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD: str = 'django.db.models.BigAutoField'
@@ -124,14 +139,9 @@ LOGGING: dict[str, Any] = {
 }
 
 
-def _parse_origins(v: str) -> list[str]:
-    return [s.strip() for s in v.split(',')]
-
-
 CORS_ALLOWED_ORIGINS: list[str] = cast(
     list[str],
-    config('CORS_ALLOWED_ORIGINS',
-           default='http://localhost:5173', cast=_parse_origins),
+    config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=_parse_list),
 )
 CORS_ALLOW_CREDENTIALS: bool = True
 
