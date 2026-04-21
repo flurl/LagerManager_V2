@@ -26,8 +26,8 @@
                 :title="sub.title" />
             </v-list>
           </v-menu>
-          <v-list-item v-else :to="item.to" :prepend-icon="item.icon" :title="item.title"
-            @click="item.href ? window.open(item.href, '_blank') : undefined" />
+          <v-list-item v-else :to="item.to" :href="item.href" :target="item.href ? '_blank' : undefined"
+            :prepend-icon="item.icon" :title="item.title" />
         </template>
       </v-list>
     </v-menu>
