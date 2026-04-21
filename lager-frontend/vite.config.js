@@ -30,6 +30,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}'],
         navigateFallback: 'index.html',
+        // Backend-served paths must never be hijacked by the SPA's SW
+        navigateFallbackDenylist: [/^\/admin/, /^\/api/, /^\/static/, /^\/media/],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => /\.(woff2?|ttf|eot)(\?.*)?$/.test(url.pathname),
@@ -40,7 +42,9 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ request }) => request.mode === 'navigate',
+            urlPattern: ({ url, request }) =>
+              request.mode === 'navigate' &&
+              !/^\/(admin|api|static|media)(\/|$)/.test(url.pathname),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'navigation-cache',
