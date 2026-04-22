@@ -360,8 +360,15 @@ function openImportDialog() {
   importDialog.value = true
 }
 
-function onImportConfirm(newLines) {
+function onImportConfirm(newLines, meta) {
   lines.value.push(...newLines)
+  const parts = []
+  if (meta?.deliveryDate) parts.push(`Lieferdatum: ${meta.deliveryDate}`)
+  if (meta?.invoiceNumber) parts.push(`Rechnungsnr.: ${meta.invoiceNumber}`)
+  if (parts.length) {
+    const suffix = parts.join(', ')
+    form.value.comment = form.value.comment ? `${form.value.comment}, ${suffix}` : suffix
+  }
 }
 
 async function applySkonto() {

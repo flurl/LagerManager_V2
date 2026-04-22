@@ -44,6 +44,14 @@
 
       <!-- Step 2: Preview -->
       <v-card-text v-else>
+        <v-row dense class="mb-3">
+          <v-col cols="6">
+            <v-text-field v-model="deliveryDate" label="Lieferdatum" type="date" density="compact" hide-details clearable />
+          </v-col>
+          <v-col cols="6">
+            <v-text-field v-model="invoiceNumber" label="Rechnungsnummer" density="compact" hide-details clearable />
+          </v-col>
+        </v-row>
         <v-table density="compact">
           <thead>
             <tr>
@@ -129,6 +137,8 @@ const selectedAttachmentIds = ref([])
 const galleryRef = ref(null)
 const apiLoading = ref(false)
 const selectedProviderId = ref(AI_PROVIDERS[0].id)
+const deliveryDate = ref('')
+const invoiceNumber = ref('')
 
 watch(() => props.modelValue, (val) => {
   if (val) {
@@ -137,6 +147,8 @@ watch(() => props.modelValue, (val) => {
     importError.value = ''
     previewLines.value = []
     selectedAttachmentIds.value = []
+    deliveryDate.value = ''
+    invoiceNumber.value = ''
   }
 })
 
@@ -160,6 +172,8 @@ function parseImportJson() {
     importError.value = 'JSON muss ein "articles"-Array enthalten'
     return
   }
+  deliveryDate.value = data.date_of_delivery ?? ''
+  invoiceNumber.value = data.invoice_number ?? ''
   previewLines.value = data.articles.map((a) => {
     const wa = a.ID != null ? props.warehouseArticles.find((w) => w.source_article_id === a.ID) : null
     const tr = props.taxRates.find((t) => Number(t.percent) === a.tax)
@@ -190,7 +204,7 @@ function confirmImport() {
       unit_price: row.unit_price,
       tax_rate: row.tax_rate,
     }))
-  emit('confirm', lines)
+  emit('confirm', lines, { deliveryDate: deliveryDate.value, invoiceNumber: invoiceNumber.value })
   emit('update:modelValue', false)
 }
 
