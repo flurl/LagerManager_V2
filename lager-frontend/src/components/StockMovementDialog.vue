@@ -123,6 +123,7 @@
             :movement-id="form.id ?? null"
             :preloaded-attachments="!form.id ? pendingAttachments : []"
             @uploaded="onPendingUploaded"
+            @deleted="onPendingDeleted"
           />
         </v-tabs-window-item>
       </v-tabs-window>
@@ -348,6 +349,10 @@ function onPendingUploaded(newAttachments) {
   if (!form.value.id) {
     pendingAttachments.value = [...pendingAttachments.value, ...newAttachments]
   }
+}
+
+function onPendingDeleted(att) {
+  pendingAttachments.value = pendingAttachments.value.filter((a) => a.id !== att.id)
 }
 
 async function handleClose() {

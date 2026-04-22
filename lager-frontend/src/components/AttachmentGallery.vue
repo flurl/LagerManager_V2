@@ -136,7 +136,7 @@ const props = defineProps({
   // Seed the attachment list when no movementId (e.g. pending attachments for a new movement)
   preloadedAttachments: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['update:modelValue', 'uploaded'])
+const emit = defineEmits(['update:modelValue', 'uploaded', 'deleted'])
 
 const attachments = ref([])
 const loading = ref(false)
@@ -198,6 +198,7 @@ async function deleteAttachment(att) {
   if (props.selectable) {
     emit('update:modelValue', attachments.value.map((a) => a.id))
   }
+  emit('deleted', att)
 }
 
 function onThumbEnter(att, event) {
