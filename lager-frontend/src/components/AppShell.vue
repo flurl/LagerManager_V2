@@ -140,14 +140,21 @@ const allNavGroups = [
       { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand', permission: 'inventory.view_physicalcount' },
       {
         title: 'Bestandszählung',
-        icon: 'mdi-cellphone-check',
+        icon: 'mdi-table-edit',
         permission: 'stock_count.view_stockcountentry',
         items: [
-          { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung', permission: 'stock_count.view_stockcountentry' },
-          { to: '/stock-count-entries', icon: 'mdi-table-edit', title: 'Zählergebnisse', permission: 'stock_count.view_stockcountentry' },]
+          { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung App', permission: 'stock_count.view_stockcountentry' },
+          { to: '/stock-count-entries', icon: 'mdi-database-import', title: 'Bestandszählung Import', permission: 'stock_count.view_stockcountentry' },]
       },
-      { to: '/staff-consumption', icon: 'mdi-glass-mug-variant', title: 'Personalverbrauch' },
-      { to: '/staff-consumption-import', icon: 'mdi-database-import', title: 'Personalverbrauch Import', permission: 'deliveries.add_stockmovement' },
+      {
+        title: 'Personal-/Eigenverbrauch',
+        icon: 'mdi-glass-mug-variant',
+        permission: 'deliveries.add_stockmovement',
+        items: [
+          { to: '/staff-consumption', icon: 'mdi-cellphone-check', title: 'Verbrauch App' },
+          { to: '/staff-consumption-import', icon: 'mdi-database-import', title: 'Verbrauch Import', permission: 'deliveries.add_stockmovement' },
+        ]
+      },
     ],
   },
   {
