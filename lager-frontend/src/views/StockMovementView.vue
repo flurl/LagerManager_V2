@@ -80,7 +80,7 @@
                 <tbody>
                   <tr v-for="d in detailsCache[hoveredItem.id]" :key="d.id">
                     <td>{{ d.article_name }}</td>
-                    <td class="text-end">{{ d.quantity }}</td>
+                    <td class="text-end">{{ Number(d.quantity).toFixed(2) }}</td>
                     <td class="text-end">{{ formatCurrency(d.unit_price) }}</td>
                     <td class="text-end">{{ formatCurrency(d.line_net) }}</td>
                     <td class="text-end">{{ formatCurrency(d.line_gross) }}</td>

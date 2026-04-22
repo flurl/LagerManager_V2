@@ -17,8 +17,10 @@
         <v-col cols="4">
           <v-text-field v-model="form.date" label="Datum" type="date" :error-messages="dateError" />
         </v-col>
-        <v-col cols="4">
-          <v-text-field v-model="form.comment" label="Kommentar" />
+      </v-row>
+      <v-row dense>
+        <v-col cols="12">
+          <v-textarea v-model="form.comment" label="Kommentar" rows="2" auto-grow />
         </v-col>
       </v-row>
 
