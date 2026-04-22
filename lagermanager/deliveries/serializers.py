@@ -53,6 +53,13 @@ class TaxRateSerializer(serializers.ModelSerializer[TaxRate]):
 
 
 class AttachmentSerializer(serializers.ModelSerializer["Attachment"]):
+    # Return a relative URL so the browser resolves it against the current origin,
+    # staying on HTTPS regardless of what scheme Django sees behind the proxy.
+    file = serializers.SerializerMethodField()
+
+    def get_file(self, obj: Attachment) -> str:
+        return obj.file.url
+
     class Meta:
         model = Attachment
         fields = [
