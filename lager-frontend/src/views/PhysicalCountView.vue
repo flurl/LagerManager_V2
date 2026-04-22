@@ -27,7 +27,24 @@
         <NumberInput v-model="item.quantity" density="compact" hide-details style="width: 100px"
           @change="saveItem(item)" />
       </template>
+      <template #item.actions="{ item }">
+        <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="deleteItem(item)" />
+      </template>
     </v-data-table>
+
+    <v-dialog v-model="deleteDialog" max-width="400">
+      <v-card>
+        <v-card-title>Eintrag löschen</v-card-title>
+        <v-card-text>
+          Soll der Eintrag für <strong>{{ pendingDelete?.article_name }}</strong> wirklich gelöscht werden?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="deleteDialog = false">Abbrechen</v-btn>
+          <v-btn color="error" :loading="deleteLoading" @click="confirmDelete">Löschen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -42,11 +59,15 @@ const items = ref([])
 const filterDate = ref('')
 const loading = ref(false)
 const initLoading = ref(false)
+const deleteDialog = ref(false)
+const deleteLoading = ref(false)
+const pendingDelete = ref(null)
 
 const headers = [
   { title: 'Datum', key: 'date' },
   { title: 'Artikel', key: 'article_name' },
   { title: 'Menge', key: 'quantity' },
+  { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
 
 async function fetchItems() {
@@ -67,6 +88,22 @@ async function fetchItems() {
 
 async function saveItem(item) {
   await api.patch(`/physical-counts/${item.id}/`, { quantity: item.quantity })
+}
+
+function deleteItem(item) {
+  pendingDelete.value = item
+  deleteDialog.value = true
+}
+
+async function confirmDelete() {
+  deleteLoading.value = true
+  try {
+    await api.delete(`/physical-counts/${pendingDelete.value.id}/`)
+    items.value = items.value.filter(i => i.id !== pendingDelete.value.id)
+    deleteDialog.value = false
+  } finally {
+    deleteLoading.value = false
+  }
 }
 
 async function initDate() {
