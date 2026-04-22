@@ -15,6 +15,10 @@ const ANNOTATION_SCHEMA = {
         format: 'date',
         description: 'The date of delivery in YYYY-MM-DD format',
       },
+      invoice_number: {
+        "description": "The invoice number",
+        "type": "string"
+      },
       total_sum_net: {
         type: 'number',
         minimum: 0,
