@@ -10,21 +10,24 @@
       </v-col>
     </v-row>
 
-    <v-row v-if="hasHiddenArticles" class="mb-2" align="center">
-      <v-col cols="auto">
+    <v-row v-if="hasHiddenArticles || hasNegativeArticles" class="mb-2" align="center">
+      <v-col v-if="hasHiddenArticles" cols="auto">
         <v-chip color="warning" size="small" prepend-icon="mdi-eye-off">
           {{ hiddenCount }} Artikel ausgeblendet
         </v-chip>
       </v-col>
-      <v-col cols="auto">
+      <v-col v-if="hasHiddenArticles" cols="auto">
         <v-checkbox v-model="showHidden" label="Ausgeblendete anzeigen" density="compact" hide-details />
+      </v-col>
+      <v-col cols="auto">
+        <v-checkbox v-model="showNegativeOnly" label="Minusstände" density="compact" hide-details />
       </v-col>
     </v-row>
 
     <v-row class="mb-2">
       <v-col>
-        <v-autocomplete v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips clearable
-          density="compact" hide-details>
+        <v-autocomplete v-model="activeArticles" :items="allArticles" label="Artikel" multiple chips closable-chips
+          clearable density="compact" hide-details>
           <template #prepend-item>
             <v-list-item title="Alle" @click="toggleAll">
               <template #prepend>
@@ -68,6 +71,18 @@ const activeArticles = ref([])
 
 const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenArticles()
 
+const showNegativeOnly = ref(false)
+
+const articlesWithNegative = computed(() => {
+  const result = new Set()
+    ; (rawData.value?.datasets || []).forEach((d) => {
+      if (d.data.some((v) => v < 0)) result.add(d.label)
+    })
+  return result
+})
+
+const hasNegativeArticles = computed(() => articlesWithNegative.value.size > 0)
+
 const COLORS = [
   '#1565C0', '#E53935', '#43A047', '#FB8C00', '#8E24AA',
   '#00ACC1', '#6D4C41', '#F06292', '#546E7A', '#26A69A',
@@ -76,7 +91,7 @@ const COLORS = [
 const allArticles = computed(() =>
   (rawData.value?.datasets || [])
     .map((d) => d.label)
-    .filter((label) => shouldInclude(label))
+    .filter((label) => shouldInclude(label) && (!showNegativeOnly.value || articlesWithNegative.value.has(label)))
 )
 
 // Stable color map keyed by article name so colors don't shift when filtering
@@ -101,7 +116,10 @@ const chartData = computed(() => {
       borderColor: colorMap.value[d.label],
       backgroundColor: 'transparent',
       tension: 0.1,
-      pointRadius: 2,
+      pointRadius: d.data.map((v) => v < 0 ? 6 : 2),
+      pointStyle: d.data.map((v) => v < 0 ? 'triangle' : 'circle'),
+      pointBackgroundColor: d.data.map((v) => v < 0 ? '#E53935' : 'transparent'),
+      pointBorderColor: d.data.map((v) => v < 0 ? '#E53935' : colorMap.value[d.label]),
     }))
 
   const countedDatasets = (rawData.value.counted_datasets || [])
@@ -166,6 +184,10 @@ async function fetchData() {
     loading.value = false
   }
 }
+
+watch(showNegativeOnly, () => {
+  activeArticles.value = activeArticles.value.filter((a) => allArticles.value.includes(a))
+})
 
 watch(() => periodStore.currentPeriodId, fetchData)
 onMounted(fetchData)
