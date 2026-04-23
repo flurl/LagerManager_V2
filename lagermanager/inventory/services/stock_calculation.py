@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 CONSUMPTION_QUERY = """
     SELECT
-        checkpoint_datum::date AS day,
+        to_date(checkpoint_info, 'DD.MM.YYYY') AS day,
         art2.artikel_bezeichnung AS article_name,
         SUM(tbd.tisch_bondetail_absmenge * az.zutate_menge / COALESCE(le.lager_einheit_multiplizierer, 1.0)) AS amount
     FROM artikel_basis art1
@@ -47,7 +47,7 @@ CONSUMPTION_QUERY = """
     UNION ALL
 
     SELECT
-        checkpoint_datum::date AS day,
+        to_date(checkpoint_info, 'DD.MM.YYYY') AS day,
         a.artikel_bezeichnung AS article_name,
         SUM(tbd.tisch_bondetail_absmenge) AS amount
     FROM artikel_basis a
@@ -177,7 +177,8 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
         initial[sl.article.name] = float(sl.quantity)
 
     daily_delta: dict[datetime.date, dict[str, float]] = get_daily_stock_delta(
-        period_id, (StockMovement.Type.CONSUMPTION, StockMovement.Type.DELIVERY)
+        period_id, (StockMovement.Type.CONSUMPTION,
+                    StockMovement.Type.DELIVERY)
     )
 
     # Physical counts keyed by (date, article_name)
@@ -198,7 +199,8 @@ def compute_running_stock(period_id: int) -> list[dict[str, object]]:
 
     while current_date <= end_date:
         for article in all_articles:
-            running[article] += daily_delta.get(current_date, {}).get(article, 0.0)
+            running[article] += daily_delta.get(current_date,
+                                                {}).get(article, 0.0)
             counted = counts.get((current_date, article))
             result.append({
                 'date': current_date.isoformat(),
