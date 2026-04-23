@@ -98,7 +98,7 @@
 
     <v-dialog v-model="dialog" max-width="1100" persistent>
       <StockMovementDialog :movement="selectedMovement" :movement-type="movementType" @saved="onSaved"
-        @close="dialog = false" />
+        @refresh="fetchMovements" @close="dialog = false" />
     </v-dialog>
   </div>
 </template>

@@ -113,7 +113,7 @@
               <NumberInput v-model="skontoPercent" label="Skonto %" density="compact" />
             </v-col>
             <v-col cols="auto" class="d-flex align-center">
-              <v-btn size="small" @click="applySkonto" :disabled="!form.id">Skonto anwenden</v-btn>
+              <v-btn size="small" @click="applySkonto">Skonto anwenden</v-btn>
             </v-col>
           </v-row>
         </v-tabs-window-item>
@@ -147,6 +147,32 @@
     :config="config"
     @confirm="onImportConfirm"
   />
+
+  <!-- Skonto save-first dialog -->
+  <v-dialog v-model="skontoSaveDialog" max-width="480">
+    <v-card>
+      <v-card-title class="d-flex align-center pa-4">
+        <v-icon size="28" class="mr-2">mdi-content-save</v-icon>
+        Speichern erforderlich
+      </v-card-title>
+      <v-card-text class="pt-4">
+        Die Bewegung muss zuerst gespeichert werden, bevor der Skonto angewendet werden kann. Jetzt speichern und Skonto anwenden?
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="skontoSaveDialog = false">Abbrechen</v-btn>
+        <v-btn color="primary" :loading="saving" @click="confirmSkontoSave">Speichern und anwenden</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Save error snackbar -->
+  <v-snackbar v-model="saveErrorSnackbar" color="error" timeout="6000" location="bottom">
+    {{ saveError }}
+    <template #actions>
+      <v-btn variant="text" @click="saveErrorSnackbar = false">Schließen</v-btn>
+    </template>
+  </v-snackbar>
 
   <!-- Duplicate warning dialog -->
   <v-dialog v-model="duplicateDialog" max-width="480">
@@ -182,7 +208,7 @@ const props = defineProps({
   movement: { type: Object, default: null },
   movementType: { type: String, default: 'delivery' },
 })
-const emit = defineEmits(['saved', 'close'])
+const emit = defineEmits(['saved', 'close', 'refresh'])
 
 const periodStore = usePeriodStore()
 const activeTab = ref('positions')
@@ -194,6 +220,9 @@ const skontoPercent = ref(0)
 const duplicateDialog = ref(false)
 const duplicateCount = ref(0)
 const importDialog = ref(false)
+const skontoSaveDialog = ref(false)
+const saveError = ref('')
+const saveErrorSnackbar = ref(false)
 const pendingAttachments = ref([])
 const dateError = ref('')
 const linesError = ref('')
@@ -201,7 +230,7 @@ const defaultTaxRateId = ref(null)
 const config = ref({})
 const originalDetailIds = ref([])
 
-const isNew = computed(() => !props.movement?.id)
+const isNew = computed(() => !props.movement?.id && !form.value.id)
 
 // Derive the effective type: existing movements use their own type, new ones use the prop
 const effectiveType = computed(() => props.movement?.movement_type ?? props.movementType)
@@ -265,10 +294,9 @@ function removeLine(idx) {
 }
 
 
-async function save() {
+function validate() {
   dateError.value = ''
   linesError.value = ''
-
   const period = periodStore.currentPeriod
   if (form.value.date && period) {
     if (form.value.date < period.start || form.value.date > period.end) {
@@ -280,7 +308,11 @@ async function save() {
   } else if (lines.value.some((l) => !l.tax_rate)) {
     linesError.value = 'Alle Positionen müssen einen Steuersatz haben'
   }
-  if (dateError.value || linesError.value) return
+  return !dateError.value && !linesError.value
+}
+
+async function save() {
+  if (!validate()) return
 
   if (form.value.partner && form.value.date) {
     const res = await api.get('/stock-movements/', {
@@ -306,7 +338,23 @@ async function confirmSave() {
   await doSave()
 }
 
-async function doSave() {
+function extractErrorMessage(err) {
+  const data = err?.response?.data
+  if (!data) return err?.message ?? 'Unbekannter Fehler'
+  if (typeof data === 'string') return data
+  if (typeof data.detail === 'string') return data.detail
+  const fieldErrors = Object.entries(data)
+    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+    .join(' | ')
+  return fieldErrors || (err?.message ?? 'Unbekannter Fehler')
+}
+
+function showSaveError(err) {
+  saveError.value = extractErrorMessage(err)
+  saveErrorSnackbar.value = true
+}
+
+async function doSave({ silent = false } = {}) {
   saving.value = true
   try {
     let movementId = form.value.id
@@ -316,6 +364,7 @@ async function doSave() {
         period: periodStore.currentPeriodId,
       })
       movementId = res.data.id
+      form.value.id = movementId
     } else {
       await api.put(`/stock-movements/${movementId}/`, form.value)
       // Delete all existing details and re-create
@@ -325,11 +374,12 @@ async function doSave() {
       originalDetailIds.value = []
     }
     // Create detail lines
-    await Promise.all(
+    const detailResponses = await Promise.all(
       lines.value.map((l) =>
         api.post(`/stock-movements/${movementId}/details/`, { ...l, stock_movement: movementId })
       )
     )
+    originalDetailIds.value = detailResponses.map((r) => r.data.id)
     // Assign any pending (orphaned) attachments to the newly created movement
     if (isNew.value && pendingAttachments.value.length) {
       await Promise.all(
@@ -339,7 +389,10 @@ async function doSave() {
       )
       pendingAttachments.value = []
     }
-    emit('saved')
+    if (!silent) emit('saved')
+  } catch (err) {
+    showSaveError(err)
+    throw err
   } finally {
     saving.value = false
   }
@@ -379,10 +432,37 @@ function onImportConfirm(newLines, meta) {
 }
 
 async function applySkonto() {
-  if (!form.value.id) return
-  await api.post(`/stock-movements/${form.value.id}/apply_discount/`, { percent: skontoPercent.value })
-  const res = await api.get(`/stock-movements/${form.value.id}/`)
-  lines.value = res.data.details || []
+  if (!form.value.id) {
+    skontoSaveDialog.value = true
+    return
+  }
+  try {
+    await api.post(`/stock-movements/${form.value.id}/apply_discount/`, { percent: skontoPercent.value })
+    const res = await api.get(`/stock-movements/${form.value.id}/`)
+    lines.value = res.data.details || []
+  } catch (err) {
+    showSaveError(err)
+  }
+}
+
+async function confirmSkontoSave() {
+  skontoSaveDialog.value = false
+  if (!validate()) return
+  try {
+    await doSave({ silent: true })
+  } catch {
+    return
+  }
+  if (form.value.id) {
+    try {
+      await api.post(`/stock-movements/${form.value.id}/apply_discount/`, { percent: skontoPercent.value })
+      const res = await api.get(`/stock-movements/${form.value.id}/`)
+      lines.value = res.data.details || []
+    } catch (err) {
+      showSaveError(err)
+    }
+  }
+  emit('refresh')
 }
 
 onMounted(async () => {
