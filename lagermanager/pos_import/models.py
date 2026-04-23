@@ -103,7 +103,8 @@ class TischAktiv(models.Model):
     class Meta:
         db_table = 'tische_aktiv'
         unique_together = [('source_id', 'period')]
-        indexes = [models.Index(fields=['checkpoint_tag'], name='tische_aktiv_chkpt_tag_idx')]
+        indexes = [models.Index(fields=['checkpoint_tag'],
+                                name='tische_aktiv_chkpt_tag_idx')]
 
 
 class TischBon(models.Model):
@@ -373,7 +374,8 @@ class ArticleMeta(models.Model):
         related_name='article_metas',
     )
     is_hidden = models.BooleanField(default=False)
-    sub_articles = models.TextField(blank=True)   # comma-separated, e.g. "lemon,orange"
+    # comma-separated, e.g. "lemon,orange"
+    sub_articles = models.TextField(blank=True)
     package_size = models.DecimalField(
         max_digits=10, decimal_places=4, null=True, blank=True
     )
@@ -486,6 +488,7 @@ class WarehouseArticle(models.Model):
     class Meta:
         db_table = 'lager_artikel'
         unique_together = [('source_id', 'period'), ('article', 'period')]
+        ordering = ["article__name"]
 
     def __str__(self) -> str:
         return f"LA {self.source_id}"
