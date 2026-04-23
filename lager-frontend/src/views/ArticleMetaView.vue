@@ -33,11 +33,14 @@
       :loading="loading"
       density="compact"
       :items-per-page="100"
+      :row-props="() => ({ style: 'cursor: pointer' })"
+      @click:row="(_, { item }) => openEdit(item)"
     >
       <template #item.is_hidden="{ item }">
         <v-checkbox-btn
           :model-value="item.meta?.is_hidden ?? false"
           density="compact"
+          @click.stop
           @update:model-value="toggleHidden(item, $event)"
         />
       </template>
@@ -55,7 +58,7 @@
       </template>
 
       <template #item.actions="{ item }">
-        <v-icon size="small" @click="openEdit(item)">mdi-pencil</v-icon>
+        <v-icon size="small" @click.stop="openEdit(item)">mdi-pencil</v-icon>
       </template>
     </v-data-table>
 

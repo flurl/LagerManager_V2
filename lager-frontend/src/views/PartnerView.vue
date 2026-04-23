@@ -7,10 +7,11 @@
       </v-col>
     </v-row>
 
-    <v-data-table :headers="headers" :items="items" :loading="loading" density="compact">
+    <v-data-table :headers="headers" :items="items" :loading="loading" density="compact"
+      :row-props="() => ({ style: 'cursor: pointer' })" @click:row="(_, { item }) => openEdit(item)">
       <template #item.actions="{ item }">
-        <v-icon size="small" @click="openEdit(item)">mdi-pencil</v-icon>
-        <v-icon size="small" class="ml-1" color="error" @click="deleteItem(item)">mdi-delete</v-icon>
+        <v-icon size="small" @click.stop="openEdit(item)">mdi-pencil</v-icon>
+        <v-icon size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
       </template>
     </v-data-table>
 
