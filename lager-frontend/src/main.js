@@ -22,10 +22,11 @@ const vuetify = createVuetify({
     defaultTheme: 'light',
     themes: {
       light: {
-        colors: {
-          primary: '#1565C0',
-          secondary: '#546E7A',
-        },
+        colors: { primary: '#1565C0', secondary: '#546E7A' },
+      },
+      dark: {
+        dark: true,
+        colors: { primary: '#64B5F6', secondary: '#90A4AE' },
       },
     },
   },

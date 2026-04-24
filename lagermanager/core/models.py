@@ -72,13 +72,20 @@ class Location(models.Model):
 
 
 class UserPreferences(models.Model):
-    """Per-user preferences: language and per-period color scheme."""
+    """Per-user preferences: language, theme, and per-period color scheme."""
+
+    class Theme(models.TextChoices):
+        LIGHT = 'light', 'Light'
+        DARK = 'dark', 'Dark'
+        AUTO = 'auto', 'Auto'
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='preferences',
     )
     language = models.CharField(max_length=10, default='de')
+    theme = models.CharField(max_length=10, choices=Theme.choices, default=Theme.AUTO)
     period_colors = models.JSONField(default=dict)  # {str(period_id): '#rrggbb'}
 
     class Meta:

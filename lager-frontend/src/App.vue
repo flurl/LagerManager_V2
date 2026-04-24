@@ -20,11 +20,13 @@
 import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
+import { useAppTheme } from './composables/useAppTheme'
 import AppShell from './components/AppShell.vue'
 import LoginView from './views/LoginView.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
+useAppTheme()
 
 onMounted(async () => {
   if (auth.isAuthenticated && !auth.user) {
@@ -39,9 +41,12 @@ onMounted(async () => {
 
 <style>
 .v-data-table tbody tr:nth-child(even) td {
-  background-color: rgba(0, 0, 0, 0.03);
+  background-color: rgba(0, 0, 0, 0.04);
+}
+.v-theme--dark .v-data-table tbody tr:nth-child(even) td {
+  background-color: rgba(255, 255, 255, 0.07);
 }
 .v-data-table tbody tr:hover td {
-  background-color: rgba(21, 101, 192, 0.08) !important;
+  background-color: var(--period-primary-hover, rgba(21, 101, 192, 0.08)) !important;
 }
 </style>

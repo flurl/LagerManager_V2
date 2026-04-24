@@ -7,8 +7,8 @@ export const useAuthStore = defineStore('auth', {
     const cachedPermissions = /** @type {string[]} */ (
       JSON.parse(localStorage.getItem('authPermissions') || 'null') || []
     )
-    const cachedPreferences = /** @type {{ language: string, period_colors: Record<string, string> }} */ (
-      JSON.parse(localStorage.getItem('authPreferences') || 'null') || { language: 'de', period_colors: {} }
+    const cachedPreferences = /** @type {{ language: string, theme: string, period_colors: Record<string, string> }} */ (
+      JSON.parse(localStorage.getItem('authPreferences') || 'null') || { language: 'de', theme: 'auto', period_colors: {} }
     )
     return {
       token: localStorage.getItem('token') || null,
@@ -52,7 +52,7 @@ export const useAuthStore = defineStore('auth', {
       this.refreshToken = null
       this.user = null
       this.permissions = []
-      this.preferences = { language: 'de', period_colors: {} }
+      this.preferences = { language: 'de', theme: 'auto', period_colors: {} }
       this.ready = false
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')

@@ -54,6 +54,22 @@ class MeViewTest(APITestCase):
         self.assertEqual(prefs.language, 'de')
         self.assertEqual(prefs.period_colors, {'1': '#aabbcc'})  # unchanged
 
+    def test_default_theme_is_auto(self) -> None:
+        resp = self.client.get('/api/me/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['preferences']['theme'], 'auto')
+
+    def test_patch_updates_theme(self) -> None:
+        resp = self.client.patch('/api/me/', {'theme': 'dark'}, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['theme'], 'dark')
+        self.assertEqual(UserPreferences.objects.get(user=self.user).theme, 'dark')
+
+    def test_patch_rejects_invalid_theme(self) -> None:
+        resp = self.client.patch('/api/me/', {'theme': 'nope'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('theme', resp.data)
+
 
 class PermissionEnforcementTest(APITestCase):
     """Spot-check that DjangoModelPermissionsWithView blocks GET without view_* permission."""

@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar elevation="1">
+  <v-app-bar color="primary" elevation="1">
     <v-app-bar-title class="mr-4">
       <v-icon class="mr-1">mdi-warehouse</v-icon>
       LagerManager
@@ -81,6 +81,8 @@
     <v-card>
       <v-card-title>Benutzereinstellungen</v-card-title>
       <v-card-text>
+        <v-select v-model="prefsForm.theme" :items="themeOptions" item-title="label" item-value="value"
+          label="Design" class="mb-4" />
         <v-select v-model="prefsForm.language" :items="languageOptions" item-title="label" item-value="value"
           label="Sprache" class="mb-4" />
         <div class="text-subtitle-2 mb-2">Periodenfarben</div>
@@ -244,15 +246,21 @@ async function savePeriod() {
 const prefsDialog = ref(false)
 const prefsSaving = ref(false)
 const prefsError = ref('')
-const prefsForm = reactive({ language: 'de', period_colors: {} })
+const prefsForm = reactive({ language: 'de', theme: 'auto', period_colors: {} })
 const languageOptions = [
   { label: 'Deutsch', value: 'de' },
   { label: 'English', value: 'en' },
+]
+const themeOptions = [
+  { label: 'System', value: 'auto' },
+  { label: 'Hell', value: 'light' },
+  { label: 'Dunkel', value: 'dark' },
 ]
 
 watch(prefsDialog, (open) => {
   if (open) {
     prefsForm.language = auth.preferences.language ?? 'de'
+    prefsForm.theme = auth.preferences.theme ?? 'auto'
     prefsForm.period_colors = { ...auth.preferences.period_colors }
     prefsError.value = ''
   }
@@ -262,7 +270,7 @@ async function savePrefs() {
   prefsError.value = ''
   prefsSaving.value = true
   try {
-    await auth.updatePreferences({ language: prefsForm.language, period_colors: { ...prefsForm.period_colors } })
+    await auth.updatePreferences({ language: prefsForm.language, theme: prefsForm.theme, period_colors: { ...prefsForm.period_colors } })
     prefsDialog.value = false
   } catch {
     prefsError.value = 'Fehler beim Speichern der Einstellungen.'

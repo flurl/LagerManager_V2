@@ -31,7 +31,7 @@
       :items-per-page="100" :sort-by="[{ key: 'date', order: 'desc' }]" @click:row="(_, { item }) => openDetail(item)">
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
-          :style="hoveredRowId === item.id ? { backgroundColor: HIGHLIGHT_COLOR } : {}" @click="openDetail(item)"
+          :style="hoveredRowId === item.id ? { backgroundColor: highlightColor } : {}" @click="openDetail(item)"
           @mouseenter="onRowEnter(item, $event)" @mouseleave="onRowLeave">
           <td v-for="col in columns" :key="col.key" :class="col.align ? `text-${col.align}` : ''"
             class="v-data-table__td">
@@ -50,12 +50,13 @@
 
     <Teleport to="body">
       <div v-if="detailOverlay && hoveredItem" :style="overlayStyle">
-        <v-card min-width="400" max-width="600" :color="HIGHLIGHT_COLOR" :style="{
+        <v-card min-width="400" max-width="600" :style="{
           pointerEvents: 'auto',
-          borderLeft: `2px solid ${HIGHLIGHT_COLOR}`,
-          borderRight: `2px solid ${HIGHLIGHT_COLOR}`,
-          borderTop: overlayAbove ? `2px solid ${HIGHLIGHT_COLOR}` : 'none',
-          borderBottom: overlayAbove ? 'none' : `2px solid ${HIGHLIGHT_COLOR}`,
+          backgroundColor: highlightColor,
+          borderLeft: `2px solid ${primaryColor}`,
+          borderRight: `2px solid ${primaryColor}`,
+          borderTop: overlayAbove ? `2px solid ${primaryColor}` : 'none',
+          borderBottom: overlayAbove ? 'none' : `2px solid ${primaryColor}`,
           borderTopLeftRadius: overlayAbove ? undefined : 0,
           borderTopRightRadius: overlayAbove ? undefined : 0,
           borderBottomLeftRadius: overlayAbove ? 0 : undefined,
@@ -70,11 +71,11 @@
               <v-table density="compact">
                 <thead>
                   <tr>
-                    <th class="text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Artikel</th>
-                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Menge</th>
-                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">EP</th>
-                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Netto</th>
-                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: HIGHLIGHT_COLOR }">Brutto</th>
+                    <th class="text-subtitle-2" :style="{ backgroundColor: highlightColor }">Artikel</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: highlightColor }">Menge</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: highlightColor }">EP</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: highlightColor }">Netto</th>
+                    <th class="text-end text-subtitle-2" :style="{ backgroundColor: highlightColor }">Brutto</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -105,13 +106,19 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useTheme } from 'vuetify'
 import { usePeriodStore } from '../stores/period'
 import { useCsvExport } from '../composables/useCsvExport'
+import { hexToRgba } from '../utils/color'
 import api from '../api'
 import StockMovementDialog from '../components/StockMovementDialog.vue'
 
 const periodStore = usePeriodStore()
 const { exportCsv } = useCsvExport()
+const theme = useTheme()
+
+const primaryColor = computed(() => theme.current.value.colors.primary)
+const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
 
 const movements = ref([])
 const loading = ref(false)
@@ -124,7 +131,6 @@ const detailOverlay = ref(false)
 const hoveredItem = ref(null)
 const hoveredRowId = ref(null)
 let hideTimer = null
-const HIGHLIGHT_COLOR = '#dbeafe'
 const rowBottom = ref(0)
 const rowTop = ref(0)
 const filterPartner = ref(null)

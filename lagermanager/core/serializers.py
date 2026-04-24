@@ -24,4 +24,4 @@ class LocationSerializer(serializers.ModelSerializer):
 class UserPreferencesSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserPreferences
-        fields: list[str] = ['language', 'period_colors']
+        fields: list[str] = ['language', 'theme', 'period_colors']
