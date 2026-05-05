@@ -3,8 +3,16 @@
     <!-- Step 1: Location Selection -->
     <div v-if="step === 1">
       <v-card class="mb-4" flat>
-        <v-card-title class="text-h6 pb-0">Bestandszählung</v-card-title>
-        <v-card-subtitle>Standort wählen</v-card-subtitle>
+        <v-card-text class="pb-0 d-flex align-center justify-space-between">
+          <div>
+            <div class="text-h6">Bestandszählung</div>
+            <div class="text-caption text-medium-emphasis">Standort wählen</div>
+          </div>
+          <v-icon :color="isOnline ? 'success' : 'error'" size="28"
+            :title="isOnline ? 'Online' : 'Offline'">
+            {{ isOnline ? 'mdi-wifi' : 'mdi-wifi-off' }}
+          </v-icon>
+        </v-card-text>
       </v-card>
 
       <v-text-field
