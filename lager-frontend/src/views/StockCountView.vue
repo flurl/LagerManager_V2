@@ -471,9 +471,46 @@ async function prefetchArticles() {
   }
 }
 
+async function loadArticlesFromCache() {
+  const cache = JSON.parse(localStorage.getItem(ARTICLES_CACHE_KEY) || '{}')
+  const entries = Object.values(cache)
+
+  const exact = entries.find(c => countDate.value >= c.start && countDate.value <= c.end)
+  if (exact) {
+    articles.value = exact.articles
+    showSnack('Offline – Artikelliste aus Cache.', 'warning')
+    return
+  }
+
+  if (!entries.length) {
+    showSnack('Offline und kein Artikel-Cache vorhanden.', 'error')
+    return
+  }
+
+  const closest = entries.sort((a, b) =>
+    Math.abs(new Date(countDate.value) - new Date(a.end)) -
+    Math.abs(new Date(countDate.value) - new Date(b.end)),
+  )[0]
+
+  const confirmed = await askOfflineFallback(
+    `Offline – kein Cache für den gewählten Zeitraum (${countDate.value}).\n` +
+    `Nächstbester Cache: Artikel für ${closest.start} bis ${closest.end}.\n` +
+    `Trotzdem verwenden?`,
+  )
+  if (confirmed) {
+    articles.value = closest.articles
+  } else {
+    goBack()
+  }
+}
+
 async function loadArticles() {
   loadingArticles.value = true
   try {
+    if (!isOnline.value) {
+      await loadArticlesFromCache()
+      return
+    }
     articles.value = await fetchAndCacheArticles(countDate.value)
   } catch (err) {
     if (!isNetworkError(err)) {
@@ -485,40 +522,7 @@ async function loadArticles() {
       )
       return
     }
-
-    // Offline path — look up the per-period cache
-    const cache = JSON.parse(localStorage.getItem(ARTICLES_CACHE_KEY) || '{}')
-    const entries = Object.values(cache)
-
-    // Exact match: a cached period whose range contains the selected count date
-    const exact = entries.find(c => countDate.value >= c.start && countDate.value <= c.end)
-    if (exact) {
-      articles.value = exact.articles
-      showSnack('Offline – Artikelliste aus Cache.', 'warning')
-      return
-    }
-
-    if (!entries.length) {
-      showSnack('Offline und kein Artikel-Cache vorhanden.', 'error')
-      return
-    }
-
-    // No exact match — find the period whose end date is closest to the count date
-    const closest = entries.sort((a, b) =>
-      Math.abs(new Date(countDate.value) - new Date(a.end)) -
-      Math.abs(new Date(countDate.value) - new Date(b.end)),
-    )[0]
-
-    const confirmed = await askOfflineFallback(
-      `Offline – kein Cache für den gewählten Zeitraum (${countDate.value}).\n` +
-      `Nächstbester Cache: Artikel für ${closest.start} bis ${closest.end}.\n` +
-      `Trotzdem verwenden?`,
-    )
-    if (confirmed) {
-      articles.value = closest.articles
-    } else {
-      goBack()
-    }
+    await loadArticlesFromCache()
   } finally {
     loadingArticles.value = false
   }
