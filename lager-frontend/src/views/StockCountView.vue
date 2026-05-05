@@ -638,11 +638,37 @@ function onOffline() {
   isOnline.value = false
 }
 
+// --- Active connectivity probe ---
+// navigator.onLine / online+offline events are unreliable for detecting loss of
+// connectivity (especially on Android). We supplement them with a real network
+// probe so the indicator updates promptly without waiting for a timeout.
+const PROBE_INTERVAL_MS = 30_000
+
+async function probeOnline() {
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 5000)
+    await fetch('/api/', { method: 'HEAD', cache: 'no-store', signal: ctrl.signal })
+    clearTimeout(timer)
+    if (!isOnline.value) onOnline()
+  } catch {
+    if (isOnline.value) onOffline()
+  }
+}
+
+let probeInterval = /** @type {ReturnType<typeof setInterval> | null} */ (null)
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') probeOnline()
+}
+
 // --- Lifecycle ---
 onMounted(async () => {
   document.documentElement.classList.add('no-pull-to-refresh')
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  probeInterval = setInterval(probeOnline, PROBE_INTERVAL_MS)
   await loadLocations()
   syncPending()
   prefetchArticles()
@@ -652,6 +678,8 @@ onUnmounted(() => {
   document.documentElement.classList.remove('no-pull-to-refresh')
   window.removeEventListener('online', onOnline)
   window.removeEventListener('offline', onOffline)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (probeInterval !== null) clearInterval(probeInterval)
 })
 </script>
 
