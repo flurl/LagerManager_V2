@@ -145,6 +145,26 @@
       </div>
     </div>
 
+    <!-- Resume partial count dialog -->
+    <v-dialog v-model="resumeDialog.show" max-width="380" persistent>
+      <v-card>
+        <v-card-title class="text-subtitle-1">Unterbrochene Zählung gefunden</v-card-title>
+        <v-card-text>
+          <v-list density="compact" class="pa-0">
+            <v-list-item prepend-icon="mdi-map-marker" :title="resumeDialog.partial?.location?.name ?? ''" subtitle="Standort" />
+            <v-list-item prepend-icon="mdi-calendar" :title="resumeDialog.partial?.countDate ?? ''" subtitle="Zähldatum" />
+            <v-list-item prepend-icon="mdi-counter" :title="`${resumePartialCountedCount} Artikel erfasst`" subtitle="Fortschritt" />
+            <v-list-item prepend-icon="mdi-clock-outline" :title="resumePartialAge" subtitle="Zuletzt gespeichert" />
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" color="error" @click="discardPartialCount">Neu starten</v-btn>
+          <v-spacer />
+          <v-btn color="primary" prepend-icon="mdi-restore" @click="continuePartialCount">Fortsetzen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Long-press number input dialog -->
     <v-dialog v-model="longPressDialog.show" max-width="300" persistent>
       <v-card>
@@ -202,7 +222,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import api from '../api'
 
 // --- State ---
@@ -571,16 +591,19 @@ async function save() {
   }
   if (!isOnline.value) {
     queuePendingSave(payload)
+    clearPartialCount()
     showSaveDialog('Offline gespeichert', 'Die Daten wurden lokal gespeichert und werden synchronisiert, sobald Sie wieder online sind.', goBack)
     return
   }
   saving.value = true
   try {
     await api.post('/stock-count/entries/bulk/', payload)
+    clearPartialCount()
     showSaveDialog('Gespeichert', `${payload.entries.length} Einträge wurden erfolgreich gespeichert.`, goBack)
   } catch (err) {
     if (!navigator.onLine || err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
       queuePendingSave(payload)
+      clearPartialCount()
       showSaveDialog('Offline gespeichert', 'Die Daten wurden lokal gespeichert und werden synchronisiert, sobald Sie wieder online sind.', goBack)
     } else {
       showSaveDialog('Fehler', 'Beim Speichern ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.')
@@ -588,6 +611,88 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+// --- Partial count persistence ---
+const PARTIAL_COUNT_KEY = 'stockcount_partial'
+
+function savePartialCount() {
+  if (step.value !== 2 || !selectedLocation.value) return
+  localStorage.setItem(PARTIAL_COUNT_KEY, JSON.stringify({
+    location: selectedLocation.value,
+    countDate: countDate.value,
+    articleSessions: articleSessions.value,
+    lastTouchedId: lastTouchedId.value,
+    savedAt: new Date().toISOString(),
+  }))
+}
+
+function clearPartialCount() {
+  localStorage.removeItem(PARTIAL_COUNT_KEY)
+}
+
+let saveDebounceTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null)
+function scheduleSave() {
+  if (saveDebounceTimer !== null) clearTimeout(saveDebounceTimer)
+  saveDebounceTimer = setTimeout(savePartialCount, 400)
+}
+
+watch(articleSessions, scheduleSave, { deep: true })
+
+// --- Resume dialog ---
+const resumeDialog = reactive({
+  show: false,
+  partial: /** @type {object | null} */ (null),
+})
+
+const resumePartialCountedCount = computed(() => {
+  if (!resumeDialog.partial) return 0
+  return Object.values(resumeDialog.partial.articleSessions ?? {}).filter(
+    sessions => sessions.some(s => s.pkgCount > 0 || s.unitCount > 0),
+  ).length
+})
+
+const resumePartialAge = computed(() => {
+  if (!resumeDialog.partial?.savedAt) return ''
+  const diff = Date.now() - new Date(resumeDialog.partial.savedAt).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return 'gerade eben'
+  if (mins < 60) return `vor ${mins} Minute${mins !== 1 ? 'n' : ''}`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `vor ${hours} Stunde${hours !== 1 ? 'n' : ''}`
+  return `vor ${Math.floor(hours / 24)} Tag${Math.floor(hours / 24) !== 1 ? 'en' : ''}`
+})
+
+function checkForPartialCount() {
+  try {
+    const raw = localStorage.getItem(PARTIAL_COUNT_KEY)
+    if (!raw) return
+    const partial = JSON.parse(raw)
+    const hasData = Object.values(partial.articleSessions ?? {}).some(
+      sessions => sessions.some(s => s.pkgCount > 0 || s.unitCount > 0),
+    )
+    if (!hasData) { clearPartialCount(); return }
+    resumeDialog.partial = partial
+    resumeDialog.show = true
+  } catch {
+    clearPartialCount()
+  }
+}
+
+async function continuePartialCount() {
+  const p = resumeDialog.partial
+  resumeDialog.show = false
+  selectedLocation.value = p.location
+  countDate.value = p.countDate
+  articleSessions.value = p.articleSessions
+  lastTouchedId.value = p.lastTouchedId ?? null
+  step.value = 2
+  await loadArticles()
+}
+
+function discardPartialCount() {
+  clearPartialCount()
+  resumeDialog.show = false
 }
 
 // --- Offline queue ---
@@ -670,6 +775,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   probeInterval = setInterval(probeOnline, PROBE_INTERVAL_MS)
   await loadLocations()
+  checkForPartialCount()
   syncPending()
   prefetchArticles()
 })
