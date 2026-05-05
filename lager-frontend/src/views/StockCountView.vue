@@ -174,6 +174,18 @@
       </v-card>
     </v-dialog>
 
+    <!-- Save result dialog -->
+    <v-dialog v-model="saveDialog.show" max-width="360" persistent>
+      <v-card>
+        <v-card-title class="text-subtitle-1">{{ saveDialog.title }}</v-card-title>
+        <v-card-text>{{ saveDialog.message }}</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="primary" @click="confirmSaveDialog">OK</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
       {{ snackbar.message }}
@@ -207,6 +219,24 @@ const articleSessions = ref({})
 const lastTouchedId = ref(null)
 
 const snackbar = reactive({ show: false, message: '', color: 'success' })
+const saveDialog = reactive({
+  show: false,
+  title: '',
+  message: '',
+  onClose: /** @type {(() => void) | null} */ (null),
+})
+
+function showSaveDialog(title, message, onClose = null) {
+  saveDialog.title = title
+  saveDialog.message = message
+  saveDialog.onClose = onClose
+  saveDialog.show = true
+}
+
+function confirmSaveDialog() {
+  saveDialog.show = false
+  saveDialog.onClose?.()
+}
 const offlineFallbackDialog = reactive({
   show: false,
   message: '',
@@ -524,20 +554,24 @@ function buildPayload() {
 async function save() {
   const payload = buildPayload()
   if (!payload.entries.length) {
-    showSnack('Keine Mengen erfasst.', 'warning')
+    showSaveDialog('Keine Einträge', 'Keine Mengen erfasst.')
+    return
+  }
+  if (!isOnline.value) {
+    queuePendingSave(payload)
+    showSaveDialog('Offline gespeichert', 'Die Daten wurden lokal gespeichert und werden synchronisiert, sobald Sie wieder online sind.', goBack)
     return
   }
   saving.value = true
   try {
     await api.post('/stock-count/entries/bulk/', payload)
-    showSnack(`${payload.entries.length} Einträge gespeichert.`)
-    goBack()
+    showSaveDialog('Gespeichert', `${payload.entries.length} Einträge wurden erfolgreich gespeichert.`, goBack)
   } catch (err) {
     if (!navigator.onLine || err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
       queuePendingSave(payload)
-      showSnack('Offline gespeichert. Wird synchronisiert sobald online.', 'warning')
+      showSaveDialog('Offline gespeichert', 'Die Daten wurden lokal gespeichert und werden synchronisiert, sobald Sie wieder online sind.', goBack)
     } else {
-      showSnack('Fehler beim Speichern.', 'error')
+      showSaveDialog('Fehler', 'Beim Speichern ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.')
     }
   } finally {
     saving.value = false
