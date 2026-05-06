@@ -35,6 +35,26 @@
           </v-btn>
         </v-col>
       </v-row>
+
+      <!-- Pending (offline-queued) saves -->
+      <div v-if="pendingSaves.length" class="mx-2 mt-4">
+        <div class="text-caption text-medium-emphasis d-flex align-center mb-2" style="gap: 4px">
+          <v-icon size="16">mdi-cloud-upload-outline</v-icon>
+          {{ pendingSaves.length }} ausstehende Übermittlung{{ pendingSaves.length !== 1 ? 'en' : '' }}
+        </div>
+        <v-card v-for="(p, i) in pendingSaves" :key="i" class="mb-2 pending-card" variant="tonal" color="warning" rounded="lg">
+          <v-card-text class="py-2 px-3 d-flex justify-space-between align-center">
+            <div class="d-flex align-center" style="gap: 8px">
+              <v-icon size="18">mdi-map-marker</v-icon>
+              <span class="font-weight-medium">{{ p.location_name }}</span>
+            </div>
+            <div class="text-right">
+              <div class="text-caption">{{ formatPendingDate(p.count_date) }}</div>
+              <div class="text-caption text-medium-emphasis">{{ p.entries.length }} Artikel</div>
+            </div>
+          </v-card-text>
+        </v-card>
+      </div>
     </div>
 
     <!-- Step 2: Article Counting -->
@@ -698,10 +718,25 @@ function discardPartialCount() {
 // --- Offline queue ---
 const PENDING_KEY = 'stockcount_pending_saves'
 
+const pendingSaves = ref(/** @type {object[]} */ ([]))
+
+function refreshPendingSaves() {
+  try {
+    pendingSaves.value = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]')
+  } catch {
+    pendingSaves.value = []
+  }
+}
+
+function formatPendingDate(iso) {
+  return new Date(iso).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 function queuePendingSave(payload) {
   const existing = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]')
   existing.push(payload)
   localStorage.setItem(PENDING_KEY, JSON.stringify(existing))
+  refreshPendingSaves()
 }
 
 async function syncPending() {
@@ -731,6 +766,7 @@ async function syncPending() {
   } else {
     localStorage.setItem(PENDING_KEY, JSON.stringify(remaining))
   }
+  refreshPendingSaves()
 }
 
 function onOnline() {
@@ -775,6 +811,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   probeInterval = setInterval(probeOnline, PROBE_INTERVAL_MS)
   await loadLocations()
+  refreshPendingSaves()
   checkForPartialCount()
   syncPending()
   prefetchArticles()
@@ -807,6 +844,10 @@ html.no-pull-to-refresh {
   min-height: 64px;
   white-space: normal;
   margin-bottom: 8px;
+}
+
+.pending-card {
+  border: 1px solid rgba(var(--v-theme-warning), 0.3);
 }
 
 /* Article list */
