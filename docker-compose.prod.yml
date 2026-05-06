@@ -24,6 +24,7 @@ services:
       - static_data:/app/staticfiles
       - media_data:/app/media
       - ./lagermanager/exports:/app/exports
+      - ./.git:/app/.git:ro
     env_file: .env
     depends_on:
       db:
