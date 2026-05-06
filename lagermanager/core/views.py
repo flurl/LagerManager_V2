@@ -1,3 +1,4 @@
+import subprocess
 from typing import Any
 
 from constance import config as constance_cfg
@@ -14,7 +15,12 @@ from rest_framework.views import APIView
 
 from .models import Department, Location, Period, UserPreferences
 from .permissions import DjangoModelPermissionsWithView
-from .serializers import DepartmentSerializer, LocationSerializer, PeriodSerializer, UserPreferencesSerializer
+from .serializers import (
+    DepartmentSerializer,
+    LocationSerializer,
+    PeriodSerializer,
+    UserPreferencesSerializer,
+)
 
 
 class PeriodViewSet(viewsets.ModelViewSet[Period]):
@@ -99,6 +105,27 @@ class ConfigView(APIView):
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
         return Response({'success': True})
+
+
+class VersionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        try:
+            commit_count = int(subprocess.check_output(
+                ["git", "rev-list", "--count", "HEAD"],
+                stderr=subprocess.DEVNULL,
+            ).decode().strip())
+        except Exception:
+            commit_count = 0
+        try:
+            commit_hash = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
+        except Exception:
+            commit_hash = "unknown"
+        return Response({"version": f"V2.{commit_count}", "hash": commit_hash})
 
 
 class MeView(APIView):

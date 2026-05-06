@@ -27,7 +27,7 @@
             </v-list>
           </v-menu>
           <v-list-item v-else :to="item.to" :href="item.href" :target="item.href ? '_blank' : undefined"
-            :prepend-icon="item.icon" :title="item.title" />
+            :prepend-icon="item.icon" :title="item.title" @click="item.action ? item.action() : undefined" />
         </template>
       </v-list>
     </v-menu>
@@ -104,6 +104,31 @@
     </v-card>
   </v-dialog>
 
+  <!-- About Dialog -->
+  <v-dialog v-model="aboutDialog" max-width="360">
+    <v-card>
+      <v-card-title class="d-flex align-center ga-2">
+        <v-icon>mdi-warehouse</v-icon>
+        Über LagerManager
+      </v-card-title>
+      <v-card-text>
+        <div v-if="aboutLoading" class="text-center py-4">
+          <v-progress-circular indeterminate size="24" />
+        </div>
+        <template v-else>
+          <div class="text-body-1">LagerManager {{ aboutVersion }} ({{ aboutHash }})</div>
+          <div class="text-body-2 text-medium-emphasis mt-1">
+            Frontend V2.{{ frontendCommitCount }} ({{ frontendCommitHash }})
+          </div>
+        </template>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="aboutDialog = false">Schließen</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <v-main>
     <v-container fluid>
       <router-view />
@@ -116,6 +141,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import { useAuthStore } from '../stores/auth'
 import NumberInput from './NumberInput.vue'
+import api from '../api'
 
 const periodStore = usePeriodStore()
 const auth = useAuthStore()
@@ -185,6 +211,7 @@ const allNavGroups = [
       { to: '/import', icon: 'mdi-database-import', title: 'Daten importieren', permission: 'core.run_import' },
       { to: '/settings', icon: 'mdi-tune', title: 'Einstellungen', permission: 'constance.change_config' },
       { href: '/admin/', icon: 'mdi-shield-account', title: 'Django Admin' },
+      { icon: 'mdi-information-outline', title: 'Über', action: openAbout },
     ],
   },
 ]
@@ -276,6 +303,29 @@ async function savePrefs() {
     prefsError.value = 'Fehler beim Speichern der Einstellungen.'
   } finally {
     prefsSaving.value = false
+  }
+}
+
+// About dialog
+/* eslint-disable no-undef */
+const frontendCommitCount = __APP_COMMIT_COUNT__
+const frontendCommitHash = __APP_COMMIT_HASH__
+/* eslint-enable no-undef */
+const aboutDialog = ref(false)
+const aboutLoading = ref(false)
+const aboutVersion = ref('')
+const aboutHash = ref('')
+
+async function openAbout() {
+  aboutDialog.value = true
+  if (aboutVersion.value) return
+  aboutLoading.value = true
+  try {
+    const { data } = await api.get('/version/')
+    aboutVersion.value = data.version
+    aboutHash.value = data.hash
+  } finally {
+    aboutLoading.value = false
   }
 }
 

@@ -1,9 +1,26 @@
+import { execSync } from 'child_process'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 import { VitePWA } from 'vite-plugin-pwa'
 
+function getGitInfo() {
+  try {
+    const count = execSync('git rev-list --count HEAD').toString().trim()
+    const hash = execSync('git rev-parse --short HEAD').toString().trim()
+    return { count, hash }
+  } catch {
+    return { count: '0', hash: 'unknown' }
+  }
+}
+
+const { count: gitCount, hash: gitHash } = getGitInfo()
+
 export default defineConfig({
+  define: {
+    __APP_COMMIT_COUNT__: JSON.stringify(gitCount),
+    __APP_COMMIT_HASH__: JSON.stringify(gitHash),
+  },
   plugins: [
     vue(),
     vuetify({ autoImport: true }),

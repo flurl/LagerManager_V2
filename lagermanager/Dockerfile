@@ -4,7 +4,10 @@ RUN apt-get update && apt-get install -y \
     gcc \
     freetds-dev \
     freetds-bin \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+RUN git config --global --add safe.directory /app
 
 WORKDIR /app
 

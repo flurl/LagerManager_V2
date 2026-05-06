@@ -21,6 +21,7 @@ services:
     volumes:
       - ./lagermanager:/app
       - media_data:/app/media
+      - ./.git:/app/.git:ro
     ports:
       - "8000:8000"
     environment:
