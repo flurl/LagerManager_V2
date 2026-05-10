@@ -38,6 +38,24 @@
 
       <!-- Pending (offline-queued) saves -->
       <div v-if="pendingSaves.length" class="mx-2 mt-4">
+        <div class="d-flex mb-3" style="gap: 8px">
+          <v-btn
+            color="primary"
+            size="small"
+            :disabled="!isOnline || syncing"
+            :loading="syncing"
+            prepend-icon="mdi-cloud-upload"
+            @click="syncPending"
+          >Synchronisieren</v-btn>
+          <v-btn
+            variant="outlined"
+            color="error"
+            size="small"
+            :disabled="!isOnline || syncing"
+            prepend-icon="mdi-delete-sweep"
+            @click="deleteSyncedDialog.show = true"
+          >Synchronisierte löschen</v-btn>
+        </div>
         <div class="text-caption text-medium-emphasis d-flex align-center mb-2" style="gap: 4px">
           <v-icon size="16">mdi-cloud-upload-outline</v-icon>
           {{ pendingSaves.length }} ausstehende Übermittlung{{ pendingSaves.length !== 1 ? 'en' : '' }}
@@ -48,9 +66,22 @@
               <v-icon size="18">mdi-map-marker</v-icon>
               <span class="font-weight-medium">{{ p.location_name }}</span>
             </div>
-            <div class="text-right">
-              <div class="text-caption">{{ formatPendingDate(p.count_date) }}</div>
-              <div class="text-caption text-medium-emphasis">{{ p.entries.length }} Artikel</div>
+            <div class="d-flex align-center" style="gap: 8px">
+              <div class="text-right">
+                <div class="text-caption">{{ formatPendingDate(p.count_date) }}</div>
+                <div class="text-caption text-medium-emphasis">{{ p.entries.length }} Artikel</div>
+              </div>
+              <v-progress-circular
+                v-if="pendingStatuses[i]?.status === 'checking' || pendingStatuses[i]?.status === 'syncing'"
+                indeterminate size="18" width="2" color="primary"
+              />
+              <v-tooltip v-else-if="pendingStatuses[i]?.status === 'failed'" :text="pendingStatuses[i]?.error ?? 'Fehler'">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" color="error" size="18">mdi-alert-circle</v-icon>
+                </template>
+              </v-tooltip>
+              <v-icon v-else-if="pendingStatuses[i]?.status === 'synced'" color="success" size="18">mdi-check-circle</v-icon>
+              <v-icon v-else-if="pendingStatuses[i]?.status === 'on_server'" color="info" size="18">mdi-cloud-check</v-icon>
             </div>
           </v-card-text>
         </v-card>
@@ -222,6 +253,31 @@
       </v-card>
     </v-dialog>
 
+    <!-- Delete synced dialog -->
+    <v-dialog v-model="deleteSyncedDialog.show" max-width="420" persistent>
+      <v-card>
+        <v-card-title class="text-subtitle-1">Synchronisierte Einträge löschen</v-card-title>
+        <v-card-text>
+          <p class="mb-3">Lokal gespeicherte Zählungen, die bereits am Server vorhanden sind, werden vom Gerät entfernt.</p>
+          <v-checkbox
+            v-model="deleteSyncedDialog.includeUnsynced"
+            label="Auch nicht synchronisierte Einträge löschen"
+            color="error"
+            density="compact"
+            hide-details
+          />
+          <p v-if="deleteSyncedDialog.includeUnsynced" class="text-caption text-error mt-2">
+            Achtung: Nicht synchronisierte Zählungen gehen unwiderruflich verloren.
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="deleteSyncedDialog.show = false">Abbrechen</v-btn>
+          <v-spacer />
+          <v-btn color="error" @click="deleteSyncedCachedCounts">Löschen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Save result dialog -->
     <v-dialog v-model="saveDialog.show" max-width="360" persistent>
       <v-card>
@@ -265,6 +321,9 @@ const articles = ref([])
  */
 const articleSessions = ref({})
 const lastTouchedId = ref(null)
+
+const syncing = ref(false)
+const pendingStatuses = ref(/** @type {{status: string, error: string | null}[]} */ ([]))
 
 const snackbar = reactive({ show: false, message: '', color: 'success' })
 const saveDialog = reactive({
@@ -726,6 +785,7 @@ function refreshPendingSaves() {
   } catch {
     pendingSaves.value = []
   }
+  pendingStatuses.value = pendingSaves.value.map(() => ({ status: 'idle', error: null }))
 }
 
 function formatPendingDate(iso) {
@@ -740,38 +800,95 @@ function queuePendingSave(payload) {
 }
 
 async function syncPending() {
-  const raw = localStorage.getItem(PENDING_KEY)
-  if (!raw) return
-  const queue = JSON.parse(raw)
-  if (!queue.length) return
-
-  const remaining = []
-  for (const payload of queue) {
-    try {
-      await api.post('/stock-count/entries/bulk/', payload)
-    } catch (err) {
-      if (err.response?.status === 401) {
-        // JWT expired — keep in queue, user must re-login
-        remaining.push(payload)
+  if (!isOnline.value || syncing.value) return
+  syncing.value = true
+  try {
+    refreshPendingSaves()
+    let synced = 0, onServer = 0, failed = 0
+    for (let i = 0; i < pendingSaves.value.length; i++) {
+      const p = pendingSaves.value[i]
+      const date = p.count_date.split('T')[0]
+      pendingStatuses.value[i] = { status: 'checking', error: null }
+      try {
+        const existing = await api.get('/stock-count/entries/', {
+          params: { location_id: p.location_id, count_date: date },
+        })
+        if ((existing.data?.length ?? 0) > 0) {
+          pendingStatuses.value[i] = { status: 'on_server', error: null }
+          onServer++
+          continue
+        }
+        pendingStatuses.value[i] = { status: 'syncing', error: null }
+        const resp = await api.post('/stock-count/entries/bulk/', p)
+        if (resp.status === 200 && typeof resp.data?.saved === 'number') {
+          pendingStatuses.value[i] = { status: 'synced', error: null }
+          synced++
+        } else {
+          pendingStatuses.value[i] = { status: 'failed', error: 'Unerwartete Antwort' }
+          failed++
+        }
+      } catch (err) {
+        const msg = err.response?.status === 401
+          ? 'Anmeldung abgelaufen'
+          : err.response?.status
+            ? `Server-Fehler ${err.response.status}`
+            : 'Netzwerkfehler'
+        pendingStatuses.value[i] = { status: 'failed', error: msg }
+        failed++
       }
-      // Other errors: drop to avoid infinite retry of bad data
     }
+    showSaveDialog(
+      'Synchronisation abgeschlossen',
+      `${synced} synchronisiert, ${onServer} bereits am Server, ${failed} fehlgeschlagen.\nLokale Daten bleiben erhalten.`,
+    )
+  } finally {
+    syncing.value = false
   }
+}
 
-  if (remaining.length === 0) {
-    localStorage.removeItem(PENDING_KEY)
-    if (queue.length > remaining.length) {
-      showSnack(`${queue.length - remaining.length} offline Einträge synchronisiert.`)
+const deleteSyncedDialog = reactive({ show: false, includeUnsynced: false })
+
+watch(() => deleteSyncedDialog.show, (open) => {
+  if (open) deleteSyncedDialog.includeUnsynced = false
+})
+
+async function deleteSyncedCachedCounts() {
+  const includeUnsynced = deleteSyncedDialog.includeUnsynced
+  deleteSyncedDialog.show = false
+  if (!isOnline.value || syncing.value) return
+  syncing.value = true
+  try {
+    const queue = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]')
+    if (includeUnsynced) {
+      localStorage.removeItem(PENDING_KEY)
+      refreshPendingSaves()
+      showSaveDialog('Lokaler Cache bereinigt', `${queue.length} Einträge entfernt (inkl. nicht synchronisierter).`)
+      return
     }
-  } else {
+    const remaining = []
+    let removed = 0
+    for (const p of queue) {
+      const date = p.count_date.split('T')[0]
+      try {
+        const res = await api.get('/stock-count/entries/', {
+          params: { location_id: p.location_id, count_date: date },
+        })
+        if ((res.data?.length ?? 0) > 0) removed++
+        else remaining.push(p)
+      } catch {
+        remaining.push(p)
+      }
+    }
     localStorage.setItem(PENDING_KEY, JSON.stringify(remaining))
+    refreshPendingSaves()
+    showSaveDialog('Lokaler Cache bereinigt', `${removed} bereits synchronisierte Einträge entfernt.`)
+  } finally {
+    syncing.value = false
   }
-  refreshPendingSaves()
 }
 
 function onOnline() {
   isOnline.value = true
-  syncPending()
   prefetchArticles()
 }
 
@@ -813,7 +930,6 @@ onMounted(async () => {
   await loadLocations()
   refreshPendingSaves()
   checkForPartialCount()
-  syncPending()
   prefetchArticles()
 })
 
