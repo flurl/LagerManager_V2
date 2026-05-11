@@ -107,9 +107,10 @@ MEDIA_URL: str = '/media/'
 MEDIA_ROOT: Path = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD: str = 'django.db.models.BigAutoField'
 
-SIMPLE_JWT: dict[str, timedelta] = {
+SIMPLE_JWT: dict[str, timedelta | bool] = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'REFRESH_TOKEN_LIFETIME': timedelta(weeks=4),
+    'ROTATE_REFRESH_TOKENS': True,
 }
 
 REST_FRAMEWORK: dict[str, Any] = {
