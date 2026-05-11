@@ -379,6 +379,7 @@ class ArticleMeta(models.Model):
     package_size = models.DecimalField(
         max_digits=10, decimal_places=4, null=True, blank=True
     )
+    minimum_inventory = models.IntegerField(default=0)
     extra = models.JSONField(default=dict, blank=True)
 
     class Meta:

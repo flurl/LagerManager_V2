@@ -57,6 +57,11 @@
         <span v-else class="text-disabled">—</span>
       </template>
 
+      <template #item.minimum_inventory="{ item }">
+        <span v-if="item.meta?.minimum_inventory">{{ item.meta.minimum_inventory }}</span>
+        <span v-else class="text-disabled">—</span>
+      </template>
+
       <template #item.actions="{ item }">
         <v-icon size="small" @click.stop="openEdit(item)">mdi-pencil</v-icon>
       </template>
@@ -84,6 +89,16 @@
             min="0"
             step="any"
             clearable
+            density="compact"
+            class="mb-4"
+            hide-details
+          />
+          <v-text-field
+            v-model.number="form.minimum_inventory"
+            label="Mindestbestand"
+            type="number"
+            min="0"
+            step="1"
             density="compact"
             hide-details
           />
@@ -116,13 +131,14 @@ const onlyWarehouse = ref(false)
 const dialog = ref(false)
 const saving = ref(false)
 const editingArticle = ref(null)
-const form = ref({ is_hidden: false, sub_articles: [], package_size: null })
+const form = ref({ is_hidden: false, sub_articles: [], package_size: null, minimum_inventory: 0 })
 
 const headers = [
   { title: 'Artikel', key: 'name' },
   { title: 'Versteckt', key: 'is_hidden', sortable: false },
   { title: 'Unter-Artikel', key: 'sub_articles', sortable: false },
   { title: 'Packungsgröße', key: 'package_size', sortable: false },
+  { title: 'Mindestbestand', key: 'minimum_inventory', sortable: false },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
 
@@ -164,7 +180,7 @@ async function fetchData() {
 }
 
 async function toggleHidden(row, value) {
-  await saveMeta(row, { is_hidden: value, sub_articles: row.meta?.sub_articles ?? [], package_size: row.meta?.package_size ?? null })
+  await saveMeta(row, { is_hidden: value, sub_articles: row.meta?.sub_articles ?? [], package_size: row.meta?.package_size ?? null, minimum_inventory: row.meta?.minimum_inventory ?? 0 })
 }
 
 function openEdit(row) {
@@ -173,6 +189,7 @@ function openEdit(row) {
     is_hidden: row.meta?.is_hidden ?? false,
     sub_articles: row.meta?.sub_articles ? [...row.meta.sub_articles] : [],
     package_size: row.meta?.package_size ?? null,
+    minimum_inventory: row.meta?.minimum_inventory ?? 0,
   }
   dialog.value = true
 }
