@@ -44,6 +44,11 @@ const routes = [
     meta: { title: 'Aktueller Lagerstand', permission: 'core.view_reports' },
   },
   {
+    path: '/reports/below-minimum-stock',
+    component: () => import('./views/reports/BelowMinimumStockTableReport.vue'),
+    meta: { title: 'Unter Mindestbestand', permission: 'core.view_reports' },
+  },
+  {
     path: '/reports/inventory',
     component: () => import('./views/reports/InventoryTableReport.vue'),
     meta: { title: 'Inventur', permission: 'core.view_reports' },

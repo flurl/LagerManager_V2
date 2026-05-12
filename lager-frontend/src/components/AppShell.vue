@@ -196,6 +196,7 @@ const allNavGroups = [
         items: [
           { to: '/reports/stock-level', icon: 'mdi-chart-line', title: 'Lagerstand' },
           { to: '/reports/current-stock-level', icon: 'mdi-package-variant', title: 'Aktueller Lagerstand' },
+          { to: '/reports/below-minimum-stock', icon: 'mdi-alert-circle-outline', title: 'Unter Mindestbestand' },
           { to: '/reports/inventory', icon: 'mdi-clipboard-text', title: 'Inventur' },
           { to: '/reports/consumption', icon: 'mdi-chart-areaspline', title: 'Verbrauch' },
           { to: '/reports/consumption-totals', icon: 'mdi-sigma', title: 'Gesamtverbrauch' },

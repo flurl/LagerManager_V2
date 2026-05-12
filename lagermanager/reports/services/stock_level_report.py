@@ -82,6 +82,48 @@ def get_stock_level_chart_data(period_id: int) -> dict[str, Any]:
     }
 
 
+def get_below_minimum_stock(period_id: int) -> list[dict[str, Any]]:
+    """
+    Returns articles whose current stock is below their minimum_inventory threshold.
+    Only considers articles where minimum_inventory > 0.
+    Each record includes: article, stock, minimum_inventory, shortage, plus enrichment fields.
+    Sorted by shortage descending (worst first).
+    """
+    from pos_import.models import Article, ArticleMeta
+
+    rows: list[dict[str, Any]] = get_current_stock_levels(period_id)
+    if not rows:
+        return []
+
+    name_to_source_id: dict[str, int] = {
+        a.name: a.source_id
+        for a in Article.objects.filter(period_id=period_id).only('name', 'source_id')
+    }
+    min_inv_map: dict[int, int] = {
+        m.source_id: m.minimum_inventory
+        for m in ArticleMeta.objects.filter(period_id=period_id, minimum_inventory__gt=0)
+    }
+
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        source_id: int | None = name_to_source_id.get(row['article'])
+        if source_id is None:
+            continue
+        min_inv: int | None = min_inv_map.get(source_id)
+        if min_inv is None:
+            continue
+        stock: float = row['stock'] or 0.0
+        if stock < min_inv:
+            result.append({
+                **row,
+                'minimum_inventory': min_inv,
+                'shortage': round(min_inv - stock, 3),
+            })
+
+    result.sort(key=lambda r: r['shortage'], reverse=True)
+    return result
+
+
 def get_current_stock_levels(period_id: int) -> list[dict[str, Any]]:
     """
     Returns the current stock level for each article — i.e. the running stock

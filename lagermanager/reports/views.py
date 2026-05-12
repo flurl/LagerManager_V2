@@ -17,6 +17,7 @@ from .services.consumption_report import (
 )
 from .services.inventory_report import get_inventory_report
 from .services.stock_level_report import (
+    get_below_minimum_stock,
     get_current_stock_levels,
     get_stock_level_chart_data,
 )
@@ -114,6 +115,17 @@ class TotalMovementsReportView(APIView):
             date_grouping=date_grouping,
             group_by_partner=group_by_partner,
         )
+        return Response(data)
+
+
+class BelowMinimumStockReportView(APIView):
+    permission_classes = [IsAuthenticated, _view_reports]
+
+    def get(self, request: Request) -> Response:
+        period_id = request.query_params.get('period_id')
+        if not period_id:
+            return Response({'error': 'period_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        data = get_below_minimum_stock(int(period_id))
         return Response(data)
 
 
