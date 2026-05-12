@@ -48,6 +48,7 @@ INSTALLED_APPS: list[str] = [
     'reports',
     'stock_count',
     'staff_consumption',
+    'notifications',
 ]
 
 MIDDLEWARE: list[str] = [

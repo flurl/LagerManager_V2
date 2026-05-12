@@ -15,6 +15,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path('api/', include('reports.urls')),
     path('api/', include('stock_count.urls')),
     path('api/', include('staff_consumption.urls')),
+    path('api/', include('notifications.urls')),
 ]
 
 if settings.DEBUG:

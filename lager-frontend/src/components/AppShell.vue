@@ -40,6 +40,8 @@
       <v-icon>mdi-plus-circle-outline</v-icon>
     </v-btn>
 
+    <NotificationBell />
+
     <!-- User menu -->
     <v-menu :open-delay="0" :close-delay="0">
       <template #activator="{ props }">
@@ -141,6 +143,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import { useAuthStore } from '../stores/auth'
 import NumberInput from './NumberInput.vue'
+import NotificationBell from './NotificationBell.vue'
 import api from '../api'
 
 const periodStore = usePeriodStore()

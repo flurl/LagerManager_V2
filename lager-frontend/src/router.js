@@ -118,6 +118,11 @@ const routes = [
     component: () => import('./views/ForbiddenView.vue'),
     meta: { title: 'Kein Zugriff', public: true },
   },
+  {
+    path: '/notifications',
+    component: () => import('./views/NotificationView.vue'),
+    meta: { title: 'Benachrichtigungen' },
+  },
 ]
 
 const router = createRouter({
@@ -143,7 +148,7 @@ router.beforeEach(async (to) => {
     }
   }
   const perm = to.meta.permission
-  if (!perm || !auth.hasPermission(perm)) {
+  if (perm && !auth.hasPermission(perm)) {
     return { path: '/forbidden' }
   }
 })

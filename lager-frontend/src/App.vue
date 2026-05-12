@@ -17,14 +17,16 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
+import { useNotificationsStore } from './stores/notifications'
 import { useAppTheme } from './composables/useAppTheme'
 import AppShell from './components/AppShell.vue'
 import LoginView from './views/LoginView.vue'
 
 const auth = useAuthStore()
+const notifications = useNotificationsStore()
 const route = useRoute()
 useAppTheme()
 
@@ -37,6 +39,20 @@ onMounted(async () => {
     }
   }
 })
+
+watch(
+  () => auth.isAuthenticated,
+  (authenticated) => {
+    if (authenticated) {
+      notifications.fetchUnreadCount()
+      notifications.startPolling()
+    } else {
+      notifications.stopPolling()
+      notifications.reset()
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style>
