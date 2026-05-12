@@ -42,6 +42,8 @@
             v-for="item in displayItems"
             :key="item.id"
             :class="{ 'font-weight-bold': !item.is_read }"
+            :style="item.link ? 'cursor: pointer' : 'cursor: default'"
+            @click="item.link && navigateTo(item)"
           >
             <template #prepend>
               <v-icon :color="severityColor(item.severity)" size="20" class="mr-1">
@@ -51,6 +53,7 @@
 
             <v-list-item-title :class="{ 'font-weight-medium': !item.is_read }">
               {{ item.title }}
+              <v-icon v-if="item.link" size="14" class="ml-1" color="primary">mdi-open-in-app</v-icon>
             </v-list-item-title>
             <v-list-item-subtitle v-if="item.message" class="text-truncate">
               {{ item.message }}
@@ -117,6 +120,11 @@ async function markAllAsRead() {
 function goToAll() {
   open.value = false
   router.push('/notifications')
+}
+
+function navigateTo(item) {
+  open.value = false
+  router.push(item.link)
 }
 
 const SEVERITY_COLOR = {

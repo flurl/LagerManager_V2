@@ -2,6 +2,27 @@ from django.conf import settings
 from django.db import models
 
 
+class StockAlertSubscription(models.Model):
+    """Users who receive daily below-minimum-stock notifications."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='stock_alert_subscription',
+        verbose_name='Benutzer',
+    )
+    active = models.BooleanField(default=True, verbose_name='Aktiv')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Lagerbestand-Alarm-Abonnement'
+        verbose_name_plural = 'Lagerbestand-Alarm-Abonnements'
+
+    def __str__(self) -> str:
+        status = 'aktiv' if self.active else 'inaktiv'
+        return f'{self.user} ({status})'
+
+
 class Notification(models.Model):
     class Severity(models.TextChoices):
         INFO = 'info', 'Information'

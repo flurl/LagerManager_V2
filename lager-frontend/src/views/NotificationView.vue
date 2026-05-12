@@ -45,6 +45,14 @@
         {{ formatDate(item.created_at) }}
       </template>
 
+      <template #item.title="{ item }">
+        <router-link v-if="item.link" :to="item.link" class="text-decoration-none">
+          {{ item.title }}
+          <v-icon size="14" class="ml-1">mdi-open-in-app</v-icon>
+        </router-link>
+        <span v-else>{{ item.title }}</span>
+      </template>
+
       <template #item.actions="{ item }">
         <v-icon
           v-if="!item.is_read"

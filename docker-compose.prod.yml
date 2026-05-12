@@ -31,6 +31,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  cron:
+    build: ./lagermanager
+    command: supercronic /app/crontab
+    env_file: .env
+    environment:
+      TZ: Europe/Vienna
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   nginx:
     image: nginx:alpine
     ports:

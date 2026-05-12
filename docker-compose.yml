@@ -33,6 +33,18 @@ services:
       db:
         condition: service_healthy
 
+  cron:
+    build: ./lagermanager
+    command: supercronic /app/crontab
+    environment:
+      DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/lagermanager
+      DJANGO_DEBUG: "True"
+      DJANGO_SECRET_KEY: dev-secret-key-change-in-production
+      TZ: Europe/Vienna
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   media_data:
