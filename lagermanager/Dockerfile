@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+ARG TARGETARCH
 RUN curl -fsSL \
-    "https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-amd64" \
+    "https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}" \
     -o /usr/local/bin/supercronic \
     && chmod +x /usr/local/bin/supercronic
 
