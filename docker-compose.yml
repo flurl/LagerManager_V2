@@ -35,7 +35,7 @@ services:
 
   cron:
     build: ./lagermanager
-    command: supercronic /app/crontab
+    command: /usr/local/bin/supercronic /app/crontab
     environment:
       DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/lagermanager
       DJANGO_DEBUG: "True"

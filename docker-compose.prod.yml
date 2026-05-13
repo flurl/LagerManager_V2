@@ -33,7 +33,7 @@ services:
 
   cron:
     build: ./lagermanager
-    command: supercronic /app/crontab
+    command: /usr/local/bin/supercronic /app/crontab
     env_file: .env
     environment:
       TZ: Europe/Vienna
