@@ -124,6 +124,24 @@ def get_below_minimum_stock(period_id: int) -> list[dict[str, Any]]:
     return result
 
 
+def _build_initial_inventory_map(period_id: int) -> dict[str, float]:
+    """Returns {article_name: total_initial_quantity} summed across all locations."""
+    from django.db.models import Sum
+
+    from inventory.models import InitialInventory
+
+    result: dict[str, float] = {}
+    for entry in (
+        InitialInventory.objects
+        .filter(period_id=period_id)
+        .select_related('article')
+        .values('article__name')
+        .annotate(total=Sum('quantity'))
+    ):
+        result[entry['article__name']] = float(entry['total'])
+    return result
+
+
 def get_current_stock_levels(period_id: int) -> list[dict[str, Any]]:
     """
     Returns the current stock level for each article — i.e. the running stock
@@ -132,7 +150,7 @@ def get_current_stock_levels(period_id: int) -> list[dict[str, Any]]:
     Builds on get_stock_level_chart_data() and extracts the last date's value
     from each dataset, returning a flat list of records sorted by article name.
     Each record includes: article, stock, purchase_price, total_value,
-    warehouse_unit, warehouse_unit_multiplier.
+    warehouse_unit, warehouse_unit_multiplier, initial_inventory, stock_minus_initial.
     """
     from .article_enrichment import enrich_with_article_data
 
@@ -146,4 +164,14 @@ def get_current_stock_levels(period_id: int) -> list[dict[str, Any]]:
         if ds['data'] and ds['data'][-1] is not None
     ]
     rows.sort(key=lambda r: r['article'])
-    return enrich_with_article_data(rows, period_id, quantity_key='stock')
+    enriched: list[dict[str, Any]] = enrich_with_article_data(
+        rows, period_id, quantity_key='stock')
+
+    init_inv_map: dict[str, float] = _build_initial_inventory_map(period_id)
+    for row in enriched:
+        init_inv: float = init_inv_map.get(row['article'], 0.0)
+        row['initial_inventory'] = init_inv
+        row['stock_minus_initial'] = round(
+            (row.get('stock') or 0.0) - init_inv, 3)
+
+    return enriched

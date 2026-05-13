@@ -16,7 +16,13 @@
     <template #item.stock="{ item }">{{ item.stock.toFixed(3) }}</template>
     <template #item.purchase_price="{ item }">{{ item.purchase_price?.toFixed(4) ?? '—' }}</template>
     <template #item.total_value="{ item }">{{ item.total_value?.toFixed(2) ?? '—' }}</template>
-    <template #item.warehouse_unit_multiplier="{ item }">{{ item.warehouse_unit_multiplier?.toFixed(4) ?? '—' }}</template>
+    <template #item.warehouse_unit_multiplier="{ item }">{{ item.warehouse_unit_multiplier?.toFixed(4) ?? '—'
+    }}</template>
+    <template #item.stock_minus_initial="{ item }">
+      <span :class="item.stock_minus_initial < 0 ? 'text-error' : item.stock_minus_initial > 0 ? 'text-success' : ''">
+        {{ item.stock_minus_initial?.toFixed(3) ?? '—' }}
+      </span>
+    </template>
   </ReportTable>
 </template>
 
@@ -38,6 +44,7 @@ const filteredItems = computed(() => items.value.filter((item) => shouldInclude(
 const headers = [
   { title: 'Artikel', key: 'article' },
   { title: 'Bestand', key: 'stock', align: 'end' },
+  { title: 'Bestand - Initial', key: 'stock_minus_initial', align: 'end' },
   { title: 'EK-Preis', key: 'purchase_price', align: 'end' },
   { title: 'Warenwert', key: 'total_value', align: 'end' },
   { title: 'Einheit', key: 'warehouse_unit' },
