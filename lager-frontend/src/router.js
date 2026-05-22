@@ -24,6 +24,11 @@ const routes = [
     meta: { title: 'Gezählter Stand', permission: 'inventory.view_physicalcount' },
   },
   {
+    path: '/physical-counts/overview',
+    component: () => import('./views/PhysicalCountOverviewView.vue'),
+    meta: { title: 'Gezählter Stand – Übersicht', permission: 'inventory.view_physicalcount' },
+  },
+  {
     path: '/stock-count',
     component: () => import('./views/StockCountView.vue'),
     meta: { title: 'Bestandszählung', fullscreen: true, permission: 'stock_count.view_stockcountentry' },
@@ -32,6 +37,11 @@ const routes = [
     path: '/stock-count-entries',
     component: () => import('./views/StockCountEntriesView.vue'),
     meta: { title: 'Zählergebnisse', permission: 'stock_count.view_stockcountentry' },
+  },
+  {
+    path: '/stock-count-entries/overview',
+    component: () => import('./views/StockCountEntriesOverviewView.vue'),
+    meta: { title: 'Bestandszählung – Übersicht', permission: 'stock_count.view_stockcountentry' },
   },
   {
     path: '/reports/stock-level',

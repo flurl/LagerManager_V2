@@ -168,14 +168,14 @@ const allNavGroups = [
       { to: '/stock-movements', icon: 'mdi-receipt-text', title: 'Lagerbewegungen', permission: 'deliveries.view_stockmovement' },
       { to: '/period-start-stock', icon: 'mdi-format-list-numbered', title: 'Periode Anfangs-Stand', permission: 'inventory.view_periodstartstocklevel' },
       { to: '/initial-inventory', icon: 'mdi-clipboard-list', title: 'Initialer Stand', permission: 'inventory.view_initialinventory' },
-      { to: '/physical-counts', icon: 'mdi-counter', title: 'Gezählter Stand', permission: 'inventory.view_physicalcount' },
+      { to: '/physical-counts/overview', icon: 'mdi-counter', title: 'Gezählter Stand', permission: 'inventory.view_physicalcount' },
       {
         title: 'Bestandszählung',
         icon: 'mdi-table-edit',
         permission: 'stock_count.view_stockcountentry',
         items: [
           { to: '/stock-count', icon: 'mdi-cellphone-check', title: 'Bestandszählung App', permission: 'stock_count.view_stockcountentry' },
-          { to: '/stock-count-entries', icon: 'mdi-database-import', title: 'Bestandszählung Import', permission: 'stock_count.view_stockcountentry' },]
+          { to: '/stock-count-entries/overview', icon: 'mdi-database-import', title: 'Bestandszählung Import', permission: 'stock_count.view_stockcountentry' },]
       },
       {
         title: 'Personal-/Eigenverbrauch',

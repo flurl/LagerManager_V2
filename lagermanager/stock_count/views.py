@@ -2,10 +2,12 @@ import datetime as dt
 from typing import Any
 
 from core.permissions import DjangoModelPermissionsWithView, require_perm
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from inventory.models import InitialInventory
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -159,3 +161,28 @@ class StockCountEntryViewSet(viewsets.ModelViewSet[StockCountEntry]):
         if count_date:
             qs = qs.filter(count_date__date=count_date)
         return qs
+
+    @action(detail=False, methods=['get'], url_path='dates')
+    def dates(self, request: Request) -> Response:
+        qs = (
+            StockCountEntry.objects
+            .annotate(day=TruncDate('count_date'))
+            .values('day', 'location_id', 'location_name')
+            .annotate(count=Count('id'))
+            .order_by('-day', 'location_name')
+        )
+        return Response(list(qs))
+
+    @action(detail=False, methods=['delete'], url_path='by-day')
+    def by_day(self, request: Request) -> Response:
+        day = request.query_params.get('day')
+        location_id = request.query_params.get('location_id')
+        if not day or not location_id:
+            return Response(
+                {'error': 'day and location_id required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        count, _ = StockCountEntry.objects.filter(
+            count_date__date=day, location_id=location_id,
+        ).delete()
+        return Response({'deleted': count})

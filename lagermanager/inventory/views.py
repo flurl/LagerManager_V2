@@ -6,7 +6,8 @@ from core.models import Location
 from core.permissions import DjangoModelPermissionsWithView
 from core.services.period import get_period_for_datetime
 from django.conf import settings
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
+from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -155,6 +156,31 @@ class PhysicalCountViewSet(viewsets.ModelViewSet[PhysicalCount]):
             if period:
                 obj.period = period
                 obj.save(update_fields=['period'])
+
+    @action(detail=False, methods=['get'], url_path='dates')
+    def dates(self, request: Request) -> Response:
+        qs = (
+            self.get_queryset()
+            .annotate(day=TruncDate('date'))
+            .values('day')
+            .annotate(count=Count('id'))
+            .order_by('-day')
+        )
+        return Response(list(qs))
+
+    @action(detail=False, methods=['delete'], url_path='by-day')
+    def by_day(self, request: Request) -> Response:
+        day = request.query_params.get('day')
+        period_id = request.query_params.get('period_id')
+        if not day or not period_id:
+            return Response(
+                {'error': 'day and period_id required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        count, _ = PhysicalCount.objects.filter(
+            date__date=day, period_id=period_id,
+        ).delete()
+        return Response({'deleted': count})
 
     @action(detail=False, methods=['post'])
     def init_date(self, request: Request) -> Response:

@@ -50,11 +50,13 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
 import NumberInput from '../components/NumberInput.vue'
 
 const periodStore = usePeriodStore()
+const route = useRoute()
 const items = ref([])
 const filterDate = ref('')
 const loading = ref(false)
@@ -126,5 +128,8 @@ function formatDate(dt) {
 
 watch(() => periodStore.currentPeriodId, fetchItems)
 watch(filterDate, fetchItems)
-onMounted(fetchItems)
+onMounted(() => {
+  if (route.query.date) filterDate.value = route.query.date
+  fetchItems()
+})
 </script>

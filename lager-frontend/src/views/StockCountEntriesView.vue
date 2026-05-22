@@ -2,8 +2,7 @@
   <div>
     <v-row class="mb-2" align="center">
       <v-col><h2>Zählergebnisse</h2></v-col>
-      <v-col cols="auto" class="d-flex gap-2">
-        <v-btn color="secondary" prepend-icon="mdi-archive-arrow-down" @click="openInitDialog">+Init. Stand</v-btn>
+      <v-col cols="auto">
         <v-btn color="primary" prepend-icon="mdi-plus" @click="openNew">Neu</v-btn>
       </v-col>
     </v-row>
@@ -155,44 +154,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- Init from initial inventory dialog -->
-    <v-dialog v-model="initDialog" max-width="420">
-      <v-card>
-        <v-card-title>Init. Stand importieren</v-card-title>
-        <v-card-text>
-          <v-select
-            v-model="initLocationIds"
-            :items="locations"
-            item-title="name"
-            item-value="id"
-            label="Standorte"
-            multiple
-            chips
-            closable-chips
-            class="mb-3"
-          />
-          <v-text-field
-            v-model="initDate"
-            label="Datum"
-            type="date"
-            hide-details
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="initDialog = false">Abbrechen</v-btn>
-          <v-btn
-            color="primary"
-            :loading="initLoading"
-            :disabled="!initLocationIds.length || !initDate"
-            @click="doInitFromInventory"
-          >
-            Importieren
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
       {{ snackbar.message }}
     </v-snackbar>
@@ -201,10 +162,10 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '../api'
-import { usePeriodStore } from '../stores/period'
 
-const periodStore = usePeriodStore()
+const route = useRoute()
 
 const items = ref([])
 const locations = ref([])
@@ -215,12 +176,6 @@ const filterLocationId = ref(null)
 const filterDate = ref(null)
 const selectedLocation = ref(null)
 const snackbar = reactive({ show: false, message: '', color: 'success' })
-
-// Init from initial inventory state
-const initDialog = ref(false)
-const initLocationIds = ref([])
-const initDate = ref(new Date().toISOString().substring(0, 10))
-const initLoading = ref(false)
 
 // Import state
 const importDialog = ref(false)
@@ -431,33 +386,9 @@ async function forceImport() {
   }
 }
 
-function openInitDialog() {
-  initLocationIds.value = []
-  initDate.value = new Date().toISOString().substring(0, 10)
-  initDialog.value = true
-}
-
-async function doInitFromInventory() {
-  if (!initLocationIds.value.length || !initDate.value) return
-  initLoading.value = true
-  try {
-    const res = await api.post('/stock-count/entries/from-initial-inventory/', {
-      location_ids: initLocationIds.value,
-      count_date: `${initDate.value}T12:00:00`,
-      period_id: periodStore.currentPeriodId,
-    })
-    initDialog.value = false
-    showSnack(`${res.data.created} erstellt, ${res.data.updated} aktualisiert.`)
-    await fetchItems()
-  } catch (err) {
-    const detail = err.response?.data
-    showSnack(typeof detail === 'string' ? detail : 'Fehler beim Importieren.', 'error')
-  } finally {
-    initLoading.value = false
-  }
-}
-
 onMounted(async () => {
+  if (route.query.date) filterDate.value = route.query.date
+  if (route.query.location_id) filterLocationId.value = Number(route.query.location_id)
   await fetchLocations()
   await fetchItems()
 })

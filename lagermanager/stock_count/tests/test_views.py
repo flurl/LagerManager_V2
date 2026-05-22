@@ -347,6 +347,73 @@ class StockCountTestCase(APITestCase):
         self.assertEqual(data['unit_count'], 3)
         self.assertEqual(data['quantity'], 23)
 
+    def test_by_day_delete_removes_entries_for_day_and_location(self) -> None:
+        location2 = Location.objects.create(name='Küche')
+        day = datetime(2024, 6, 15, 10, 0, tzinfo=timezone.utc)
+        StockCountEntry.objects.create(
+            count_date=day, article_id='101', article_name='Bier',
+            location_id=self.location.pk, location_name=self.location.name, unit_count=5,
+        )
+        StockCountEntry.objects.create(
+            count_date=day, article_id='102', article_name='Cola',
+            location_id=location2.pk, location_name=location2.name, unit_count=3,
+        )
+        resp = self.client.delete(
+            '/api/stock-count/entries/by-day/',
+            {'day': '2024-06-15', 'location_id': self.location.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['deleted'], 1)
+        self.assertEqual(StockCountEntry.objects.count(), 1)
+        self.assertEqual(StockCountEntry.objects.get().location_id, location2.pk)
+
+    def test_by_day_delete_requires_day_and_location(self) -> None:
+        resp = self.client.delete('/api/stock-count/entries/by-day/', {'day': '2024-06-15'})
+        self.assertEqual(resp.status_code, 400)
+        resp = self.client.delete('/api/stock-count/entries/by-day/', {'location_id': self.location.pk})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_dates_groups_by_day_and_location(self) -> None:
+        location2 = Location.objects.create(name='Küche')
+        day1 = datetime(2024, 6, 15, 10, 0, tzinfo=timezone.utc)
+        day2 = datetime(2024, 6, 16, 10, 0, tzinfo=timezone.utc)
+        for date in [day1, day2]:
+            StockCountEntry.objects.create(
+                count_date=date, article_id='101', article_name='Bier',
+                location_id=self.location.pk, location_name=self.location.name,
+                unit_count=2,
+            )
+            StockCountEntry.objects.create(
+                count_date=date, article_id='102', article_name='Cola',
+                location_id=location2.pk, location_name=location2.name,
+                unit_count=3,
+            )
+        resp = self.client.get('/api/stock-count/entries/dates/')
+        self.assertEqual(resp.status_code, 200)
+        rows = resp.data
+        self.assertEqual(len(rows), 4)
+        # Most recent day first
+        self.assertEqual(str(rows[0]['day']), '2024-06-16')
+        self.assertEqual(str(rows[2]['day']), '2024-06-15')
+        # Each row has count=1 (one entry per location per day)
+        for row in rows:
+            self.assertEqual(row['count'], 1)
+
+    def test_dates_multiple_entries_per_day_location_summed(self) -> None:
+        day = datetime(2024, 6, 15, 10, 0, tzinfo=timezone.utc)
+        StockCountEntry.objects.create(
+            count_date=day, article_id='101', article_name='Bier',
+            location_id=self.location.pk, location_name=self.location.name, unit_count=5,
+        )
+        StockCountEntry.objects.create(
+            count_date=day, article_id='102', article_name='Cola',
+            location_id=self.location.pk, location_name=self.location.name, unit_count=3,
+        )
+        resp = self.client.get('/api/stock-count/entries/dates/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data), 1)
+        self.assertEqual(resp.data[0]['count'], 2)
+
     def test_from_initial_inventory_creates_entries(self) -> None:
         InitialInventory.objects.create(
             article=self.article_beer,
