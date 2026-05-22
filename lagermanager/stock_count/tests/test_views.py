@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from core.models import Location, Period
 from django.contrib.auth.models import User
+from inventory.models import InitialInventory
 from pos_import.models import (
     Article,
     ArticleGroup,
@@ -344,6 +346,94 @@ class StockCountTestCase(APITestCase):
         self.assertEqual(data['units_per_package'], 10)
         self.assertEqual(data['unit_count'], 3)
         self.assertEqual(data['quantity'], 23)
+
+    def test_from_initial_inventory_creates_entries(self) -> None:
+        InitialInventory.objects.create(
+            article=self.article_beer,
+            location=self.location,
+            period=self.period,
+            quantity=Decimal('10'),
+        )
+        InitialInventory.objects.create(
+            article=self.article_cola,
+            location=self.location,
+            period=self.period,
+            quantity=Decimal('5.7'),
+        )
+        payload = {
+            'location_ids': [self.location.pk],
+            'count_date': '2024-06-15T12:00:00',
+            'period_id': self.period.pk,
+        }
+        resp = self.client.post('/api/stock-count/entries/from-initial-inventory/', payload, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['created'], 2)
+        self.assertEqual(resp.data['updated'], 0)
+        beer = StockCountEntry.objects.get(article_id='101')
+        self.assertEqual(beer.quantity, 10)
+        cola = StockCountEntry.objects.get(article_id='102')
+        self.assertEqual(cola.quantity, 6)  # round(5.7)
+
+    def test_from_initial_inventory_upserts(self) -> None:
+        InitialInventory.objects.create(
+            article=self.article_beer,
+            location=self.location,
+            period=self.period,
+            quantity=Decimal('10'),
+        )
+        payload = {
+            'location_ids': [self.location.pk],
+            'count_date': '2024-06-15T12:00:00',
+            'period_id': self.period.pk,
+        }
+        self.client.post('/api/stock-count/entries/from-initial-inventory/', payload, format='json')
+        InitialInventory.objects.filter(article=self.article_beer).update(quantity=Decimal('20'))
+        resp = self.client.post('/api/stock-count/entries/from-initial-inventory/', payload, format='json')
+        self.assertEqual(resp.data['created'], 0)
+        self.assertEqual(resp.data['updated'], 1)
+        beer = StockCountEntry.objects.get(article_id='101')
+        self.assertEqual(beer.quantity, 20)
+
+    def test_from_initial_inventory_multiple_locations(self) -> None:
+        location2 = Location.objects.create(name='Küche')
+        InitialInventory.objects.create(
+            article=self.article_beer, location=self.location,
+            period=self.period, quantity=Decimal('3'),
+        )
+        InitialInventory.objects.create(
+            article=self.article_beer, location=location2,
+            period=self.period, quantity=Decimal('7'),
+        )
+        payload = {
+            'location_ids': [self.location.pk, location2.pk],
+            'count_date': '2024-06-15T12:00:00',
+            'period_id': self.period.pk,
+        }
+        resp = self.client.post('/api/stock-count/entries/from-initial-inventory/', payload, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['created'], 2)
+        self.assertEqual(StockCountEntry.objects.count(), 2)
+
+    def test_from_initial_inventory_requires_location_ids(self) -> None:
+        resp = self.client.post('/api/stock-count/entries/from-initial-inventory/', {
+            'count_date': '2024-06-15T12:00:00',
+            'period_id': self.period.pk,
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_from_initial_inventory_requires_date(self) -> None:
+        resp = self.client.post('/api/stock-count/entries/from-initial-inventory/', {
+            'location_ids': [self.location.pk],
+            'period_id': self.period.pk,
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_from_initial_inventory_requires_period_id(self) -> None:
+        resp = self.client.post('/api/stock-count/entries/from-initial-inventory/', {
+            'location_ids': [self.location.pk],
+            'count_date': '2024-06-15T12:00:00',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
 
     def test_entry_create_with_breakdown(self) -> None:
         payload = {
