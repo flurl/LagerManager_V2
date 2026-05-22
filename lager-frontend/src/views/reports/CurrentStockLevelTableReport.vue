@@ -32,10 +32,10 @@
       </span>
       <span v-else>—</span>
     </template>
-    <template #item.stock_minus_count="{ item }">
-      <span v-if="item.stock_minus_count != null"
-        :class="item.stock_minus_count < 0 ? 'text-error' : item.stock_minus_count > 0 ? 'text-success' : ''">
-        {{ item.stock_minus_count.toFixed(2) }}
+    <template #item.count_minus_stock="{ item }">
+      <span v-if="item.count_minus_stock != null"
+        :class="item.count_minus_stock < 0 ? 'text-error' : item.count_minus_stock > 0 ? 'text-success' : ''">
+        {{ item.count_minus_stock.toFixed(2) }}
       </span>
       <span v-else>—</span>
     </template>
@@ -70,7 +70,7 @@ const baseHeaders = [
 
 const countHeaders = [
   { title: 'Letzte Zählung', key: 'last_physical_count', align: 'end' },
-  { title: 'Bestand - Zählung', key: 'stock_minus_count', align: 'end' },
+  { title: 'Zählung - Bestand', key: 'count_minus_stock', align: 'end' },
 ]
 
 const headers = computed(() => showLastCount.value ? [...baseHeaders, ...countHeaders] : baseHeaders)

@@ -197,7 +197,7 @@ class GetCurrentStockLevelsLastPhysicalCountTest(TestCase):
 
     @patch("reports.services.article_enrichment.enrich_with_article_data")
     @patch("reports.services.stock_level_report.get_stock_level_chart_data")
-    def test_last_physical_count_and_stock_minus_count_added(
+    def test_last_physical_count_and_count_minus_stock_added(
         self, mock_chart: MagicMock, mock_enrich: MagicMock
     ) -> None:
         mock_chart.return_value = {
@@ -219,7 +219,7 @@ class GetCurrentStockLevelsLastPhysicalCountTest(TestCase):
         row = rows[0]
         self.assertAlmostEqual(row["last_physical_count"], 8.0)
         self.assertEqual(row["last_physical_count_date"], "2024-01-10")
-        self.assertAlmostEqual(row["stock_minus_count"], 4.0)
+        self.assertAlmostEqual(row["count_minus_stock"], -4.0)
 
     @patch("reports.services.article_enrichment.enrich_with_article_data")
     @patch("reports.services.stock_level_report.get_stock_level_chart_data")
@@ -245,4 +245,4 @@ class GetCurrentStockLevelsLastPhysicalCountTest(TestCase):
         row = rows[0]
         self.assertIsNone(row["last_physical_count"])
         self.assertIsNone(row["last_physical_count_date"])
-        self.assertIsNone(row["stock_minus_count"])
+        self.assertIsNone(row["count_minus_stock"])

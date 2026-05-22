@@ -197,11 +197,11 @@ def get_current_stock_levels(period_id: int) -> list[dict[str, Any]]:
             last_count, last_count_date = last_count_entry
             row['last_physical_count'] = last_count
             row['last_physical_count_date'] = last_count_date
-            row['stock_minus_count'] = round(
-                (row.get('stock') or 0.0) - last_count, 3)
+            row['count_minus_stock'] = round(
+                last_count - (row.get('stock') or 0.0), 3)
         else:
             row['last_physical_count'] = None
             row['last_physical_count_date'] = None
-            row['stock_minus_count'] = None
+            row['count_minus_stock'] = None
 
     return enriched
