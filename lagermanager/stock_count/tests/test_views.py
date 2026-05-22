@@ -359,8 +359,7 @@ class StockCountTestCase(APITestCase):
             location_id=location2.pk, location_name=location2.name, unit_count=3,
         )
         resp = self.client.delete(
-            '/api/stock-count/entries/by-day/',
-            {'day': '2024-06-15', 'location_id': self.location.pk},
+            f'/api/stock-count/entries/by-day/?day=2024-06-15&location_id={self.location.pk}',
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data['deleted'], 1)
@@ -368,9 +367,9 @@ class StockCountTestCase(APITestCase):
         self.assertEqual(StockCountEntry.objects.get().location_id, location2.pk)
 
     def test_by_day_delete_requires_day_and_location(self) -> None:
-        resp = self.client.delete('/api/stock-count/entries/by-day/', {'day': '2024-06-15'})
+        resp = self.client.delete('/api/stock-count/entries/by-day/?day=2024-06-15')
         self.assertEqual(resp.status_code, 400)
-        resp = self.client.delete('/api/stock-count/entries/by-day/', {'location_id': self.location.pk})
+        resp = self.client.delete(f'/api/stock-count/entries/by-day/?location_id={self.location.pk}')
         self.assertEqual(resp.status_code, 400)
 
     def test_dates_groups_by_day_and_location(self) -> None:

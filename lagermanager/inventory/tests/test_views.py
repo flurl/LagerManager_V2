@@ -89,15 +89,14 @@ class PhysicalCountViewTestCase(APITestCase):
         self._make_count(self.article2, day)
         self._make_count(self.article, datetime(2024, 6, 16, 10, 0, tzinfo=timezone.utc))
         resp = self.client.delete(
-            '/api/physical-counts/by-day/',
-            {'day': '2024-06-15', 'period_id': self.period.pk},
+            f'/api/physical-counts/by-day/?day=2024-06-15&period_id={self.period.pk}',
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data['deleted'], 2)
         self.assertEqual(PhysicalCount.objects.count(), 1)
 
     def test_by_day_delete_requires_day_and_period(self) -> None:
-        resp = self.client.delete('/api/physical-counts/by-day/', {'day': '2024-06-15'})
+        resp = self.client.delete('/api/physical-counts/by-day/?day=2024-06-15')
         self.assertEqual(resp.status_code, 400)
-        resp = self.client.delete('/api/physical-counts/by-day/', {'period_id': self.period.pk})
+        resp = self.client.delete(f'/api/physical-counts/by-day/?period_id={self.period.pk}')
         self.assertEqual(resp.status_code, 400)
