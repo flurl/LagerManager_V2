@@ -1,27 +1,43 @@
 <template>
   <ReportTable :headers="headers" :items="filteredItems" :loading="loading" title="Aktueller Lagerstand"
     csv-filename="aktueller-lagerstand.csv">
-    <template v-if="hasHiddenArticles" #controls>
+    <template #controls>
       <v-row class="mb-2" align="center">
-        <v-col cols="auto">
+        <v-col v-if="hasHiddenArticles" cols="auto">
           <v-chip color="warning" size="small" prepend-icon="mdi-eye-off">
             {{ hiddenCount }} Artikel ausgeblendet
           </v-chip>
         </v-col>
-        <v-col cols="auto">
+        <v-col v-if="hasHiddenArticles" cols="auto">
           <v-checkbox v-model="showHidden" label="Ausgeblendete anzeigen" density="compact" hide-details />
+        </v-col>
+        <v-col cols="auto">
+          <v-checkbox v-model="showLastCount" label="Letzte Zählung" density="compact" hide-details />
         </v-col>
       </v-row>
     </template>
-    <template #item.stock="{ item }">{{ item.stock.toFixed(3) }}</template>
-    <template #item.purchase_price="{ item }">{{ item.purchase_price?.toFixed(4) ?? '—' }}</template>
+    <template #item.stock="{ item }">{{ item.stock.toFixed(2) }}</template>
+    <template #item.purchase_price="{ item }">{{ item.purchase_price?.toFixed(2) ?? '—' }}</template>
     <template #item.total_value="{ item }">{{ item.total_value?.toFixed(2) ?? '—' }}</template>
-    <template #item.warehouse_unit_multiplier="{ item }">{{ item.warehouse_unit_multiplier?.toFixed(4) ?? '—'
+    <template #item.warehouse_unit_multiplier="{ item }">{{ item.warehouse_unit_multiplier?.toFixed(2) ?? '—'
     }}</template>
     <template #item.stock_minus_initial="{ item }">
       <span :class="item.stock_minus_initial < 0 ? 'text-error' : item.stock_minus_initial > 0 ? 'text-success' : ''">
-        {{ item.stock_minus_initial?.toFixed(3) ?? '—' }}
+        {{ item.stock_minus_initial?.toFixed(2) ?? '—' }}
       </span>
+    </template>
+    <template #item.last_physical_count="{ item }">
+      <span v-if="item.last_physical_count != null">
+        {{ item.last_physical_count.toFixed(2) }} ({{ item.last_physical_count_date }})
+      </span>
+      <span v-else>—</span>
+    </template>
+    <template #item.stock_minus_count="{ item }">
+      <span v-if="item.stock_minus_count != null"
+        :class="item.stock_minus_count < 0 ? 'text-error' : item.stock_minus_count > 0 ? 'text-success' : ''">
+        {{ item.stock_minus_count.toFixed(2) }}
+      </span>
+      <span v-else>—</span>
     </template>
   </ReportTable>
 </template>
@@ -36,12 +52,13 @@ import ReportTable from '../../components/ReportTable.vue'
 const periodStore = usePeriodStore()
 const items = ref([])
 const loading = ref(false)
+const showLastCount = ref(false)
 
 const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenArticles()
 
 const filteredItems = computed(() => items.value.filter((item) => shouldInclude(item.article)))
 
-const headers = [
+const baseHeaders = [
   { title: 'Artikel', key: 'article' },
   { title: 'Bestand', key: 'stock', align: 'end' },
   { title: 'Bestand - Initial', key: 'stock_minus_initial', align: 'end' },
@@ -50,6 +67,13 @@ const headers = [
   { title: 'Einheit', key: 'warehouse_unit' },
   { title: 'Multiplikator', key: 'warehouse_unit_multiplier', align: 'end' },
 ]
+
+const countHeaders = [
+  { title: 'Letzte Zählung', key: 'last_physical_count', align: 'end' },
+  { title: 'Bestand - Zählung', key: 'stock_minus_count', align: 'end' },
+]
+
+const headers = computed(() => showLastCount.value ? [...baseHeaders, ...countHeaders] : baseHeaders)
 
 async function fetchData() {
   if (!periodStore.currentPeriodId) return

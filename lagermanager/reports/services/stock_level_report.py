@@ -4,9 +4,8 @@ into Chart.js-compatible format.
 """
 from typing import Any
 
+from django.utils import timezone
 from inventory.services.stock_calculation import compute_running_stock
-
-# TODO: this report is just plain wrong, must be fixed
 
 
 def _get_movement_meta(period_id: int) -> dict[str, dict[str, list[dict[str, Any]]]]:
@@ -124,6 +123,23 @@ def get_below_minimum_stock(period_id: int) -> list[dict[str, Any]]:
     return result
 
 
+def _build_last_physical_count_map(period_id: int) -> dict[str, tuple[float, str]]:
+    """Returns {article_name: (quantity, date_iso)} for the most recent PhysicalCount per article."""
+    from inventory.models import PhysicalCount
+
+    result: dict[str, tuple[float, str]] = {}
+    for pc in (
+        PhysicalCount.objects
+        .filter(period_id=period_id)
+        .select_related('article')
+        .order_by('article__name', '-date')
+    ):
+        if pc.article.name not in result:
+            result[pc.article.name] = (
+                float(pc.quantity), timezone.localdate(pc.date).isoformat())
+    return result
+
+
 def _build_initial_inventory_map(period_id: int) -> dict[str, float]:
     """Returns {article_name: total_initial_quantity} summed across all locations."""
     from django.db.models import Sum
@@ -168,10 +184,24 @@ def get_current_stock_levels(period_id: int) -> list[dict[str, Any]]:
         rows, period_id, quantity_key='stock')
 
     init_inv_map: dict[str, float] = _build_initial_inventory_map(period_id)
+    last_count_map: dict[str, tuple[float, str]
+                         ] = _build_last_physical_count_map(period_id)
     for row in enriched:
         init_inv: float = init_inv_map.get(row['article'], 0.0)
         row['initial_inventory'] = init_inv
         row['stock_minus_initial'] = round(
             (row.get('stock') or 0.0) - init_inv, 3)
+        last_count_entry: tuple[float, str] | None = last_count_map.get(
+            row['article'])
+        if last_count_entry is not None:
+            last_count, last_count_date = last_count_entry
+            row['last_physical_count'] = last_count
+            row['last_physical_count_date'] = last_count_date
+            row['stock_minus_count'] = round(
+                (row.get('stock') or 0.0) - last_count, 3)
+        else:
+            row['last_physical_count'] = None
+            row['last_physical_count_date'] = None
+            row['stock_minus_count'] = None
 
     return enriched
