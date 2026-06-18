@@ -88,6 +88,15 @@ const COLORS = [
   '#00ACC1', '#6D4C41', '#F06292', '#546E7A', '#26A69A',
 ]
 
+// Shift a hex color towards lighter/darker to derive a related but distinct shade.
+function shadeColor(hex, percent) {
+  const num = parseInt(hex.slice(1), 16)
+  const r = Math.min(255, Math.max(0, (num >> 16) + Math.round(2.55 * percent)))
+  const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + Math.round(2.55 * percent)))
+  const b = Math.min(255, Math.max(0, (num & 0xff) + Math.round(2.55 * percent)))
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
+}
+
 const allArticles = computed(() =>
   (rawData.value?.datasets || [])
     .map((d) => d.label)
@@ -129,12 +138,15 @@ const chartData = computed(() => {
     })
     .map((d) => {
       const articleName = d.label.replace('-gezaehlt', '')
+      const countedColor = shadeColor(colorMap.value[articleName], +35)
       return {
         label: d.label,
         data: d.data,
-        borderColor: colorMap.value[articleName],
-        backgroundColor: colorMap.value[articleName],
-        showLine: false,
+        borderColor: countedColor,
+        backgroundColor: countedColor,
+        showLine: true,
+        borderWidth: 1,
+        spanGaps: true,
         pointRadius: 6,
         pointStyle: 'rectRot',
       }
@@ -154,7 +166,15 @@ const chartOptions = {
     tooltip: {
       callbacks: {
         afterLabel: (context) => {
-          if (context.dataset.label.endsWith('-gezaehlt')) return []
+          if (context.dataset.label.endsWith('-gezaehlt')) {
+            const articleName = context.dataset.label.replace('-gezaehlt', '')
+            const stockDataset = rawData.value?.datasets?.find((d) => d.label === articleName)
+            const stockValue = stockDataset?.data?.[context.dataIndex]
+            if (stockValue == null || context.parsed.y == null) return []
+            const diff = context.parsed.y - stockValue
+            const sign = diff >= 0 ? '+' : ''
+            return [`  Differenz: ${sign}${Number.isInteger(diff) ? diff : diff.toFixed(2)}`]
+          }
           const movements = rawData.value?.movement_meta?.[context.label]?.[context.dataset.label]
           if (!movements?.length) return []
           return movements.map((m) => {
