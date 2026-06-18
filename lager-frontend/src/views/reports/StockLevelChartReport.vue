@@ -10,7 +10,7 @@
       </v-col>
     </v-row>
 
-    <v-row v-if="hasHiddenArticles || hasNegativeArticles" class="mb-2" align="center">
+    <v-row v-if="hasHiddenArticles || hasNegativeArticles || hasCountedData" class="mb-2" align="center">
       <v-col v-if="hasHiddenArticles" cols="auto">
         <v-chip color="warning" size="small" prepend-icon="mdi-eye-off">
           {{ hiddenCount }} Artikel ausgeblendet
@@ -19,8 +19,11 @@
       <v-col v-if="hasHiddenArticles" cols="auto">
         <v-checkbox v-model="showHidden" label="Ausgeblendete anzeigen" density="compact" hide-details />
       </v-col>
-      <v-col cols="auto">
+      <v-col v-if="hasNegativeArticles" cols="auto">
         <v-checkbox v-model="showNegativeOnly" label="Minusstände" density="compact" hide-details />
+      </v-col>
+      <v-col v-if="hasCountedData" cols="auto">
+        <v-checkbox v-model="showCountDiff" label="Zählungen diff anzeigen" density="compact" hide-details />
       </v-col>
     </v-row>
 
@@ -72,6 +75,7 @@ const activeArticles = ref([])
 const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenArticles()
 
 const showNegativeOnly = ref(false)
+const showCountDiff = ref(false)
 
 const articlesWithNegative = computed(() => {
   const result = new Set()
@@ -82,6 +86,7 @@ const articlesWithNegative = computed(() => {
 })
 
 const hasNegativeArticles = computed(() => articlesWithNegative.value.size > 0)
+const hasCountedData = computed(() => (rawData.value?.counted_datasets?.length ?? 0) > 0)
 
 const COLORS = [
   '#1565C0', '#E53935', '#43A047', '#FB8C00', '#8E24AA',
@@ -139,9 +144,13 @@ const chartData = computed(() => {
     .map((d) => {
       const articleName = d.label.replace('-gezaehlt', '')
       const countedColor = shadeColor(colorMap.value[articleName], +35)
+      const stockDataset = rawData.value.datasets.find((s) => s.label === articleName)
+      const data = showCountDiff.value
+        ? d.data.map((v, i) => (v != null && stockDataset?.data?.[i] != null) ? v - stockDataset.data[i] : null)
+        : d.data
       return {
         label: d.label,
-        data: d.data,
+        data,
         borderColor: countedColor,
         backgroundColor: countedColor,
         showLine: true,
@@ -170,10 +179,19 @@ const chartOptions = {
             const articleName = context.dataset.label.replace('-gezaehlt', '')
             const stockDataset = rawData.value?.datasets?.find((d) => d.label === articleName)
             const stockValue = stockDataset?.data?.[context.dataIndex]
-            if (stockValue == null || context.parsed.y == null) return []
-            const diff = context.parsed.y - stockValue
-            const sign = diff >= 0 ? '+' : ''
-            return [`  Differenz: ${sign}${Number.isInteger(diff) ? diff : diff.toFixed(2)}`]
+            const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2)
+            if (showCountDiff.value) {
+              // Y-axis is diff — show the original count in the tooltip
+              const originalCount = rawData.value?.counted_datasets?.find((d) => d.label === context.dataset.label)?.data?.[context.dataIndex]
+              if (originalCount == null) return []
+              return [`  Gezählt: ${fmt(originalCount)}`]
+            } else {
+              // Y-axis is count — show the diff in the tooltip
+              if (stockValue == null || context.parsed.y == null) return []
+              const diff = context.parsed.y - stockValue
+              const sign = diff >= 0 ? '+' : ''
+              return [`  Differenz: ${sign}${fmt(diff)}`]
+            }
           }
           const movements = rawData.value?.movement_meta?.[context.label]?.[context.dataset.label]
           if (!movements?.length) return []
