@@ -15,7 +15,7 @@
             textDecoration: item.status === 'cancelled' ? 'line-through' : undefined,
             opacity: item.status === 'cancelled' ? 0.5 : undefined,
           }"
-          @click="openEdit(item)"
+          @click="item.status === 'draft' ? openEdit(item) : openPreview(item)"
           @mouseenter="onRowEnter(item, $event)" @mouseleave="onRowLeave">
           <td v-for="col in columns" :key="col.key" :class="col.align ? `text-${col.align}` : ''"
             class="v-data-table__td">
@@ -42,7 +42,7 @@
               <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Stornieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="error" @click.stop="cancelInvoice(item)">mdi-cancel</v-icon>
               </template></v-tooltip>
-              <v-icon size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
+              <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
             </template>
             <template v-else>{{ item[col.key] }}</template>
