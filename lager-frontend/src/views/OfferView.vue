@@ -11,7 +11,7 @@
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
           :style="hoveredRowId === item.id ? { backgroundColor: highlightColor } : {}"
-          @click="openEdit(item)"
+          @click="item.status === 'draft' ? openEdit(item) : openPreview(item)"
           @mouseenter="onRowEnter(item, $event)" @mouseleave="onRowLeave">
           <td v-for="col in columns" :key="col.key" :class="col.align ? `text-${col.align}` : ''"
             class="v-data-table__td">
@@ -34,8 +34,11 @@
                   <v-icon v-bind="props" size="small" class="ml-1" color="success" @click.stop="convertToInvoice(item)">mdi-file-send</v-icon>
                 </template>
               </v-tooltip>
-              <v-icon size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
-              <v-icon size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
+              <v-tooltip v-if="item.status !== 'draft'" text="Kopieren"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="duplicateItem(item)">mdi-content-copy</v-icon>
+              </template></v-tooltip>
+              <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
+              <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
             </template>
             <template v-else>{{ item[col.key] }}</template>
           </td>
@@ -204,6 +207,12 @@ function openPreview(item) {
   previewPath.value = `/offers/${item.id}`
   previewTitle.value = `Angebot ${item.number || '#' + item.id}`
   previewDialog.value = true
+}
+
+async function duplicateItem(item) {
+  const res = await api.post(`/offers/${item.id}/duplicate/`)
+  await fetchItems()
+  openEdit(res.data)
 }
 
 async function deleteItem(item) {

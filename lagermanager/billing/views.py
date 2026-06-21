@@ -23,6 +23,7 @@ from .models import (
     InvoiceLine,
     NumberSequence,
     Offer,
+    OfferLine,
     Reminder,
 )
 from .serializers import (
@@ -210,6 +211,52 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
             offer.status = Offer.Status.CONVERTED
             offer.save(update_fields=['status'])
         return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
+
+    # ---- Guard: block mutations on non-draft offers -------------------------
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        offer: Offer = self.get_object()
+        if offer.status != Offer.Status.DRAFT:
+            return Response(
+                {'detail': 'Nur Entwürfe können bearbeitet werden.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        offer: Offer = self.get_object()
+        if offer.status != Offer.Status.DRAFT:
+            return Response(
+                {'detail': 'Nur Entwürfe können gelöscht werden.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    # ---- Duplicate ----------------------------------------------------------
+
+    @action(detail=True, methods=['post'], url_path='duplicate')
+    def duplicate(self, request: Request, pk: str | None = None) -> Response:
+        offer: Offer = self.get_object()
+        with transaction.atomic():
+            new_offer = Offer.objects.create(
+                address=offer.address,
+                document_date=offer.document_date,
+                valid_until=offer.valid_until,
+                notes=offer.notes,
+                status=Offer.Status.DRAFT,
+            )
+            for line in offer.lines.select_related('billing_article', 'tax_rate'):
+                OfferLine.objects.create(
+                    offer=new_offer,
+                    position=line.position,
+                    billing_article=line.billing_article,
+                    description=line.description,
+                    unit=line.unit,
+                    quantity=line.quantity,
+                    unit_price=line.unit_price,
+                    tax_rate=line.tax_rate,
+                )
+        return Response(OfferSerializer(new_offer).data, status=status.HTTP_201_CREATED)
 
     # ---- Preview / PDF ------------------------------------------------------
 
