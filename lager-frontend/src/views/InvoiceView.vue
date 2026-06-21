@@ -42,6 +42,9 @@
               <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Stornieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="error" @click.stop="cancelInvoice(item)">mdi-cancel</v-icon>
               </template></v-tooltip>
+              <v-tooltip text="Duplizieren"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="duplicateInvoice(item)">mdi-content-copy</v-icon>
+              </template></v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
             </template>
@@ -237,6 +240,12 @@ async function deleteItem(item) {
   if (!confirm(`Rechnung ${item.number || '#' + item.id} wirklich löschen?`)) return
   await api.delete(`/invoices/${item.id}/`)
   await fetchItems()
+}
+
+async function duplicateInvoice(item) {
+  const res = await api.post(`/invoices/${item.id}/duplicate/`)
+  await fetchItems()
+  openEdit(res.data)
 }
 
 function onRowEnter(item, event) {

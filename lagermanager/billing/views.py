@@ -393,6 +393,32 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
         invoice.save(update_fields=['status', 'paid_at'])
         return Response(InvoiceSerializer(invoice).data)
 
+    # ---- Duplicate ----------------------------------------------------------
+
+    @action(detail=True, methods=['post'], url_path='duplicate')
+    def duplicate(self, request: Request, pk: str | None = None) -> Response:
+        invoice: Invoice = self.get_object()
+        with transaction.atomic():
+            new_invoice = Invoice.objects.create(
+                address=invoice.address,
+                document_date=invoice.document_date,
+                due_date=invoice.due_date,
+                notes=invoice.notes,
+                status=Invoice.Status.DRAFT,
+            )
+            for line in invoice.lines.select_related('billing_article', 'tax_rate'):
+                InvoiceLine.objects.create(
+                    invoice=new_invoice,
+                    position=line.position,
+                    billing_article=line.billing_article,
+                    description=line.description,
+                    unit=line.unit,
+                    quantity=line.quantity,
+                    unit_price=line.unit_price,
+                    tax_rate=line.tax_rate,
+                )
+        return Response(InvoiceSerializer(new_invoice).data, status=status.HTTP_201_CREATED)
+
     # ---- Preview / PDF ------------------------------------------------------
 
     @action(detail=True, methods=['get'], url_path='preview')
