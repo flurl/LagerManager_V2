@@ -2,6 +2,8 @@ import datetime
 import logging
 from typing import Any
 
+from constance import config
+
 from core.models import Address
 from core.permissions import DjangoModelPermissionsWithView, require_perm
 from django.db import transaction
@@ -185,10 +187,12 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         with transaction.atomic():
+            due_date = offer.document_date + datetime.timedelta(days=config.INVOICE_PAYMENT_TERMS_DAYS)
             invoice = Invoice.objects.create(
                 address=offer.address,
                 source_offer=offer,
                 document_date=offer.document_date,
+                due_date=due_date,
                 notes=offer.notes,
                 status=Invoice.Status.DRAFT,
             )
