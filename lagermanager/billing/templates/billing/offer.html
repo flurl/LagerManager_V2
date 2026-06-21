@@ -1,0 +1,58 @@
+{% extends "billing/base_document.html" %}
+
+{% block doc_title %}Angebot {% if doc.number %}{{ doc.number }}{% else %}(Entwurf){% endif %}{% endblock %}
+{% block doc_type_label %}Angebot{% endblock %}
+
+{% block meta_table %}
+<table class="meta-table">
+  <tr><td>Datum</td><td>{{ doc.document_date|date:"d.m.Y" }}</td></tr>
+  {% if doc.valid_until %}
+  <tr><td>Gültig bis</td><td>{{ doc.valid_until|date:"d.m.Y" }}</td></tr>
+  {% endif %}
+</table>
+{% endblock %}
+
+{% block doc_body %}
+<table class="line-table">
+  <thead>
+    <tr>
+      <th style="width:3em">Pos</th>
+      <th>Bezeichnung</th>
+      <th class="num" style="width:5em">Menge</th>
+      <th style="width:4em">Einh.</th>
+      <th class="num" style="width:7em">EP (netto)</th>
+      <th class="num" style="width:5em">MwSt.</th>
+      <th class="num" style="width:8em">Gesamt (netto)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in doc.lines.all %}
+    <tr>
+      <td>{{ line.position }}</td>
+      <td>{{ line.description }}</td>
+      <td class="num">{{ line.quantity|floatformat:"-4" }}</td>
+      <td>{{ line.unit }}</td>
+      <td class="num">{{ line.unit_price|floatformat:"2" }}</td>
+      <td class="num">{% if line.tax_rate %}{{ line.tax_rate.percent|floatformat:"-2" }} %{% else %}—{% endif %}</td>
+      <td class="num">{{ line.net_amount|floatformat:"2" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7" style="text-align:center;color:#aaa;padding:16px;">Keine Positionen</td></tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="6" class="num">Nettobetrag</td>
+      <td class="num">{{ doc.net_total|floatformat:"2" }} €</td>
+    </tr>
+    <tr>
+      <td colspan="6" class="num">Umsatzsteuer</td>
+      <td class="num">{{ doc.tax_total|floatformat:"2" }} €</td>
+    </tr>
+    <tr class="grand-total">
+      <td colspan="6" class="num">Gesamtbetrag (brutto)</td>
+      <td class="num">{{ doc.gross_total|floatformat:"2" }} €</td>
+    </tr>
+  </tfoot>
+</table>
+{% endblock %}

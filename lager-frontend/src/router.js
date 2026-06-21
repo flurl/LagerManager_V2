@@ -123,6 +123,32 @@ const routes = [
     component: () => import('./views/StaffConsumptionImportView.vue'),
     meta: { title: 'Personalverbrauch Import', permission: 'deliveries.add_stockmovement' },
   },
+  // Billing
+  {
+    path: '/addresses',
+    component: () => import('./views/AddressView.vue'),
+    meta: { title: 'Adressen', permission: 'billing.view_address' },
+  },
+  {
+    path: '/billing-articles',
+    component: () => import('./views/BillingArticleView.vue'),
+    meta: { title: 'Faktura-Artikel', permission: 'billing.view_billingarticle' },
+  },
+  {
+    path: '/offers',
+    component: () => import('./views/OfferView.vue'),
+    meta: { title: 'Angebote', permission: 'billing.view_offer' },
+  },
+  {
+    path: '/invoices',
+    component: () => import('./views/InvoiceView.vue'),
+    meta: { title: 'Rechnungen', permission: 'billing.view_invoice' },
+  },
+  {
+    path: '/reminders',
+    component: () => import('./views/ReminderView.vue'),
+    meta: { title: 'Mahnungen', permission: 'billing.view_reminder' },
+  },
   {
     path: '/forbidden',
     component: () => import('./views/ForbiddenView.vue'),

@@ -14,3 +14,4 @@ django-stubs
 djangorestframework-stubs
 Pillow>=10.0
 PyMuPDF>=1.24
+weasyprint>=62.0

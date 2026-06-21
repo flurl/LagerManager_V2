@@ -526,6 +526,16 @@ def run_import(period_id: int, host: str, database: str, user: str, password: st
         )
 
     conn.close()
+
+    # 15. adressen_basis — sync into core.Address (global, not period-scoped)
+    logger.info("Syncing adressen_basis into core.Address")
+    try:
+        from core.services.wz_address_sync import sync_addresses
+        summary['adressen_basis'] = sync_addresses(host, database, user, password)
+    except Exception:
+        logger.exception("Address sync failed — POS import continues without it")
+        summary['adressen_basis'] = 0
+
     logger.info("Import complete: %s", summary)
     return summary
 

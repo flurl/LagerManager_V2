@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block doc_title %}Dokument{% endblock %}</title>
+<style>
+  /* ---- Reset & base ---- */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 10pt; }
+  body {
+    font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif;
+    color: #1a1a1a;
+    background: #fff;
+    line-height: 1.45;
+  }
+
+  /* ---- Page layout (WeasyPrint) ---- */
+  @page {
+    size: A4;
+    margin: 22mm 20mm 28mm 20mm;
+    @bottom-center {
+      content: "Seite " counter(page) " von " counter(pages);
+      font-size: 8pt;
+      color: #888;
+    }
+  }
+
+  /* ---- Wrapper ---- */
+  .page { max-width: 780px; margin: 0 auto; padding: 0 0 40px; }
+
+  /* ---- Header ---- */
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 28px;
+  }
+  .company-block { font-size: 9pt; color: #555; line-height: 1.5; }
+  .company-block strong { font-size: 12pt; color: #1a1a1a; display: block; margin-bottom: 4px; }
+  .doc-type-block {
+    text-align: right;
+  }
+  .doc-type-block h1 {
+    font-size: 22pt;
+    font-weight: 700;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .doc-type-block .doc-number {
+    font-size: 11pt;
+    color: #555;
+    margin-top: 4px;
+  }
+
+  /* ---- Divider ---- */
+  .divider {
+    border: none;
+    border-top: 2px solid #2c3e50;
+    margin: 0 0 20px;
+  }
+
+  /* ---- Address + meta ---- */
+  .address-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+  .recipient-block {
+    font-size: 10pt;
+    white-space: pre-line;
+    min-width: 200px;
+  }
+  .meta-table {
+    font-size: 9pt;
+    border-collapse: collapse;
+    min-width: 190px;
+    text-align: right;
+  }
+  .meta-table td { padding: 2px 0; }
+  .meta-table td:first-child { padding-right: 16px; color: #777; white-space: nowrap; }
+  .meta-table td:last-child { font-weight: 600; color: #1a1a1a; }
+
+  /* ---- Line items table ---- */
+  .line-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 9pt;
+  }
+  .line-table thead th {
+    background: #2c3e50;
+    color: #fff;
+    padding: 6px 8px;
+    text-align: left;
+    font-weight: 600;
+  }
+  .line-table thead th.num { text-align: right; }
+  .line-table tbody tr:nth-child(even) { background: #f5f7fa; }
+  .line-table tbody td {
+    padding: 5px 8px;
+    vertical-align: top;
+    border-bottom: 1px solid #e8ecf0;
+  }
+  .line-table tbody td.num { text-align: right; white-space: nowrap; }
+  .line-table tfoot td {
+    padding: 5px 8px;
+    font-weight: 600;
+    border-top: 2px solid #2c3e50;
+  }
+  .line-table tfoot td.num { text-align: right; }
+  .line-table tfoot tr.grand-total td {
+    font-size: 11pt;
+    background: #2c3e50;
+    color: #fff;
+  }
+
+  /* ---- Notes ---- */
+  .notes-section { margin: 24px 0; font-size: 9pt; color: #444; white-space: pre-line; }
+  .notes-label { font-weight: 600; margin-bottom: 4px; color: #1a1a1a; }
+
+  /* ---- Footer ---- */
+  .doc-footer {
+    margin-top: 32px;
+    padding-top: 12px;
+    border-top: 1px solid #ddd;
+    font-size: 8pt;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .doc-footer div { flex: 1; }
+
+  /* ---- Print / screen tweaks ---- */
+  @media screen {
+    body { background: #e8ecf0; }
+    .page {
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,.15);
+      padding: 28mm 20mm 28mm;
+      margin: 20px auto;
+    }
+  }
+  @media print {
+    body { background: #fff; }
+    .page { max-width: none; padding: 0; margin: 0; box-shadow: none; }
+  }
+</style>
+{% block extra_style %}{% endblock %}
+</head>
+<body>
+<div class="page">
+
+  <!-- Header: company left, document type + number right -->
+  <div class="doc-header">
+    <div class="company-block">
+      {% if company_name %}<strong>{{ company_name }}</strong>{% endif %}
+      {% if company_address %}{{ company_address }}<br>{% endif %}
+      {% if company_zip or company_city %}{{ company_zip }} {{ company_city }}<br>{% endif %}
+      {% if company_phone %}Tel: {{ company_phone }}<br>{% endif %}
+      {% if company_email %}{{ company_email }}<br>{% endif %}
+      {% if company_uid %}UID: {{ company_uid }}{% endif %}
+    </div>
+    <div class="doc-type-block">
+      <h1>{% block doc_type_label %}Dokument{% endblock %}</h1>
+      {% if doc.number %}<div class="doc-number">Nr. {{ doc.number }}</div>{% endif %}
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Recipient + metadata -->
+  <div class="address-meta">
+    <div class="recipient-block">{% block recipient %}{% if doc.recipient_text %}{{ doc.recipient_text }}{% else %}{{ doc.address.format_address_block }}{% endif %}{% endblock %}</div>
+    <div>
+      {% block meta_table %}{% endblock %}
+    </div>
+  </div>
+
+  <!-- Document body -->
+  {% block doc_body %}{% endblock %}
+
+  <!-- Notes -->
+  {% if doc.notes %}
+  <div class="notes-section">
+    <div class="notes-label">Anmerkungen</div>
+    {{ doc.notes }}
+  </div>
+  {% endif %}
+
+  <!-- Footer: IBAN / bank / custom footer text -->
+  <div class="doc-footer">
+    {% if company_iban %}
+    <div>
+      <strong>Bankverbindung</strong><br>
+      {% if company_bank %}{{ company_bank }}<br>{% endif %}
+      IBAN: {{ company_iban }}<br>
+      {% if company_bic %}BIC: {{ company_bic }}{% endif %}
+    </div>
+    {% endif %}
+    {% if invoice_footer_text %}
+    <div>{{ invoice_footer_text }}</div>
+    {% endif %}
+  </div>
+
+</div>
+</body>
+</html>
