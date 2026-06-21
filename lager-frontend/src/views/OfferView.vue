@@ -108,12 +108,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { hexToRgba } from '../utils/color'
 import api from '../api'
 import OfferDialog from '../components/OfferDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 
+const router = useRouter()
 const theme = useTheme()
 const primaryColor = computed(() => theme.current.value.colors.primary)
 const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
@@ -194,8 +196,8 @@ async function issueOffer(item) {
 
 async function convertToInvoice(item) {
   if (!confirm(`Angebot ${item.number || '#' + item.id} in eine Rechnung umwandeln?`)) return
-  await api.post(`/offers/${item.id}/convert/`)
-  await fetchItems()
+  const res = await api.post(`/offers/${item.id}/convert/`)
+  router.push({ path: '/invoices', query: { openId: res.data.id } })
 }
 
 function openPreview(item) {

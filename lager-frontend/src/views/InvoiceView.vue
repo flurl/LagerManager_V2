@@ -125,12 +125,15 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { hexToRgba } from '../utils/color'
 import api from '../api'
 import InvoiceDialog from '../components/InvoiceDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 
+const route = useRoute()
+const router = useRouter()
 const theme = useTheme()
 const primaryColor = computed(() => theme.current.value.colors.primary)
 const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
@@ -280,5 +283,13 @@ function formatCurrency(val) {
   return val != null ? Number(val).toFixed(2) + ' €' : ''
 }
 
-onMounted(fetchItems)
+onMounted(async () => {
+  await fetchItems()
+  const openId = route.query.openId
+  if (openId) {
+    const invoice = items.value.find(i => String(i.id) === String(openId))
+    if (invoice) openEdit(invoice)
+    router.replace({ path: '/invoices' })
+  }
+})
 </script>
