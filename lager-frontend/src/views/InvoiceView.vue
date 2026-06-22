@@ -48,7 +48,7 @@
               <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Als bezahlt markieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="success" @click.stop="markPaid(item)">mdi-check-circle</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Mahnung erstellen"><template #activator="{ props }">
+              <v-tooltip v-if="isOverdue(item) && !item.reverses" text="Mahnung erstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="warning" @click.stop="createReminder(item)">mdi-bell-alert</v-icon>
               </template></v-tooltip>
               <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Stornieren"><template #activator="{ props }">
