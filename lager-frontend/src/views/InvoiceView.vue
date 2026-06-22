@@ -378,7 +378,8 @@ async function confirmCancel() {
 }
 
 async function createReminder(item) {
-  alert(`Für Rechnung ${item.number} eine Mahnung erstellen: gehen Sie zu "Mahnungen" und wählen Sie diese Rechnung.`)
+  const res = await api.post(`/invoices/${item.id}/create-reminder/`)
+  router.push({ path: '/reminders', query: { openId: res.data.id } })
 }
 
 function openPreview(item) {

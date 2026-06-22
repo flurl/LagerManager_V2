@@ -470,6 +470,26 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
             _clone_lines(invoice, new_invoice)
         return Response(InvoiceSerializer(new_invoice).data, status=status.HTTP_201_CREATED)
 
+    # ---- Create reminder (Mahnung) ------------------------------------------
+
+    @action(detail=True, methods=['post'], url_path='create-reminder')
+    def create_reminder(self, request: Request, pk: str | None = None) -> Response:
+        invoice: Invoice = self.get_object()
+        if invoice.status not in (Invoice.Status.ISSUED, Invoice.Status.SENT):
+            return Response(
+                {'detail': 'Mahnungen können nur für ausgestellte oder versendete Rechnungen erstellt werden.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        today = timezone.localdate()
+        level = invoice.reminders.count() + 1
+        reminder = Reminder.objects.create(
+            invoice=invoice,
+            level=min(level, 3),
+            reminder_date=today,
+            due_date=today + datetime.timedelta(days=14),
+        )
+        return Response(ReminderSerializer(reminder).data, status=status.HTTP_201_CREATED)
+
     # ---- Preview / PDF ------------------------------------------------------
 
     @action(detail=True, methods=['get'], url_path='preview')

@@ -11,11 +11,16 @@
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
           :style="{ backgroundColor: hoveredRowId === item.id ? highlightColor : undefined }"
-          @click="openEdit(item)"
+          @click="item.status === 'draft' ? openEdit(item) : openPreview(item)"
           @mouseenter="onRowEnter(item, $event)" @mouseleave="onRowLeave">
           <td v-for="col in columns" :key="col.key" :class="col.align ? `text-${col.align}` : ''"
             class="v-data-table__td">
-            <template v-if="col.key === 'status'">
+            <template v-if="col.key === 'invoice_number'">
+              <a class="text-primary text-decoration-none cursor-pointer" @click.stop="openInvoicePreview(item)">
+                {{ item.invoice_number || '#' + item.invoice }}
+              </a>
+            </template>
+            <template v-else-if="col.key === 'status'">
               <v-chip size="x-small" :color="statusColor(item.status)">{{ statusLabel(item.status) }}</v-chip>
             </template>
             <template v-else-if="col.key === 'level'">
@@ -34,12 +39,8 @@
               <v-tooltip v-if="item.status === 'issued'" text="Per E-Mail versenden (demnächst)"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" disabled>mdi-send</v-icon>
               </template></v-tooltip>
-              <v-tooltip text="Bearbeiten"><template #activator="{ props }">
-                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
-              </template></v-tooltip>
-              <v-tooltip v-if="item.status === 'draft'" text="Löschen"><template #activator="{ props }">
-                <v-icon v-bind="props" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
-              </template></v-tooltip>
+              <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
+              <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
             </template>
             <template v-else>{{ item[col.key] }}</template>
           </td>
@@ -132,12 +133,15 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { hexToRgba } from '../utils/color'
 import api from '../api'
 import NumberInput from '../components/NumberInput.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 
+const route = useRoute()
+const router = useRouter()
 const theme = useTheme()
 const primaryColor = computed(() => theme.current.value.colors.primary)
 const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
@@ -237,6 +241,12 @@ function openPreview(item) {
   previewDialog.value = true
 }
 
+function openInvoicePreview(item) {
+  previewPath.value = `/invoices/${item.invoice}`
+  previewTitle.value = `Rechnung ${item.invoice_number || '#' + item.invoice}`
+  previewDialog.value = true
+}
+
 async function deleteItem(item) {
   if (!confirm(`Mahnung ${item.number || '#' + item.id} wirklich löschen?`)) return
   await api.delete(`/reminders/${item.id}/`)
@@ -285,5 +295,13 @@ function formatCurrency(val) {
   return val != null ? Number(val).toFixed(2) + ' €' : ''
 }
 
-onMounted(fetchItems)
+onMounted(async () => {
+  await fetchItems()
+  const openId = route.query.openId
+  if (openId) {
+    const reminder = items.value.find(i => String(i.id) === String(openId))
+    if (reminder) openEdit(reminder)
+    router.replace({ path: '/reminders' })
+  }
+})
 </script>
