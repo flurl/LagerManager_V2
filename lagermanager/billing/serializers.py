@@ -168,7 +168,7 @@ class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
         fields = [
             'id', 'number', 'status', 'address', 'address_display', 'source_offer',
             'reverses', 'reverses_number', 'reversed_by_id',
-            'document_date', 'due_date', 'paid_at',
+            'document_date', 'due_date', 'paid_at', 'notes',
             'net_total', 'gross_total',
             'created_at', 'updated_at',
         ]
