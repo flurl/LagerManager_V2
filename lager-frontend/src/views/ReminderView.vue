@@ -7,7 +7,20 @@
       </v-col>
     </v-row>
 
-    <v-data-table :headers="headers" :items="items" :loading="loading" density="compact">
+    <v-row dense class="mb-2" align="center">
+      <v-col cols="12" sm="5">
+        <v-text-field v-model="filterText" label="Suche (Nr., Adresse)" prepend-inner-icon="mdi-magnify"
+          clearable density="compact" hide-details />
+      </v-col>
+      <v-col cols="12" sm="3">
+        <v-text-field v-model="filterFrom" label="Datum von" type="date" clearable density="compact" hide-details />
+      </v-col>
+      <v-col cols="12" sm="3">
+        <v-text-field v-model="filterTo" label="Datum bis" type="date" clearable density="compact" hide-details />
+      </v-col>
+    </v-row>
+
+    <v-data-table :headers="headers" :items="filteredItems" :loading="loading" density="compact">
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
           :style="{ backgroundColor: hoveredRowId === item.id ? highlightColor : undefined }"
@@ -150,7 +163,22 @@ const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
 
 const items = ref([])
 const invoices = ref([])
+const filterText = ref('')
+const filterFrom = ref('')
+const filterTo = ref('')
 const loading = ref(false)
+
+const filteredItems = computed(() => {
+  return items.value.filter(item => {
+    if (filterText.value) {
+      const q = filterText.value.toLowerCase()
+      if (!(item.number || '').toLowerCase().includes(q) && !(item.invoice_number || '').toLowerCase().includes(q) && !(item.invoice_address_display || '').toLowerCase().includes(q)) return false
+    }
+    if (filterFrom.value && item.reminder_date < filterFrom.value) return false
+    if (filterTo.value && item.reminder_date > filterTo.value) return false
+    return true
+  })
+})
 const dialog = ref(false)
 const previewDialog = ref(false)
 const previewPath = ref(null)
