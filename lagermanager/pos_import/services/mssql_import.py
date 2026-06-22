@@ -125,7 +125,7 @@ def run_import(period_id: int, host: str, database: str, user: str, password: st
             conn, "SELECT * FROM journal_checkpoints ORDER BY checkpoint_id")
         objs: list[Any] = [
             JournalCheckpoint(
-                source_id=r[0], typ=r[1], datum=r[2], anmerkung=r[3],
+                source_id=r[0], typ=r[1].strip(), datum=r[2], anmerkung=r[3],
                 info=r[4], num=r[5], kassenbuch_verarbeitet=bool(r[6]),
                 period=period,
             )
