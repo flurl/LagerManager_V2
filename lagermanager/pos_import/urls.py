@@ -9,6 +9,7 @@ from .views import (
     RecipeViewSet,
     WarehouseArticleViewSet,
     WarehouseUnitViewSet,
+    WzInvoiceImportView,
 )
 
 router = DefaultRouter()
@@ -22,4 +23,5 @@ router.register(r'warehouse-units', WarehouseUnitViewSet, basename='warehouseuni
 urlpatterns = [
     path('', include(router.urls)),
     path('import/run/', ImportRunView.as_view(), name='import-run'),
+    path('wz-import/<str:resource>/', WzInvoiceImportView.as_view(), name='wz-import'),
 ]

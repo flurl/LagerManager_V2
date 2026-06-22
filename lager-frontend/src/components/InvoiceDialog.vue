@@ -121,6 +121,7 @@
       <v-row class="mb-1" align="center">
         <v-col><strong>Positionen</strong></v-col>
         <v-col v-if="isDraft" cols="auto" class="d-flex gap-2">
+          <v-btn size="small" prepend-icon="mdi-cash-register" @click="wzImportDialogOpen = true">WZ Import</v-btn>
           <v-btn size="small" prepend-icon="mdi-tag-plus-outline" @click="articleDialogOpen = true">Neuer Artikel</v-btn>
           <v-btn size="small" prepend-icon="mdi-plus" @click="addLine">Position hinzufügen</v-btn>
         </v-col>
@@ -215,6 +216,8 @@
   <v-dialog v-model="articleDialogOpen" max-width="560">
     <BillingArticleDialog :article="null" @saved="onArticleSaved" @close="articleDialogOpen = false" />
   </v-dialog>
+
+  <WzImportDialog v-model="wzImportDialogOpen" @confirm="onWzImport" />
 </template>
 
 <script setup>
@@ -223,6 +226,7 @@ import api from '../api'
 import NumberInput from './NumberInput.vue'
 import AddressDialog from './AddressDialog.vue'
 import BillingArticleDialog from './BillingArticleDialog.vue'
+import WzImportDialog from './WzImportDialog.vue'
 import { useLineCalculations } from '../composables/useLineCalculations'
 
 const props = defineProps({
@@ -247,6 +251,7 @@ const addressDetailOpen = ref(false)
 const addressDialogOpen = ref(false)
 const addressToEdit = ref(null)
 const articleDialogOpen = ref(false)
+const wzImportDialogOpen = ref(false)
 
 const selectedAddress = computed(() => {
   if (!form.value.address) return null
@@ -333,6 +338,18 @@ function onArticleSaved(art) {
 
 function addLine() {
   lines.value.push({ billing_article: null, description: '', unit: '', quantity: 1, unit_price: 0, tax_rate: taxRates.value[0]?.id || null })
+}
+
+function onWzImport(payload) {
+  if (payload.mode === 'lines') {
+    const defaultTaxRate = taxRates.value[0]?.id || null
+    payload.lines.forEach(l => {
+      lines.value.push({ ...l, tax_rate: l.tax_rate ?? defaultTaxRate })
+    })
+  } else if (payload.mode === 'notes') {
+    const existing = form.value.notes?.trim()
+    form.value.notes = existing ? `${existing}\n\n${payload.text}` : payload.text
+  }
 }
 
 function removeLine(idx) { lines.value.splice(idx, 1) }
