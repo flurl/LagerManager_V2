@@ -11,7 +11,7 @@
       <template #item="{ item, columns }">
         <tr class="v-data-table__tr cursor-pointer"
           :style="{
-            backgroundColor: hoveredRowId === item.id ? highlightColor : undefined,
+            backgroundColor: hoveredRowId === item.id ? highlightColor : isOverdue(item) ? overdueColor : undefined,
             textDecoration: item.status === 'cancelled' ? 'line-through' : undefined,
             opacity: item.status === 'cancelled' ? 0.5 : undefined,
           }"
@@ -21,6 +21,9 @@
             class="v-data-table__td">
             <template v-if="col.key === 'number'">
               <div class="d-flex align-center">
+                <v-tooltip v-if="isOverdue(item)" text="Überfällig"><template #activator="{ props }">
+                  <v-icon v-bind="props" size="x-small" color="error" class="mr-1">mdi-clock-alert-outline</v-icon>
+                </template></v-tooltip>
                 <v-icon v-if="item.reverses" size="x-small" color="deep-orange" class="mr-1">mdi-file-undo</v-icon>
                 <span>{{ item.number || '—' }}</span>
               </div>
@@ -230,6 +233,12 @@ const router = useRouter()
 const theme = useTheme()
 const primaryColor = computed(() => theme.current.value.colors.primary)
 const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
+const overdueColor = computed(() => hexToRgba(theme.current.value.colors.error, 0.15))
+
+const today = new Date().toISOString().slice(0, 10)
+function isOverdue(item) {
+  return ['issued', 'sent'].includes(item.status) && item.due_date && item.due_date < today
+}
 
 const items = ref([])
 const loading = ref(false)
