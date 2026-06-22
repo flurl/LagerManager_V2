@@ -1,7 +1,7 @@
 {% extends "billing/base_document.html" %}
 
-{% block doc_title %}Rechnung {% if doc.number %}{{ doc.number }}{% else %}(Entwurf){% endif %}{% endblock %}
-{% block doc_type_label %}Rechnung{% endblock %}
+{% block doc_title %}{% if doc.is_reversal %}Stornorechnung{% else %}Rechnung{% endif %} {% if doc.number %}{{ doc.number }}{% else %}(Entwurf){% endif %}{% endblock %}
+{% block doc_type_label %}{% if doc.is_reversal %}Stornorechnung{% else %}Rechnung{% endif %}{% endblock %}
 
 {% block meta_table %}
 <table class="meta-table">
@@ -11,6 +11,9 @@
   {% endif %}
   {% if doc.source_offer and doc.source_offer.number %}
   <tr><td>Angebot</td><td>{{ doc.source_offer.number }}</td></tr>
+  {% endif %}
+  {% if doc.reverses and doc.reverses.number %}
+  <tr><td>Storniert</td><td>{{ doc.reverses.number }}</td></tr>
   {% endif %}
 </table>
 {% endblock %}

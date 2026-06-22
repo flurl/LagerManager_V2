@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 from billing.models import (
     BillingArticle,
     Invoice,
+    InvoiceLine,
     Offer,
     OfferLine,
     Reminder,
@@ -293,22 +294,153 @@ class InvoiceViewSetTests(APITestCase):
         resp = self.client.post(f'/api/invoices/{invoice.pk}/lines/', [], format='json')
         self.assertEqual(resp.status_code, 400)
 
-    def test_cancel_issued_invoice(self) -> None:
+    @patch('billing.views.allocate_number', return_value='RE260699')
+    def test_cancel_issued_invoice(self, mock_alloc: object) -> None:
         invoice = _make_invoice(self.address, status='issued')
-        resp = self.client.post(f'/api/invoices/{invoice.pk}/cancel/')
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()['status'], 'cancelled')
+        invoice.number = 'RE260601'
+        invoice.save()
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Falsche Adresse'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        # Original becomes cancelled
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, 'cancelled')
+        # Response contains the reverse invoice
+        self.assertIn('reverse', resp.json())
+        self.assertEqual(resp.json()['reverse']['status'], 'issued')
 
-    def test_cancel_sent_invoice(self) -> None:
+    @patch('billing.views.allocate_number', return_value='RE260699')
+    def test_cancel_sent_invoice(self, mock_alloc: object) -> None:
         invoice = _make_invoice(self.address, status='sent')
-        resp = self.client.post(f'/api/invoices/{invoice.pk}/cancel/')
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()['status'], 'cancelled')
+        invoice.number = 'RE260602'
+        invoice.save()
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Storno auf Kundenwunsch'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, 'cancelled')
 
     def test_cancel_draft_fails(self) -> None:
         invoice = _make_invoice(self.address)
-        resp = self.client.post(f'/api/invoices/{invoice.pk}/cancel/')
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Irrtum'},
+            format='json',
+        )
         self.assertEqual(resp.status_code, 400)
+
+    def test_cancel_requires_reason(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        # No reason at all
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/cancel/', {}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Stornierungsgrund', resp.json()['detail'])
+        # Empty string reason
+        resp2 = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/', {'reason': '   '}, format='json',
+        )
+        self.assertEqual(resp2.status_code, 400)
+        # Nothing was cancelled
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, 'issued')
+
+    @patch('billing.views.allocate_number', return_value='RE260699')
+    def test_cancel_creates_reverse_invoice(self, mock_alloc: object) -> None:
+        """Reverse invoice has negated lines, issued status, and links back to original."""
+        invoice = _make_invoice(self.address, status='issued')
+        invoice.number = 'RE260603'
+        invoice.save()
+        InvoiceLine.objects.create(
+            invoice=invoice, position=1, description='Beratung',
+            quantity=Decimal('2.0000'), unit_price=Decimal('100.00'), tax_rate=self.tax,
+        )
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Doppelt erfasst', 'create_draft': False},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        data = resp.json()
+        self.assertIsNone(data['draft'])
+        reverse_data = data['reverse']
+        self.assertEqual(reverse_data['status'], 'issued')
+        self.assertEqual(reverse_data['reverses'], invoice.pk)
+        self.assertEqual(reverse_data['number'], 'RE260699')
+        self.assertIn('Stornorechnung für Rechnung RE260603', reverse_data['notes'])
+        self.assertIn('Doppelt erfasst', reverse_data['notes'])
+        # Line quantities are negated
+        reverse_id = reverse_data['id']
+        lines_resp = self.client.get(f'/api/invoices/{reverse_id}/lines/')
+        lines = lines_resp.json()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(Decimal(lines[0]['quantity']), Decimal('-2.0000'))
+        self.assertEqual(Decimal(lines[0]['unit_price']), Decimal('100.00'))
+        # Totals are negative
+        self.assertLess(Decimal(reverse_data['net_total']), Decimal('0'))
+
+    @patch('billing.views.allocate_number', return_value='RE260699')
+    def test_cancel_with_create_draft(self, mock_alloc: object) -> None:
+        """When create_draft=True, a draft copy of the original is also returned."""
+        invoice = _make_invoice(self.address, status='issued')
+        invoice.number = 'RE260604'
+        invoice.save()
+        InvoiceLine.objects.create(
+            invoice=invoice, position=1, description='Test',
+            quantity=Decimal('1.0000'), unit_price=Decimal('50.00'), tax_rate=self.tax,
+        )
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Korrektur erforderlich', 'create_draft': True},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        data = resp.json()
+        draft_data = data['draft']
+        self.assertIsNotNone(draft_data)
+        self.assertEqual(draft_data['status'], 'draft')
+        self.assertIsNone(draft_data['reverses'])
+        # Draft has positive lines (copy of original)
+        draft_id = draft_data['id']
+        lines_resp = self.client.get(f'/api/invoices/{draft_id}/lines/')
+        lines = lines_resp.json()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(Decimal(lines[0]['quantity']), Decimal('1.0000'))
+
+    @patch('billing.views.allocate_number', return_value='RE260699')
+    def test_cancel_sets_original_cancelled(self, mock_alloc: object) -> None:
+        """Original invoice status must be cancelled after the reversal."""
+        invoice = _make_invoice(self.address, status='issued')
+        invoice.number = 'RE260605'
+        invoice.save()
+        self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Storno'},
+            format='json',
+        )
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.CANCELLED)
+
+    @patch('billing.views.allocate_number', return_value='RE260699')
+    def test_cancel_reversal_heading_in_preview(self, mock_alloc: object) -> None:
+        """Preview HTML for a reversal invoice must contain 'Stornorechnung'."""
+        invoice = _make_invoice(self.address, status='issued')
+        invoice.number = 'RE260606'
+        invoice.save()
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Test'},
+            format='json',
+        )
+        reverse_id = resp.json()['reverse']['id']
+        preview = self.client.get(f'/api/invoices/{reverse_id}/preview/')
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn('Stornorechnung', preview.content.decode())
 
     def test_mark_paid_from_sent(self) -> None:
         invoice = _make_invoice(self.address, status='sent')

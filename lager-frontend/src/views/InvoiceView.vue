@@ -19,7 +19,16 @@
           @mouseenter="onRowEnter(item, $event)" @mouseleave="onRowLeave">
           <td v-for="col in columns" :key="col.key" :class="col.align ? `text-${col.align}` : ''"
             class="v-data-table__td">
-            <template v-if="col.key === 'status'">
+            <template v-if="col.key === 'number'">
+              <div class="d-flex align-center">
+                <v-icon v-if="item.reverses" size="x-small" color="deep-orange" class="mr-1">mdi-file-undo</v-icon>
+                <span>{{ item.number || '—' }}</span>
+              </div>
+              <div v-if="item.reverses_number" class="text-caption text-deep-orange" style="cursor:pointer; line-height:1.2" @click.stop="openOriginal(item)">
+                ↩ {{ item.reverses_number }}
+              </div>
+            </template>
+            <template v-else-if="col.key === 'status'">
               <v-chip size="x-small" :color="statusColor(item.status)">{{ statusLabel(item.status) }}</v-chip>
             </template>
             <template v-else-if="col.key === 'gross_total'">{{ Number(item.gross_total).toFixed(2) }} €</template>
@@ -30,19 +39,19 @@
               <v-tooltip v-if="item.status === 'draft'" text="Ausstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="issueInvoice(item)">mdi-file-check</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="item.status === 'issued'" text="Per E-Mail versenden (demnächst)"><template #activator="{ props }">
+              <v-tooltip v-if="item.status === 'issued' && !item.reverses" text="Per E-Mail versenden (demnächst)"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" disabled>mdi-send</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Als bezahlt markieren"><template #activator="{ props }">
+              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Als bezahlt markieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="success" @click.stop="markPaid(item)">mdi-check-circle</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Mahnung erstellen"><template #activator="{ props }">
+              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Mahnung erstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="warning" @click.stop="createReminder(item)">mdi-bell-alert</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Stornieren"><template #activator="{ props }">
+              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Stornieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="error" @click.stop="cancelInvoice(item)">mdi-cancel</v-icon>
               </template></v-tooltip>
-              <v-tooltip text="Duplizieren"><template #activator="{ props }">
+              <v-tooltip v-if="!item.reverses" text="Duplizieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="duplicateInvoice(item)">mdi-content-copy</v-icon>
               </template></v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
@@ -123,6 +132,87 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Issue date dialog -->
+    <v-dialog v-model="issueDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title>Rechnung ausstellen</v-card-title>
+        <v-card-subtitle v-if="issueInvoiceItem" class="pb-0">
+          {{ issueInvoiceItem.number || '#' + issueInvoiceItem.id }}
+        </v-card-subtitle>
+        <v-card-text>
+          <p class="mb-3 text-body-2 text-medium-emphasis">
+            Das Rechnungsdatum ({{ fmtDate(issueInvoiceItem?.document_date) }}) entspricht nicht dem heutigen Datum.
+            Wie soll fortgefahren werden?
+          </p>
+          <v-radio-group v-model="issueDateOption">
+            <v-radio value="both">
+              <template #label>
+                <span>
+                  Rechnungsdatum <strong>und</strong> Fälligkeitsdatum aktualisieren
+                  <div class="text-caption text-medium-emphasis">
+                    Datum: {{ fmtDate(issueToday) }} · Fällig: {{ fmtDate(issueNewDueDate) }}
+                  </div>
+                </span>
+              </template>
+            </v-radio>
+            <v-radio value="doc_only">
+              <template #label>
+                <span>
+                  Nur Rechnungsdatum aktualisieren
+                  <div class="text-caption text-medium-emphasis">
+                    Datum: {{ fmtDate(issueToday) }} · Fällig bleibt: {{ fmtDate(issueInvoiceItem?.due_date) }}
+                  </div>
+                </span>
+              </template>
+            </v-radio>
+            <v-radio value="none">
+              <template #label>
+                <span>
+                  Datum nicht ändern
+                  <div class="text-caption text-medium-emphasis">
+                    Datum: {{ fmtDate(issueInvoiceItem?.document_date) }} · Fällig: {{ fmtDate(issueInvoiceItem?.due_date) }}
+                  </div>
+                </span>
+              </template>
+            </v-radio>
+          </v-radio-group>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="issueDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" @click="confirmIssue">Ausstellen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Cancel / Storno dialog -->
+    <v-dialog v-model="cancelDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title>Rechnung stornieren</v-card-title>
+        <v-card-subtitle v-if="cancelInvoiceItem" class="pb-0">
+          {{ cancelInvoiceItem.number || '#' + cancelInvoiceItem.id }}
+        </v-card-subtitle>
+        <v-card-text>
+          <v-textarea
+            v-model="cancelReason"
+            label="Stornierungsgrund *"
+            rows="3"
+            auto-grow
+            :rules="[v => !!v?.trim() || 'Stornierungsgrund ist erforderlich']"
+          />
+          <v-radio-group v-model="cancelCreateDraft" class="mt-2">
+            <v-radio :value="false" label="Nur Stornorechnung erstellen" />
+            <v-radio :value="true" label="Stornorechnung erstellen und neuen Rechnungsentwurf aus Originalrechnung anlegen" />
+          </v-radio-group>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="cancelDialog = false">Abbrechen</v-btn>
+          <v-btn color="error" :disabled="!cancelReason?.trim()" @click="confirmCancel">Stornieren</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -152,6 +242,16 @@ const paidDialog = ref(false)
 const paidDate = ref('')
 const paidInvoiceId = ref(null)
 
+const cancelDialog = ref(false)
+const cancelInvoiceItem = ref(null)
+const cancelReason = ref('')
+const cancelCreateDraft = ref(false)
+
+const issueDialog = ref(false)
+const issueInvoiceItem = ref(null)
+const issueToday = ref('')
+const issueDateOption = ref('both')
+
 const linesCache = ref({})
 const linesLoading = ref({})
 const detailOverlay = ref(false)
@@ -169,6 +269,15 @@ const overlayStyle = computed(() => {
     return { ...base, bottom: (window.innerHeight - rowTop.value) + 'px' }
   }
   return { ...base, top: rowBottom.value + 'px' }
+})
+
+const issueNewDueDate = computed(() => {
+  const item = issueInvoiceItem.value
+  if (!item?.document_date || !item?.due_date) return ''
+  const diffDays = Math.round((new Date(item.due_date) - new Date(item.document_date)) / 86400000)
+  const d = new Date(issueToday.value)
+  d.setDate(d.getDate() + diffDays)
+  return d.toISOString().slice(0, 10)
 })
 
 const headers = [
@@ -202,9 +311,36 @@ function openNew() { selectedInvoice.value = null; dialog.value = true }
 function openEdit(item) { selectedInvoice.value = item; dialog.value = true }
 async function onSaved() { dialog.value = false; await fetchItems() }
 
+function fmtDate(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}.${m}.${y}`
+}
+
 async function issueInvoice(item) {
-  if (!confirm('Rechnung ausstellen? Dabei wird eine Nummer vergeben.')) return
+  const today = new Date().toISOString().slice(0, 10)
+  if (item.document_date !== today) {
+    issueInvoiceItem.value = item
+    issueToday.value = today
+    issueDateOption.value = 'both'
+    issueDialog.value = true
+  } else {
+    if (!confirm('Rechnung ausstellen? Dabei wird eine Nummer vergeben.')) return
+    await api.post(`/invoices/${item.id}/issue/`)
+    await fetchItems()
+  }
+}
+
+async function confirmIssue() {
+  const item = issueInvoiceItem.value
+  if (!item) return
+  if (issueDateOption.value !== 'none') {
+    const patch = { document_date: issueToday.value }
+    if (issueDateOption.value === 'both') patch.due_date = issueNewDueDate.value
+    await api.patch(`/invoices/${item.id}/`, patch)
+  }
   await api.post(`/invoices/${item.id}/issue/`)
+  issueDialog.value = false
   await fetchItems()
 }
 
@@ -220,10 +356,25 @@ async function confirmMarkPaid() {
   await fetchItems()
 }
 
-async function cancelInvoice(item) {
-  if (!confirm(`Rechnung ${item.number || '#' + item.id} wirklich stornieren?`)) return
-  await api.post(`/invoices/${item.id}/cancel/`)
+function cancelInvoice(item) {
+  cancelInvoiceItem.value = item
+  cancelReason.value = ''
+  cancelCreateDraft.value = false
+  cancelDialog.value = true
+}
+
+async function confirmCancel() {
+  const item = cancelInvoiceItem.value
+  if (!item || !cancelReason.value?.trim()) return
+  const res = await api.post(`/invoices/${item.id}/cancel/`, {
+    reason: cancelReason.value.trim(),
+    create_draft: cancelCreateDraft.value,
+  })
+  cancelDialog.value = false
   await fetchItems()
+  if (res.data.draft) {
+    openEdit(res.data.draft)
+  }
 }
 
 async function createReminder(item) {
@@ -232,7 +383,13 @@ async function createReminder(item) {
 
 function openPreview(item) {
   previewPath.value = `/invoices/${item.id}`
-  previewTitle.value = `Rechnung ${item.number || '#' + item.id}`
+  previewTitle.value = `${item.reverses ? 'Stornorechnung' : 'Rechnung'} ${item.number || '#' + item.id}`
+  previewDialog.value = true
+}
+
+function openOriginal(item) {
+  previewPath.value = `/invoices/${item.reverses}`
+  previewTitle.value = `Rechnung ${item.reverses_number || '#' + item.reverses}`
   previewDialog.value = true
 }
 

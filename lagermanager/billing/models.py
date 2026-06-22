@@ -256,6 +256,14 @@ class Invoice(models.Model):
         related_name='invoices',
     )
 
+    reverses = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reversed_by',
+        help_text='Bei Stornorechnungen: die stornierte Originalrechnung.',
+    )
+
     document_date = models.DateField()
     due_date = models.DateField(default=datetime.date.today)
     notes = models.TextField(blank=True)
@@ -266,6 +274,7 @@ class Invoice(models.Model):
 
     if TYPE_CHECKING:
         lines: RelatedManager["InvoiceLine"]
+        reversed_by: RelatedManager["Invoice"]
 
     class Meta:
         ordering = ['-document_date', '-pk']
@@ -274,6 +283,11 @@ class Invoice(models.Model):
 
     def __str__(self) -> str:
         return self.number or f'Rechnung #{self.pk} (Entwurf)'
+
+    @property
+    def is_reversal(self) -> bool:
+        """True if this invoice is a Stornorechnung (reversal of another invoice)."""
+        return self.reverses_id is not None
 
     @property
     def net_total(self) -> Decimal:

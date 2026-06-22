@@ -160,16 +160,28 @@ class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
     address_display = serializers.CharField(source='address.display_name', read_only=True)
     net_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    reverses_number = serializers.CharField(source='reverses.number', read_only=True, default=None)
+    reversed_by_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
         fields = [
             'id', 'number', 'status', 'address', 'address_display', 'source_offer',
+            'reverses', 'reverses_number', 'reversed_by_id',
             'document_date', 'due_date', 'paid_at',
             'net_total', 'gross_total',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'number', 'address_display', 'net_total', 'gross_total', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'number', 'address_display',
+            'reverses', 'reverses_number', 'reversed_by_id',
+            'net_total', 'gross_total',
+            'created_at', 'updated_at',
+        ]
+
+    def get_reversed_by_id(self, obj: Invoice) -> int | None:
+        reversal: Invoice | None = obj.reversed_by.first()
+        return reversal.pk if reversal is not None else None
 
 
 class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
@@ -178,12 +190,15 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
     gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     tax_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     lines = InvoiceLineSerializer(many=True, read_only=True)
+    reverses_number = serializers.CharField(source='reverses.number', read_only=True, default=None)
+    reversed_by_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
         fields = [
             'id', 'number', 'status', 'address', 'address_display', 'recipient_text',
             'source_offer',
+            'reverses', 'reverses_number', 'reversed_by_id',
             'document_date', 'due_date', 'notes', 'paid_at',
             'net_total', 'gross_total', 'tax_total',
             'lines',
@@ -191,9 +206,14 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
         ]
         read_only_fields = [
             'id', 'number', 'address_display', 'recipient_text',
+            'reverses', 'reverses_number', 'reversed_by_id',
             'net_total', 'gross_total', 'tax_total',
             'created_at', 'updated_at',
         ]
+
+    def get_reversed_by_id(self, obj: Invoice) -> int | None:
+        reversal: Invoice | None = obj.reversed_by.first()
+        return reversal.pk if reversal is not None else None
 
 
 # ---------------------------------------------------------------------------

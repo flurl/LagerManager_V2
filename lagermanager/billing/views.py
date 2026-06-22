@@ -3,7 +3,6 @@ import logging
 from typing import Any
 
 from constance import config
-
 from core.models import Address
 from core.permissions import DjangoModelPermissionsWithView, require_perm
 from django.db import transaction
@@ -280,11 +279,30 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
 # Invoice
 # ---------------------------------------------------------------------------
 
+def _clone_lines(src: Invoice, dst: Invoice, *, negate: bool = False) -> None:
+    """Copy all line items from *src* to *dst*, optionally negating the quantity."""
+    for line in src.lines.select_related('billing_article', 'tax_rate'):
+        InvoiceLine.objects.create(
+            invoice=dst,
+            position=line.position,
+            billing_article=line.billing_article,
+            description=line.description,
+            unit=line.unit,
+            quantity=-line.quantity if negate else line.quantity,
+            unit_price=line.unit_price,
+            tax_rate=line.tax_rate,
+        )
+
+
 class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
-        return Invoice.objects.select_related('address', 'source_offer').prefetch_related('lines__tax_rate')
+        return (
+            Invoice.objects
+            .select_related('address', 'source_offer', 'reverses')
+            .prefetch_related('lines__tax_rate', 'reversed_by')
+        )
 
     def get_serializer_class(self) -> type[BaseSerializer[Invoice]]:
         if self.action == 'list':
@@ -355,7 +373,7 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
             invoice.save(update_fields=['number', 'recipient_text', 'status'])
         return Response(InvoiceSerializer(invoice).data)
 
-    # ---- Cancel -------------------------------------------------------------
+    # ---- Cancel / reverse ---------------------------------------------------
 
     @action(detail=True, methods=['post'], url_path='cancel')
     def cancel(self, request: Request, pk: str | None = None) -> Response:
@@ -365,9 +383,52 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
                 {'detail': 'Nur ausgestellte oder versendete Rechnungen können storniert werden.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        invoice.status = Invoice.Status.CANCELLED
-        invoice.save(update_fields=['status'])
-        return Response(InvoiceSerializer(invoice).data)
+        reason: str = (request.data.get('reason') or '').strip()
+        if not reason:
+            return Response(
+                {'detail': 'Ein Stornierungsgrund ist erforderlich.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        create_draft: bool = bool(request.data.get('create_draft', False))
+        with transaction.atomic():
+            today = timezone.localdate()
+            notes = f'Stornorechnung für Rechnung {invoice.number}\nGrund: {reason}'
+            # Create the reverse (Storno) invoice as a draft first, then issue it.
+            reverse = Invoice.objects.create(
+                address=invoice.address,
+                document_date=today,
+                due_date=today,
+                reverses=invoice,
+                notes=notes,
+                status=Invoice.Status.DRAFT,
+            )
+            _clone_lines(invoice, reverse, negate=True)
+            reverse.number = allocate_number(NumberSequence.DocType.INVOICE, reverse.document_date)
+            reverse.recipient_text = invoice.recipient_text
+            reverse.status = Invoice.Status.ISSUED
+            reverse.save(update_fields=['number', 'recipient_text', 'status'])
+            # Mark the original as cancelled.
+            invoice.status = Invoice.Status.CANCELLED
+            invoice.save(update_fields=['status'])
+            # Optionally create a new draft copy of the original invoice.
+            draft: Invoice | None = None
+            if create_draft:
+                draft = Invoice.objects.create(
+                    address=invoice.address,
+                    document_date=invoice.document_date,
+                    due_date=invoice.due_date,
+                    notes=invoice.notes,
+                    source_offer=invoice.source_offer,
+                    status=Invoice.Status.DRAFT,
+                )
+                _clone_lines(invoice, draft)
+        return Response(
+            {
+                'reverse': InvoiceSerializer(reverse).data,
+                'draft': InvoiceSerializer(draft).data if draft else None,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     # ---- Mark paid ----------------------------------------------------------
 
@@ -406,17 +467,7 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
                 notes=invoice.notes,
                 status=Invoice.Status.DRAFT,
             )
-            for line in invoice.lines.select_related('billing_article', 'tax_rate'):
-                InvoiceLine.objects.create(
-                    invoice=new_invoice,
-                    position=line.position,
-                    billing_article=line.billing_article,
-                    description=line.description,
-                    unit=line.unit,
-                    quantity=line.quantity,
-                    unit_price=line.unit_price,
-                    tax_rate=line.tax_rate,
-                )
+            _clone_lines(invoice, new_invoice)
         return Response(InvoiceSerializer(new_invoice).data, status=status.HTTP_201_CREATED)
 
     # ---- Preview / PDF ------------------------------------------------------
