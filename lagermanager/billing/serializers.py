@@ -126,6 +126,14 @@ class OfferSerializer(serializers.ModelSerializer[Offer]):
             'created_at', 'updated_at',
         ]
 
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        document_date = data.get('document_date', self.instance.document_date if self.instance else None)
+        valid_until = data.get('valid_until', self.instance.valid_until if self.instance else None)
+        if document_date and valid_until and valid_until < document_date:
+            raise serializers.ValidationError(
+                {'valid_until': 'Das Ablaufdatum darf nicht vor dem Angebotsdatum liegen.'})
+        return data
+
 
 # ---------------------------------------------------------------------------
 # Invoice lines
@@ -215,6 +223,14 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
         reversal: Invoice | None = obj.reversed_by.first()
         return reversal.pk if reversal is not None else None
 
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        document_date = data.get('document_date', self.instance.document_date if self.instance else None)
+        due_date = data.get('due_date', self.instance.due_date if self.instance else None)
+        if document_date and due_date and due_date < document_date:
+            raise serializers.ValidationError(
+                {'due_date': 'Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen.'})
+        return data
+
 
 # ---------------------------------------------------------------------------
 # Reminder
@@ -239,6 +255,14 @@ class ReminderSerializer(serializers.ModelSerializer[Reminder]):
             'invoice_number', 'invoice_address_display',
             'created_at', 'updated_at',
         ]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        reminder_date = data.get('reminder_date', self.instance.reminder_date if self.instance else None)
+        due_date = data.get('due_date', self.instance.due_date if self.instance else None)
+        if reminder_date and due_date and due_date < reminder_date:
+            raise serializers.ValidationError(
+                {'due_date': 'Das Fälligkeitsdatum darf nicht vor dem Mahnungsdatum liegen.'})
+        return data
 
 
 # ---------------------------------------------------------------------------

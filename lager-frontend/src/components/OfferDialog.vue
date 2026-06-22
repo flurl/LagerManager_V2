@@ -27,7 +27,9 @@
           <v-text-field v-model="form.document_date" label="Datum *" type="date" />
         </v-col>
         <v-col cols="2">
-          <v-text-field v-model="form.valid_until" label="Gültig bis" type="date" />
+          <v-text-field v-model="form.valid_until" label="Gültig bis" type="date"
+            :min="form.document_date"
+            :rules="[v => !v || v >= form.document_date || 'Darf nicht vor dem Angebotsdatum liegen']" />
         </v-col>
         <v-col cols="3">
           <v-select

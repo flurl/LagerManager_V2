@@ -165,6 +165,23 @@ class OfferViewSetTests(APITestCase):
         self.assertEqual(resp.json()['status'], 'draft')
         self.assertIsNone(resp.json()['number'])
 
+    def test_valid_until_before_document_date_rejected(self) -> None:
+        resp = self.client.post('/api/offers/', {
+            'address': self.address.pk,
+            'document_date': '2026-06-15',
+            'valid_until': '2026-06-10',
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('valid_until', resp.json())
+
+    def test_valid_until_same_as_document_date_ok(self) -> None:
+        resp = self.client.post('/api/offers/', {
+            'address': self.address.pk,
+            'document_date': '2026-06-15',
+            'valid_until': '2026-06-15',
+        })
+        self.assertEqual(resp.status_code, 201)
+
     def test_lines_replace(self) -> None:
         offer = _make_offer(self.address)
         lines_data = [
@@ -249,6 +266,23 @@ class InvoiceViewSetTests(APITestCase):
         })
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()['status'], 'draft')
+
+    def test_due_date_before_document_date_rejected(self) -> None:
+        resp = self.client.post('/api/invoices/', {
+            'address': self.address.pk,
+            'document_date': '2026-06-15',
+            'due_date': '2026-06-10',
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('due_date', resp.json())
+
+    def test_due_date_same_as_document_date_ok(self) -> None:
+        resp = self.client.post('/api/invoices/', {
+            'address': self.address.pk,
+            'document_date': '2026-06-15',
+            'due_date': '2026-06-15',
+        })
+        self.assertEqual(resp.status_code, 201)
 
     @patch('billing.views.allocate_number', return_value='RE260601')
     def test_issue_invoice(self, mock_alloc: object) -> None:
@@ -478,6 +512,25 @@ class ReminderViewSetTests(APITestCase):
         })
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()['status'], 'draft')
+
+    def test_reminder_due_date_before_reminder_date_rejected(self) -> None:
+        resp = self.client.post('/api/reminders/', {
+            'invoice': self.invoice.pk,
+            'level': 1,
+            'reminder_date': '2026-07-01',
+            'due_date': '2026-06-25',
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('due_date', resp.json())
+
+    def test_reminder_due_date_same_as_reminder_date_ok(self) -> None:
+        resp = self.client.post('/api/reminders/', {
+            'invoice': self.invoice.pk,
+            'level': 1,
+            'reminder_date': '2026-07-01',
+            'due_date': '2026-07-01',
+        })
+        self.assertEqual(resp.status_code, 201)
 
     @patch('billing.views.allocate_number', return_value='MA260701')
     def test_issue_reminder(self, mock_alloc: object) -> None:

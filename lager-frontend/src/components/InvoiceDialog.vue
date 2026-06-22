@@ -31,7 +31,9 @@
         </v-col>
         <v-col cols="3">
           <v-text-field v-model="form.due_date" label="Fälligkeitsdatum *" type="date"
-          :rules="[v => !!v || 'Pflichtfeld']" :disabled="!isDraft" />
+            :min="form.document_date"
+            :rules="[v => !!v || 'Pflichtfeld', v => !form.document_date || v >= form.document_date || 'Darf nicht vor dem Rechnungsdatum liegen']"
+            :disabled="!isDraft" />
         </v-col>
       </v-row>
 

@@ -113,7 +113,9 @@
               <v-text-field v-model="form.reminder_date" label="Mahnungsdatum *" type="date" />
             </v-col>
             <v-col cols="4">
-              <v-text-field v-model="form.due_date" label="Zahlungsfrist *" type="date" />
+              <v-text-field v-model="form.due_date" label="Zahlungsfrist *" type="date"
+                :min="form.reminder_date"
+                :rules="[v => !!v || 'Pflichtfeld', v => !form.reminder_date || v >= form.reminder_date || 'Darf nicht vor dem Mahnungsdatum liegen']" />
             </v-col>
           </v-row>
           <NumberInput v-model="form.fee" label="Mahngebühr (€)" class="mt-2" />
