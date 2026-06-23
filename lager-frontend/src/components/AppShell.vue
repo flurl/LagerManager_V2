@@ -83,8 +83,8 @@
     <v-card>
       <v-card-title>Benutzereinstellungen</v-card-title>
       <v-card-text>
-        <v-select v-model="prefsForm.theme" :items="themeOptions" item-title="label" item-value="value"
-          label="Design" class="mb-4" />
+        <v-select v-model="prefsForm.theme" :items="themeOptions" item-title="label" item-value="value" label="Design"
+          class="mb-4" />
         <v-select v-model="prefsForm.language" :items="languageOptions" item-title="label" item-value="value"
           label="Sprache" class="mb-4" />
         <div class="text-subtitle-2 mb-2">Periodenfarben</div>
@@ -157,6 +157,7 @@ const allNavGroups = [
       { to: '/article-meta', icon: 'mdi-tag-edit', title: 'Artikel-Metadaten', permission: 'pos_import.view_articlemeta' },
       { to: '/partners', icon: 'mdi-truck', title: 'Partner', permission: 'deliveries.view_partner' },
       { to: '/tax-rates', icon: 'mdi-percent', title: 'Steuersätze', permission: 'deliveries.view_taxrate' },
+      { to: '/addresses', icon: 'mdi-account-box', title: 'Adressen', permission: 'billing.view_address' },
       { to: '/locations', icon: 'mdi-map-marker', title: 'Standorte', permission: 'core.view_location' },
       { to: '/departments', icon: 'mdi-folder-account', title: 'Abteilungen', permission: 'core.view_department' },
     ],
@@ -186,6 +187,16 @@ const allNavGroups = [
           { to: '/staff-consumption-import', icon: 'mdi-database-import', title: 'Verbrauch Import', permission: 'deliveries.add_stockmovement' },
         ]
       },
+    ],
+  },
+  {
+    label: 'Fakturierung',
+    icon: 'mdi-file-document-edit',
+    items: [
+      { to: '/billing-articles', icon: 'mdi-tag-multiple', title: 'Artikel', permission: 'billing.view_billingarticle' },
+      { to: '/offers', icon: 'mdi-file-document-outline', title: 'Angebote', permission: 'billing.view_offer' },
+      { to: '/invoices', icon: 'mdi-receipt-text-outline', title: 'Rechnungen', permission: 'billing.view_invoice' },
+      { to: '/reminders', icon: 'mdi-bell-alert-outline', title: 'Mahnungen', permission: 'billing.view_reminder' },
     ],
   },
   {

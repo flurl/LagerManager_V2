@@ -23,6 +23,27 @@ class StockAlertSubscription(models.Model):
         return f'{self.user} ({status})'
 
 
+class InvoiceAlertSubscription(models.Model):
+    """Users who receive daily overdue-invoice notifications."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='invoice_alert_subscription',
+        verbose_name='Benutzer',
+    )
+    active = models.BooleanField(default=True, verbose_name='Aktiv')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Rechnungs-Alarm-Abonnement'
+        verbose_name_plural = 'Rechnungs-Alarm-Abonnements'
+
+    def __str__(self) -> str:
+        status = 'aktiv' if self.active else 'inaktiv'
+        return f'{self.user} ({status})'
+
+
 class Notification(models.Model):
     class Severity(models.TextChoices):
         INFO = 'info', 'Information'

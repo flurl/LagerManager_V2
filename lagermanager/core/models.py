@@ -2,6 +2,91 @@ from django.conf import settings
 from django.db import models
 
 
+# ---------------------------------------------------------------------------
+# Address
+# ---------------------------------------------------------------------------
+
+class Address(models.Model):
+    """
+    Customer/partner address master table.
+
+    Rows imported from the Wiffzack POS system carry a wz_source_id (the legacy
+    adresse_id).  Locally-created rows leave wz_source_id=None.  The sync service
+    upserts by wz_source_id and never deletes, so FK references from documents always
+    remain valid.
+    """
+
+    wz_source_id = models.IntegerField(
+        null=True, blank=True, unique=True,
+        help_text='adresse_id from adressen_basis in Wiffzack; null for locally-created addresses.',
+    )
+
+    # Name / company
+    anrede = models.CharField(max_length=255, blank=True, null=True)
+    vorname = models.CharField(max_length=50, blank=True, null=True)
+    nachname = models.CharField(max_length=50, blank=True, null=True)
+    firma = models.TextField(blank=True, null=True)
+    abteilung = models.TextField(blank=True, null=True)
+
+    # Contact / address
+    strasse = models.CharField(max_length=100, blank=True, null=True)
+    plz = models.CharField(max_length=10, blank=True, null=True)
+    ort = models.CharField(max_length=50, blank=True, null=True)
+    telefon = models.CharField(max_length=50, blank=True, null=True)
+    email = models.CharField(max_length=50, blank=True, null=True)
+
+    # Business details
+    uid = models.TextField(blank=True, null=True, verbose_name='UID-Nummer')
+    anmerkung = models.TextField(blank=True, null=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['nachname', 'vorname', 'firma']
+        verbose_name = 'Adresse'
+        verbose_name_plural = 'Adressen'
+
+    def __str__(self) -> str:
+        if self.firma:
+            return self.firma
+        parts = [p for p in (self.vorname, self.nachname) if p]
+        return ' '.join(parts) if parts else f'Adresse #{self.pk}'
+
+    @property
+    def display_name(self) -> str:
+        """Formatted single-line display name including company if set."""
+        name_parts = [p for p in (self.vorname, self.nachname) if p]
+        name = ' '.join(name_parts)
+        if self.firma and name:
+            return f'{self.firma} ({name})'
+        return self.firma or name or f'Adresse #{self.pk}'
+
+    def format_address_block(self) -> str:
+        """Multi-line address block suitable for document headers."""
+        lines: list[str] = []
+        if self.anrede:
+            lines.append(self.anrede)
+        if self.firma:
+            lines.append(self.firma)
+        if self.abteilung:
+            lines.append(self.abteilung)
+        name_parts = [p for p in (self.vorname, self.nachname) if p]
+        if name_parts:
+            lines.append(' '.join(name_parts))
+        if self.strasse:
+            lines.append(self.strasse)
+        plz_ort = ' '.join(p for p in (self.plz, self.ort) if p)
+        if plz_ort:
+            lines.append(plz_ort)
+        return '\n'.join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Period
+# ---------------------------------------------------------------------------
+
 class Period(models.Model):
     """Abrechnungsperiode (Geschäftsjahr)"""
     name = models.CharField(

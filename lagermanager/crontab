@@ -1,3 +1,6 @@
-# Send daily below-minimum-stock notifications at 07:00 Vienna time
+# Send below-minimum-stock notifications every 3 days at 07:00 Vienna time
 # supercronic uses local time — the cron container must have TZ=Europe/Vienna set
-0 7 * * * python manage.py send_stock_alerts
+0 7 */3 * * python manage.py send_stock_alerts
+
+# Send overdue-invoice notifications every 3 days at 07:05 Vienna time
+5 7 */3 * * python manage.py send_invoice_alerts

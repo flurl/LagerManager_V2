@@ -1,0 +1,76 @@
+{% extends "billing/base_document.html" %}
+
+{% block doc_title %}Mahnung {% if doc.number %}{{ doc.number }}{% else %}(Entwurf){% endif %}{% endblock %}
+{% block doc_type_label %}Mahnung{% endblock %}
+
+{% block extra_style %}
+<style>
+  .reminder-badge {
+    display: inline-block;
+    background: #c0392b;
+    color: #fff;
+    font-size: 9pt;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 3px;
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+  }
+  .reminder-summary {
+    background: #fdf2f2;
+    border: 1px solid #e8c5c5;
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 10pt;
+  }
+  .reminder-summary table { width: 100%; border-collapse: collapse; }
+  .reminder-summary td { padding: 3px 0; }
+  .reminder-summary td:first-child { color: #777; padding-right: 20px; }
+  .reminder-summary td:last-child { font-weight: 600; text-align: right; }
+  .reminder-summary .total-row td { font-size: 12pt; color: #c0392b; border-top: 1px solid #e8c5c5; padding-top: 6px; }
+</style>
+{% endblock %}
+
+{% block meta_table %}
+<table class="meta-table">
+  <tr><td>Mahnungsdatum</td><td>{{ doc.reminder_date|date:"d.m.Y" }}</td></tr>
+  <tr><td>Zahlung bis</td><td>{{ doc.due_date|date:"d.m.Y" }}</td></tr>
+  <tr><td>Mahnstufe</td><td>{{ doc.level }}</td></tr>
+</table>
+{% endblock %}
+
+{% block doc_body %}
+<div class="reminder-summary">
+  <table>
+    <tr>
+      <td>Ursprüngliche Rechnung</td>
+      <td>{{ doc.invoice.number|default:"(ohne Nummer)" }}</td>
+    </tr>
+    <tr>
+      <td>Rechnungsdatum</td>
+      <td>{{ doc.invoice.document_date|date:"d.m.Y" }}</td>
+    </tr>
+    {% if doc.invoice.due_date %}
+    <tr>
+      <td>Ursprünglich fällig am</td>
+      <td>{{ doc.invoice.due_date|date:"d.m.Y" }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td>Rechnungsbetrag (brutto)</td>
+      <td>{{ doc.invoice.gross_total|floatformat:"2" }} €</td>
+    </tr>
+    {% if doc.fee %}
+    <tr>
+      <td>Mahngebühr</td>
+      <td>{{ doc.fee|floatformat:"2" }} €</td>
+    </tr>
+    {% endif %}
+    <tr class="total-row">
+      <td>Offener Betrag</td>
+      <td>{{ doc.open_amount|floatformat:"2" }} €</td>
+    </tr>
+  </table>
+</div>
+{% endblock %}

@@ -6,7 +6,14 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Article, ArticleGroup, ArticleMeta, Recipe, WarehouseArticle, WarehouseUnit
+from .models import (
+    Article,
+    ArticleGroup,
+    ArticleMeta,
+    Recipe,
+    WarehouseArticle,
+    WarehouseUnit,
+)
 from .serializers import (
     ArticleGroupSerializer,
     ArticleMetaSerializer,
@@ -16,6 +23,11 @@ from .serializers import (
     WarehouseUnitSerializer,
 )
 from .services.mssql_import import run_import
+from .services.wz_invoice_import import (
+    get_aufwand_checkpoints,
+    get_aufwand_tische,
+    get_tisch_aufwand_lines,
+)
 
 
 class ArticleMetaViewSet(viewsets.ModelViewSet[ArticleMeta]):
@@ -91,6 +103,61 @@ class WarehouseArticleViewSet(viewsets.ReadOnlyModelViewSet[WarehouseArticle]):
         return qs.select_related('article')
 
 
+class WzInvoiceImportView(APIView):
+    """
+    Three read-only endpoints for the WZ → Invoice import dialog.
+
+    GET /api/wz-import/checkpoints/?period_id=
+    GET /api/wz-import/tische/?period_id=&checkpoint_id=
+    GET /api/wz-import/bondetails/?period_id=&tisch_id=
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, resource: str) -> Response:
+        period_id_raw = request.query_params.get('period_id')
+        if not period_id_raw:
+            return Response({'error': 'period_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            period_id = int(period_id_raw)
+        except ValueError:
+            return Response({'error': 'period_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if resource == 'checkpoints':
+            qs = get_aufwand_checkpoints(period_id)
+            data = [
+                {
+                    'id': cp.source_id,
+                    'datum': cp.datum.date().isoformat(),
+                    'label': cp.info if cp.info else cp.datum.date().isoformat(),
+                }
+                for cp in qs
+            ]
+            return Response(data)
+
+        if resource == 'tische':
+            checkpoint_id_raw = request.query_params.get('checkpoint_id')
+            if not checkpoint_id_raw:
+                return Response({'error': 'checkpoint_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                checkpoint_id = int(checkpoint_id_raw)
+            except ValueError:
+                return Response({'error': 'checkpoint_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(get_aufwand_tische(period_id, checkpoint_id))
+
+        if resource == 'bondetails':
+            tisch_id_raw = request.query_params.get('tisch_id')
+            if not tisch_id_raw:
+                return Response({'error': 'tisch_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                tisch_id = int(tisch_id_raw)
+            except ValueError:
+                return Response({'error': 'tisch_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(get_tisch_aufwand_lines(period_id, tisch_id))
+
+        return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 class ImportRunView(APIView):
     """
     POST /api/import/run/
@@ -113,7 +180,8 @@ class ImportRunView(APIView):
             )
 
         try:
-            summary = run_import(int(period_id), host, database, user, password)
+            summary = run_import(int(period_id), host,
+                                 database, user, password)
             return Response({'status': 'ok', 'summary': summary})
         except Exception as exc:
             return Response(

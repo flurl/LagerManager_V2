@@ -49,6 +49,7 @@ INSTALLED_APPS: list[str] = [
     'stock_count',
     'staff_consumption',
     'notifications',
+    'billing',
 ]
 
 MIDDLEWARE: list[str] = [
@@ -153,4 +154,23 @@ CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'DEFAULT_TAX_RATE_ID': (0, 'Standard-Steuersatz (TaxRate-ID, 0 = keiner)', int),
     'GEMINI_API_KEY': ('', 'Google Gemini API Key für den Dokumenten-Import', str),
     'MISTRAL_API_KEY': ('', 'Mistral API Key für den Dokumenten-Import (OCR)', str),
+    # Billing / company issuer data (used in invoice/offer/reminder templates)
+    'COMPANY_NAME': ('', 'Firmenname (Absender auf Rechnungen)', str),
+    'COMPANY_ADDRESS': ('', 'Straße und Hausnummer des Unternehmens', str),
+    'COMPANY_ZIP': ('', 'PLZ des Unternehmens', str),
+    'COMPANY_CITY': ('', 'Ort des Unternehmens', str),
+    'COMPANY_UID': ('', 'UID-Nummer des Unternehmens', str),
+    'COMPANY_IBAN': ('', 'IBAN des Unternehmens', str),
+    'COMPANY_BIC': ('', 'BIC des Unternehmens', str),
+    'COMPANY_BANK': ('', 'Bankname des Unternehmens', str),
+    'COMPANY_EMAIL': ('', 'E-Mail-Adresse des Unternehmens', str),
+    'COMPANY_PHONE': ('', 'Telefonnummer des Unternehmens', str),
+    'INVOICE_FOOTER_TEXT': ('', 'Fußzeilen-Text auf Rechnungen/Angeboten', str),
+    'INVOICE_PAYMENT_TERMS_DAYS': (14, 'Standard-Zahlungsziel in Tagen', int),
+    'DEFAULT_BILLING_TAX_RATE_ID': (0, 'Standard-Steuersatz für Faktura-Artikel (TaxRate-ID)', int),
+    'REMINDER_FEE_DEFAULT': (0, 'Standard-Mahngebühr in Euro', int),
+    # Document number prefixes (format: PREFIXYYMM##)
+    'OFFER_NUMBER_PREFIX': ('AN', 'Nummernpräfix für Angebote', str),
+    'INVOICE_NUMBER_PREFIX': ('RE', 'Nummernpräfix für Rechnungen', str),
+    'REMINDER_NUMBER_PREFIX': ('MA', 'Nummernpräfix für Mahnungen', str),
 }
