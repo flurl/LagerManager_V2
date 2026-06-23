@@ -127,7 +127,7 @@ const routes = [
   {
     path: '/addresses',
     component: () => import('./views/AddressView.vue'),
-    meta: { title: 'Adressen', permission: 'billing.view_address' },
+    meta: { title: 'Adressen', permission: 'core.view_address' },
   },
   {
     path: '/billing-articles',
