@@ -157,7 +157,7 @@ const allNavGroups = [
       { to: '/article-meta', icon: 'mdi-tag-edit', title: 'Artikel-Metadaten', permission: 'pos_import.view_articlemeta' },
       { to: '/partners', icon: 'mdi-truck', title: 'Partner', permission: 'deliveries.view_partner' },
       { to: '/tax-rates', icon: 'mdi-percent', title: 'Steuersätze', permission: 'deliveries.view_taxrate' },
-      { to: '/addresses', icon: 'mdi-account-box', title: 'Adressen', permission: 'billing.view_address' },
+      { to: '/addresses', icon: 'mdi-account-box', title: 'Adressen', permission: 'core.view_address' },
       { to: '/locations', icon: 'mdi-map-marker', title: 'Standorte', permission: 'core.view_location' },
       { to: '/departments', icon: 'mdi-folder-account', title: 'Abteilungen', permission: 'core.view_department' },
     ],
