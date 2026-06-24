@@ -13,15 +13,15 @@ class NotificationAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 @admin.register(StockAlertSubscription)
 class StockAlertSubscriptionAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
-    list_display = ('user', 'active', 'created_at')
-    list_filter = ('active',)
+    list_display = ('user', 'active', 'email_enabled', 'created_at')
+    list_filter = ('active', 'email_enabled')
     search_fields = ('user__username',)
     readonly_fields = ('created_at',)
 
 
 @admin.register(InvoiceAlertSubscription)
 class InvoiceAlertSubscriptionAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
-    list_display = ('user', 'active', 'created_at')
-    list_filter = ('active',)
+    list_display = ('user', 'active', 'email_enabled', 'created_at')
+    list_filter = ('active', 'email_enabled')
     search_fields = ('user__username',)
     readonly_fields = ('created_at',)

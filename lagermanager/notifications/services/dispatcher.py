@@ -1,6 +1,12 @@
+import logging
+
 from django.contrib.auth.models import User
+from django.core.mail import send_mail
+from django.conf import settings
 
 from notifications.models import Notification
+
+logger = logging.getLogger(__name__)
 
 
 def notify(
@@ -11,15 +17,14 @@ def notify(
     message: str = '',
     kind: str = '',
     link: str = '',
+    email_enabled: bool = False,
 ) -> Notification:
     """Create and persist an in-app notification for the given user.
 
-    This is the single integration point for all notification producers.
-    Future notification channels (email, push notifications, etc.) should either:
-    - Add a post_save signal receiver on Notification, or
-    - Be invoked explicitly from this function before the return statement.
+    When email_enabled is True and the user has an email address, also sends
+    the notification via email.
     """
-    return Notification.objects.create(
+    notification = Notification.objects.create(
         user=user,
         severity=severity,
         title=title,
@@ -27,3 +32,16 @@ def notify(
         kind=kind,
         link=link,
     )
+
+    if email_enabled and user.email:
+        try:
+            send_mail(
+                subject=title,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+            )
+        except Exception:
+            logger.exception('Failed to send email notification to %s', user.email)
+
+    return notification

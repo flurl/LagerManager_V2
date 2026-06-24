@@ -48,6 +48,7 @@ class Command(BaseCommand):
                 severity=Notification.Severity.WARNING,
                 kind='stock_alert',
                 link='/reports/below-minimum-stock',
+                email_enabled=sub.email_enabled,
             )
             count += 1
 

@@ -57,6 +57,7 @@ class Command(BaseCommand):
                 severity=Notification.Severity.WARNING,
                 kind='invoice_alert',
                 link='/invoices',
+                email_enabled=sub.email_enabled,
             )
             count += 1
 
