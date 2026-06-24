@@ -143,6 +143,21 @@ LOGGING: dict[str, Any] = {
 }
 
 
+# Email
+EMAIL_BACKEND: str = (
+    'django.core.mail.backends.console.EmailBackend'
+    if DEBUG
+    else 'django.core.mail.backends.smtp.EmailBackend'
+)
+EMAIL_HOST: str = config('EMAIL_HOST', default='localhost')
+EMAIL_PORT: int = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_HOST_USER: str = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD: str = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS: bool = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL: bool = config('EMAIL_USE_SSL', default=False, cast=bool)
+DEFAULT_FROM_EMAIL: str = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
+SERVER_EMAIL: str = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
+
 CORS_ALLOWED_ORIGINS: list[str] = cast(
     list[str],
     config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=_parse_list),
