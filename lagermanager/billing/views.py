@@ -2,10 +2,13 @@ import datetime
 import logging
 from typing import Any
 
+from auditlog.models import LogEntry
 from constance import config
 from core.models import Address
 from core.permissions import DjangoModelPermissionsWithView, require_perm
-from django.db import transaction
+from django.contrib.contenttypes.models import ContentType
+from django.db import models, transaction
+from django.db.models import Q, QuerySet
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -44,10 +47,88 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Audit-log helpers
+# ---------------------------------------------------------------------------
+
+def _serialize_log_entry(e: LogEntry, source: str = 'document') -> dict[str, Any]:
+    # Plain dict instead of a DRF serializer: this is a read-only, fixed-shape
+    # response with no validation or write path, so the overhead of a serializer
+    # class adds nothing. LogEntry also lacks stubs, making a typed ModelSerializer
+    # awkward. Revisit if a schema generator (e.g. drf-spectacular) is added.
+    actor = (e.actor.get_full_name() or e.actor.username) if e.actor else None
+    return {
+        'id': e.pk,
+        'timestamp': e.timestamp,
+        'actor': actor,
+        'action': e.action,
+        'changes': e.changes,
+        'source': source,
+        'object_repr': e.object_repr,
+    }
+
+
+def _line_log_entries(
+    parent_obj: models.Model,
+    line_ct: ContentType,
+    parent_fk_field: str,
+) -> QuerySet[LogEntry]:
+    """Return all LogEntry records for line items ever associated with parent_obj.
+
+    Deleted lines are found via JSON path queries on the changes field (auditlog
+    stores FK values as [old_pk_str, new_pk_str] in the changes dict).
+    """
+    parent_pk_str = str(parent_obj.pk)
+
+    # CREATE entries have [None-str, pk]; DELETE entries have [pk, None-str].
+    historic_pks: set[str] = set(
+        LogEntry.objects
+        .filter(content_type=line_ct)
+        .filter(
+            Q(**{f'changes__{parent_fk_field}__0': parent_pk_str}) |
+            Q(**{f'changes__{parent_fk_field}__1': parent_pk_str})
+        )
+        .values_list('object_pk', flat=True)
+        .distinct()
+    )
+
+    # Current lines whose updates may not touch the FK field at all.
+    current_pks: set[str] = {
+        str(pk) for pk in parent_obj.lines.values_list('pk', flat=True)  # type: ignore[attr-defined]
+    }
+
+    all_pks = historic_pks | current_pks
+    if not all_pks:
+        return LogEntry.objects.none()  # type: ignore[no-any-return]  # auditlog has no stubs
+
+    return (  # type: ignore[no-any-return]  # auditlog has no stubs
+        LogEntry.objects
+        .filter(content_type=line_ct, object_pk__in=all_pks)
+        .select_related('actor')
+    )
+
+
+class AuditLogHistoryMixin:
+    """Adds GET /{pk}/history/ returning django-auditlog entries for this object."""
+
+    @action(detail=True, methods=['get'], url_path='history')
+    def history(self, request: Request, pk: str | None = None) -> Response:
+        obj = self.get_object()  # type: ignore[attr-defined]
+        ct = ContentType.objects.get_for_model(obj)
+        entries = (
+            LogEntry.objects
+            .filter(content_type=ct, object_pk=str(obj.pk))
+            .select_related('actor')
+            .order_by('-timestamp')
+        )
+        data = [_serialize_log_entry(e) for e in entries if e.changes]
+        return Response(data)
+
+
+# ---------------------------------------------------------------------------
 # Address
 # ---------------------------------------------------------------------------
 
-class AddressViewSet(viewsets.ModelViewSet[Address]):
+class AddressViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Address]):
     queryset = Address.objects.all()
     serializer_class = AddressSerializer
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
@@ -145,18 +226,74 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
             qs = offer.lines.select_related('billing_article', 'tax_rate')
             return Response(OfferLineSerializer(qs, many=True).data)
 
-        # POST — replace all lines atomically
+        # POST — reconcile: update existing lines in-place, add new, remove absent.
+        # This lets auditlog record only genuine field changes instead of
+        # delete-all + create-all noise on every save.
         lines_data: list[dict[str, Any]] = request.data if isinstance(
             request.data, list) else []
+
+        submitted_ids: set[int] = set()
+        for item in lines_data:
+            try:
+                if item.get('id'):
+                    submitted_ids.add(int(item['id']))
+            except (ValueError, TypeError):
+                pass
+
         with transaction.atomic():
-            offer.lines.all().delete()
-            for item in lines_data:
-                item['offer'] = offer.pk
-                ser = OfferLineSerializer(data=item)
+            offer.lines.exclude(pk__in=submitted_ids).delete()
+            existing: dict[int, OfferLine] = {
+                line.pk: line
+                for line in offer.lines.filter(pk__in=submitted_ids)
+            }
+            for idx, item in enumerate(lines_data):
+                payload: dict[str, Any] = {
+                    'offer': offer.pk,
+                    'position': idx + 1,
+                    'billing_article': item.get('billing_article'),
+                    'description': item.get('description', ''),
+                    'unit': item.get('unit', ''),
+                    'quantity': item.get('quantity', 0),
+                    'unit_price': item.get('unit_price', 0),
+                    'tax_rate': item.get('tax_rate'),
+                }
+                line_pk = item.get('id')
+                line_instance: OfferLine | None = (
+                    existing.get(int(line_pk)) if line_pk else None
+                )
+                ser = (
+                    OfferLineSerializer(line_instance, data=payload)
+                    if line_instance
+                    else OfferLineSerializer(data=payload)
+                )
                 ser.is_valid(raise_exception=True)
                 ser.save()
+
         qs = offer.lines.select_related('billing_article', 'tax_rate')
         return Response(OfferLineSerializer(qs, many=True).data, status=status.HTTP_200_OK)
+
+    # ---- History (parent + lines merged) ------------------------------------
+
+    @action(detail=True, methods=['get'], url_path='history')
+    def history(self, request: Request, pk: str | None = None) -> Response:
+        offer: Offer = self.get_object()
+        offer_ct = ContentType.objects.get_for_model(Offer)
+        line_ct = ContentType.objects.get_for_model(OfferLine)
+
+        parent_entries = (
+            LogEntry.objects
+            .filter(content_type=offer_ct, object_pk=str(offer.pk))
+            .select_related('actor')
+        )
+        line_entries = _line_log_entries(offer, line_ct, 'offer')
+
+        data = sorted(
+            [_serialize_log_entry(e, 'document') for e in parent_entries if e.changes] +
+            [_serialize_log_entry(e, 'line') for e in line_entries if e.changes],
+            key=lambda x: x['timestamp'],
+            reverse=True,
+        )
+        return Response(data)
 
     # ---- Issue --------------------------------------------------------------
 
@@ -343,17 +480,72 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
                 {'detail': 'Positionen können nur bei Entwürfen geändert werden.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
         lines_data: list[dict[str, Any]] = request.data if isinstance(
             request.data, list) else []
+
+        submitted_ids: set[int] = set()
+        for item in lines_data:
+            try:
+                if item.get('id'):
+                    submitted_ids.add(int(item['id']))
+            except (ValueError, TypeError):
+                pass
+
         with transaction.atomic():
-            invoice.lines.all().delete()
-            for item in lines_data:
-                item['invoice'] = invoice.pk
-                ser = InvoiceLineSerializer(data=item)
+            invoice.lines.exclude(pk__in=submitted_ids).delete()
+            existing: dict[int, InvoiceLine] = {
+                line.pk: line
+                for line in invoice.lines.filter(pk__in=submitted_ids)
+            }
+            for idx, item in enumerate(lines_data):
+                payload: dict[str, Any] = {
+                    'invoice': invoice.pk,
+                    'position': idx + 1,
+                    'billing_article': item.get('billing_article'),
+                    'description': item.get('description', ''),
+                    'unit': item.get('unit', ''),
+                    'quantity': item.get('quantity', 0),
+                    'unit_price': item.get('unit_price', 0),
+                    'tax_rate': item.get('tax_rate'),
+                }
+                line_pk = item.get('id')
+                line_instance: InvoiceLine | None = (
+                    existing.get(int(line_pk)) if line_pk else None
+                )
+                ser = (
+                    InvoiceLineSerializer(line_instance, data=payload)
+                    if line_instance
+                    else InvoiceLineSerializer(data=payload)
+                )
                 ser.is_valid(raise_exception=True)
                 ser.save()
+
         qs = invoice.lines.select_related('billing_article', 'tax_rate')
         return Response(InvoiceLineSerializer(qs, many=True).data, status=status.HTTP_200_OK)
+
+    # ---- History (parent + lines merged) ------------------------------------
+
+    @action(detail=True, methods=['get'], url_path='history')
+    def history(self, request: Request, pk: str | None = None) -> Response:
+        invoice: Invoice = self.get_object()
+        invoice_ct = ContentType.objects.get_for_model(Invoice)
+        line_ct = ContentType.objects.get_for_model(InvoiceLine)
+
+        parent_entries = (
+            LogEntry.objects
+            .filter(content_type=invoice_ct, object_pk=str(invoice.pk))
+            .select_related('actor')
+        )
+        line_entries = _line_log_entries(invoice, line_ct, 'invoice')
+
+        data = sorted(
+            [_serialize_log_entry(e, 'document') for e in parent_entries if e.changes] +
+            [_serialize_log_entry(e, 'line') for e in line_entries if e.changes],
+            key=lambda x: x['timestamp'],
+            reverse=True,
+        )
+        return Response(data)
 
     # ---- Issue --------------------------------------------------------------
 
@@ -512,7 +704,7 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
 # Reminder
 # ---------------------------------------------------------------------------
 
-class ReminderViewSet(viewsets.ModelViewSet[Reminder]):
+class ReminderViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Reminder]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:

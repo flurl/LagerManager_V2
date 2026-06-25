@@ -10,6 +10,7 @@ import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from auditlog.registry import auditlog
 from django.db import models
 
 if TYPE_CHECKING:
@@ -368,3 +369,15 @@ class Reminder(models.Model):
     def open_amount(self) -> Decimal:
         """Invoice gross total + reminder fee."""
         return self.invoice.gross_total + self.fee
+
+
+# ---------------------------------------------------------------------------
+# Audit log registration
+# ---------------------------------------------------------------------------
+
+auditlog.register(BillingArticle)
+auditlog.register(Offer)
+auditlog.register(OfferLine)
+auditlog.register(Invoice)
+auditlog.register(InvoiceLine)
+auditlog.register(Reminder)

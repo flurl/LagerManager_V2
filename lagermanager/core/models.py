@@ -1,3 +1,4 @@
+from auditlog.registry import auditlog
 from django.conf import settings
 from django.db import models
 
@@ -178,3 +179,6 @@ class UserPreferences(models.Model):
 
     def __str__(self) -> str:
         return f'Preferences({self.user})'
+
+
+auditlog.register(Address)

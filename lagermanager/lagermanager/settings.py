@@ -50,6 +50,7 @@ INSTALLED_APPS: list[str] = [
     'staff_consumption',
     'notifications',
     'billing',
+    'auditlog',
 ]
 
 MIDDLEWARE: list[str] = [
@@ -59,6 +60,7 @@ MIDDLEWARE: list[str] = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'auditlog.middleware.AuditlogMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

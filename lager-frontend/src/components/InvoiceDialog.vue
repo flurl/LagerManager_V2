@@ -220,6 +220,7 @@
   </v-dialog>
 
   <WzImportDialog v-model="wzImportDialogOpen" @confirm="onWzImport" />
+
 </template>
 
 <script setup>
@@ -377,6 +378,7 @@ async function doSave() {
       await api.put(`/invoices/${id}/`, form.value)
     }
     const linesPayload = lines.value.map((l, idx) => ({
+      id: l.id,
       invoice: id,
       position: idx + 1,
       billing_article: l.billing_article || null,

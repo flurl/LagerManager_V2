@@ -54,6 +54,9 @@
               </template></v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
+              <v-tooltip text="Verlauf"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openHistory(item)">mdi-history</v-icon>
+              </template></v-tooltip>
             </template>
             <template v-else>{{ item[col.key] }}</template>
           </td>
@@ -143,6 +146,8 @@
     </v-dialog>
 
     <DocumentPreviewDialog v-model="previewDialog" :doc-path="previewPath" :title="previewTitle" />
+
+    <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/reminders/${historyItem.id}`" />
   </div>
 </template>
 
@@ -154,6 +159,7 @@ import { hexToRgba } from '../utils/color'
 import api from '../api'
 import NumberInput from '../components/NumberInput.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
+import HistoryDialog from '../components/HistoryDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -184,6 +190,8 @@ const previewDialog = ref(false)
 const previewPath = ref(null)
 const previewTitle = ref('')
 const form = ref({})
+const historyDialog = ref(false)
+const historyItem = ref(null)
 
 const linesCache = ref({})
 const linesLoading = ref({})
@@ -263,6 +271,11 @@ async function issueReminder(item) {
   if (!confirm('Mahnung ausstellen? Dabei wird eine Nummer vergeben.')) return
   await api.post(`/reminders/${item.id}/issue/`)
   await fetchItems()
+}
+
+function openHistory(item) {
+  historyItem.value = item
+  historyDialog.value = true
 }
 
 function openPreview(item) {

@@ -22,6 +22,9 @@
       <template #item.actions="{ item }">
         <v-icon size="small" @click.stop="openEdit(item)">mdi-pencil</v-icon>
         <v-icon size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
+        <v-tooltip text="Verlauf"><template #activator="{ props }">
+          <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openHistory(item)">mdi-history</v-icon>
+        </template></v-tooltip>
       </template>
     </v-data-table>
 
@@ -29,6 +32,8 @@
     <v-dialog v-model="dialog" max-width="640">
       <AddressDialog :address="editingAddress" @saved="onAddressSaved" @close="dialog = false" />
     </v-dialog>
+
+    <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/addresses/${historyItem.id}`" />
 
     <!-- WZ sync dialog -->
     <v-dialog v-model="syncDialog" max-width="480">
@@ -57,6 +62,7 @@
 import { ref, onMounted } from 'vue'
 import api from '../api'
 import AddressDialog from '../components/AddressDialog.vue'
+import HistoryDialog from '../components/HistoryDialog.vue'
 
 const items = ref([])
 const loading = ref(false)
@@ -69,6 +75,8 @@ let searchTimeout = null
 
 const syncForm = ref({ host: '', database: '', user: '', password: '' })
 const editingAddress = ref(null)
+const historyDialog = ref(false)
+const historyItem = ref(null)
 
 const headers = [
   { title: 'Name / Firma', key: 'display_name' },
@@ -93,6 +101,11 @@ async function fetchItems(q) {
 function onSearch(val) {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => fetchItems(val || undefined), 300)
+}
+
+function openHistory(item) {
+  historyItem.value = item
+  historyDialog.value = true
 }
 
 function openNew() {

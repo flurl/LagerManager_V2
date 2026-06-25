@@ -220,6 +220,7 @@
   <v-dialog v-model="articleDialogOpen" max-width="560">
     <BillingArticleDialog :article="null" @saved="onArticleSaved" @close="articleDialogOpen = false" />
   </v-dialog>
+
 </template>
 
 <script setup>
@@ -359,6 +360,7 @@ async function doSave() {
     }
     // Replace lines
     const linesPayload = lines.value.map((l, idx) => ({
+      id: l.id,
       offer: id,
       position: idx + 1,
       billing_article: l.billing_article || null,

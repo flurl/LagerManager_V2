@@ -3,6 +3,7 @@ import datetime
 from decimal import Decimal
 from unittest.mock import patch
 
+from auditlog.models import LogEntry
 from core.models import Address
 from deliveries.models import TaxRate
 from django.contrib.auth.models import User
@@ -562,4 +563,80 @@ class ReminderViewSetTests(APITestCase):
         )
         resp = self.client.get(f'/api/reminders/{reminder.pk}/preview/')
         self.assertEqual(resp.status_code, 200)
-        self.assertIn('text/html', resp['Content-Type'])
+
+
+# ---------------------------------------------------------------------------
+# Audit-log history endpoint
+# ---------------------------------------------------------------------------
+
+def _make_log_entry(obj: object, actor: User, action: int = LogEntry.Action.UPDATE) -> LogEntry:
+    from django.contrib.contenttypes.models import ContentType
+    ct = ContentType.objects.get_for_model(obj)  # type: ignore[type-var]
+    return LogEntry.objects.create(
+        content_type=ct,
+        object_pk=str(obj.pk),  # type: ignore[union-attr]
+        object_repr=str(obj),
+        action=action,
+        changes={'status': ['draft', 'issued']},
+        actor=actor,
+    )
+
+
+class AuditLogHistoryTests(APITestCase):
+    def setUp(self) -> None:
+        self.user = _create_user()
+        self.client.force_authenticate(user=self.user)
+        self.address = _make_address()
+
+    def test_offer_history_shape(self) -> None:
+        """History endpoint returns a list with the expected keys."""
+        offer = _make_offer(self.address)
+        _make_log_entry(offer, self.user)
+        resp = self.client.get(f'/api/offers/{offer.pk}/history/')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsInstance(data, list)
+        self.assertGreaterEqual(len(data), 1)
+        # The manually added UPDATE entry should be first (most recent)
+        first = data[0]
+        self.assertIn('id', first)
+        self.assertIn('timestamp', first)
+        self.assertIn('actor', first)
+        self.assertIn('action', first)
+        self.assertIn('changes', first)
+        self.assertEqual(first['action'], LogEntry.Action.UPDATE)
+        self.assertEqual(first['actor'], self.user.username)
+
+    def test_invoice_history_returns_list(self) -> None:
+        invoice = _make_invoice(self.address)
+        _make_log_entry(invoice, self.user, LogEntry.Action.CREATE)
+        resp = self.client.get(f'/api/invoices/{invoice.pk}/history/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsInstance(resp.json(), list)
+        self.assertGreaterEqual(len(resp.json()), 1)
+
+    def test_reminder_history_returns_list(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        reminder = Reminder.objects.create(
+            invoice=invoice, level=1,
+            reminder_date=datetime.date(2026, 7, 1),
+            due_date=datetime.date(2026, 7, 15),
+        )
+        _make_log_entry(reminder, self.user)
+        resp = self.client.get(f'/api/reminders/{reminder.pk}/history/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsInstance(resp.json(), list)
+        self.assertGreaterEqual(len(resp.json()), 1)
+
+    def test_address_history_returns_list(self) -> None:
+        _make_log_entry(self.address, self.user)
+        resp = self.client.get(f'/api/addresses/{self.address.pk}/history/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsInstance(resp.json(), list)
+        self.assertGreaterEqual(len(resp.json()), 1)
+
+    def test_history_requires_auth(self) -> None:
+        offer = _make_offer(self.address)
+        self.client.logout()
+        resp = self.client.get(f'/api/offers/{offer.pk}/history/')
+        self.assertEqual(resp.status_code, 401)

@@ -52,6 +52,9 @@
               </template></v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
+              <v-tooltip text="Verlauf"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openHistory(item)">mdi-history</v-icon>
+              </template></v-tooltip>
             </template>
             <template v-else>{{ item[col.key] }}</template>
           </td>
@@ -119,6 +122,8 @@
       :doc-path="previewPath"
       :title="previewTitle"
     />
+
+    <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/offers/${historyItem.id}`" />
   </div>
 </template>
 
@@ -130,6 +135,7 @@ import { hexToRgba } from '../utils/color'
 import api from '../api'
 import OfferDialog from '../components/OfferDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
+import HistoryDialog from '../components/HistoryDialog.vue'
 
 const router = useRouter()
 const theme = useTheme()
@@ -158,6 +164,8 @@ const selectedOffer = ref(null)
 const previewDialog = ref(false)
 const previewPath = ref(null)
 const previewTitle = ref('')
+const historyDialog = ref(false)
+const historyItem = ref(null)
 
 const linesCache = ref({})
 const linesLoading = ref({})
@@ -235,6 +243,11 @@ function openPreview(item) {
   previewPath.value = `/offers/${item.id}`
   previewTitle.value = `Angebot ${item.number || '#' + item.id}`
   previewDialog.value = true
+}
+
+function openHistory(item) {
+  historyItem.value = item
+  historyDialog.value = true
 }
 
 async function duplicateItem(item) {
