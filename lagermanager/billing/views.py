@@ -7,10 +7,13 @@ from constance import config
 from core.models import Address
 from core.permissions import DjangoModelPermissionsWithView, require_perm
 from django.contrib.contenttypes.models import ContentType
-from django.db import models, transaction
+from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.http import HttpResponse
 from django.utils import timezone
+from emails.models import EmailLog
+from emails.serializers import EmailLogSerializer
+from emails.services.email import AttachmentSpec, send_document_email
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -41,7 +44,11 @@ from .serializers import (
     SyncWzSerializer,
 )
 from .services.numbering import allocate_article_number, allocate_number
-from .services.render import render_document_html, render_document_pdf
+from .services.render import (
+    build_email_defaults,
+    render_document_html,
+    render_document_pdf,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +75,7 @@ def _serialize_log_entry(e: LogEntry, source: str = 'document') -> dict[str, Any
 
 
 def _line_log_entries(
-    parent_obj: models.Model,
+    parent_obj: Offer | Invoice,
     line_ct: ContentType,
     parent_fk_field: str,
 ) -> QuerySet[LogEntry]:
@@ -93,7 +100,7 @@ def _line_log_entries(
 
     # Current lines whose updates may not touch the FK field at all.
     current_pks: set[str] = {
-        str(pk) for pk in parent_obj.lines.values_list('pk', flat=True)  # type: ignore[attr-defined]
+        str(pk) for pk in parent_obj.lines.values_list('pk', flat=True)
     }
 
     all_pks = historic_pks | current_pks
@@ -122,6 +129,103 @@ class AuditLogHistoryMixin:
         )
         data = [_serialize_log_entry(e) for e in entries if e.changes]
         return Response(data)
+
+
+class DocumentEmailMixin:
+    """Adds GET /{pk}/email-info/ and POST /{pk}/send-email/ to a document ViewSet.
+
+    Concrete ViewSets must implement:
+        _email_pdf_filename(doc) -> str
+        _allowed_send_statuses()  -> tuple[str, ...]  (statuses that may be sent)
+        _after_send_status()      -> str | None        (None = no status change)
+    """
+
+    def _email_pdf_filename(self, doc: Any) -> str:
+        raise NotImplementedError
+
+    def _allowed_send_statuses(self) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    def _after_send_status(self) -> str | None:
+        return None
+
+    # Provided by the concrete ViewSet — declared here so mypy knows it exists.
+    def get_serializer_class(self) -> type[BaseSerializer[Any]]:
+        raise NotImplementedError
+
+    @action(detail=True, methods=['get'], url_path='email-info')
+    def email_info(self, request: Request, pk: str | None = None) -> Response:
+        """Return email defaults (prefilled subject/body/recipient) + send history."""
+        doc = self.get_object()  # type: ignore[attr-defined]
+        defaults: dict[str, str] = build_email_defaults(doc)
+
+        ct = ContentType.objects.get_for_model(doc)
+        log_qs: QuerySet[EmailLog] = (
+            EmailLog.objects
+            .filter(content_type=ct, object_id=str(doc.pk))
+            .prefetch_related('attachments')
+            .select_related('sent_by')
+        )
+        return Response({
+            'defaults': defaults,
+            'log': EmailLogSerializer(log_qs, many=True).data,
+        })
+
+    @action(detail=True, methods=['post'], url_path='send-email')
+    def send_email(self, request: Request, pk: str | None = None) -> Response:
+        """Send the document as a PDF attachment by email and record the attempt."""
+        doc = self.get_object()  # type: ignore[attr-defined]
+
+        if doc.status not in self._allowed_send_statuses():
+            return Response(
+                {'detail': 'Dieses Dokument kann in seinem aktuellen Status nicht versendet werden.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        recipient: str = (request.data.get('recipient') or '').strip()
+        subject: str = (request.data.get('subject') or '').strip()
+        body: str = request.data.get('body') or ''
+        cc: str = (request.data.get('cc') or '').strip()
+
+        if not recipient:
+            return Response(
+                {'detail': 'Empfänger-E-Mail-Adresse fehlt.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            pdf_bytes: bytes = render_document_pdf(doc)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        filename = self._email_pdf_filename(doc)
+        attachment: AttachmentSpec = (filename, pdf_bytes, 'application/pdf')
+
+        try:
+            send_document_email(
+                subject=subject,
+                body=body,
+                recipient=recipient,
+                cc=cc,
+                sent_by=request.user,  # type: ignore[arg-type]
+                related_object=doc,
+                attachments=[attachment],
+            )
+        except Exception as exc:
+            # EmailLog row with status=FAILED was already written by the service.
+            return Response(
+                {'detail': f'E-Mail konnte nicht gesendet werden: {exc}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        new_status = self._after_send_status()
+        if new_status is not None and doc.status != new_status:
+            doc.status = new_status
+            doc.save(update_fields=['status'])
+
+        # Return fresh serializer data so the frontend list updates immediately.
+        serializer_class = self.get_serializer_class()
+        return Response(serializer_class(doc).data)
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +310,7 @@ def _snapshot_recipient(doc: Offer | Invoice) -> None:
     doc.recipient_text = doc.address.format_address_block()
 
 
-class OfferViewSet(viewsets.ModelViewSet[Offer]):
+class OfferViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelViewSet[Offer]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
@@ -216,6 +320,16 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
         if self.action == 'list':
             return OfferListSerializer
         return OfferSerializer
+
+    def _email_pdf_filename(self, doc: Any) -> str:
+        offer: Offer = doc
+        return f'angebot_{offer.number or "entwurf_" + str(offer.pk)}.pdf'
+
+    def _allowed_send_statuses(self) -> tuple[str, ...]:
+        return (Offer.Status.ISSUED, Offer.Status.SENT)
+
+    def _after_send_status(self) -> str | None:
+        return Offer.Status.SENT
 
     # ---- Nested lines -------------------------------------------------------
 
@@ -275,7 +389,9 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
     # ---- History (parent + lines merged) ------------------------------------
 
     @action(detail=True, methods=['get'], url_path='history')
-    def history(self, request: Request, pk: str | None = None) -> Response:
+    def history(  # type: ignore[override]  # intentionally richer than mixin: includes line-item entries
+        self, request: Request, pk: str | None = None,
+    ) -> Response:
         offer: Offer = self.get_object()
         offer_ct = ContentType.objects.get_for_model(Offer)
         line_ct = ContentType.objects.get_for_model(OfferLine)
@@ -289,7 +405,8 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
 
         data = sorted(
             [_serialize_log_entry(e, 'document') for e in parent_entries if e.changes] +
-            [_serialize_log_entry(e, 'line') for e in line_entries if e.changes],
+            [_serialize_log_entry(e, 'line')
+             for e in line_entries if e.changes],
             key=lambda x: x['timestamp'],
             reverse=True,
         )
@@ -324,7 +441,8 @@ class OfferViewSet(viewsets.ModelViewSet[Offer]):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         with transaction.atomic():
-            due_date = offer.document_date + datetime.timedelta(days=config.INVOICE_PAYMENT_TERMS_DAYS)
+            due_date = offer.document_date + \
+                datetime.timedelta(days=config.INVOICE_PAYMENT_TERMS_DAYS)
             invoice = Invoice.objects.create(
                 address=offer.address,
                 source_offer=offer,
@@ -431,7 +549,7 @@ def _clone_lines(src: Invoice, dst: Invoice, *, negate: bool = False) -> None:
         )
 
 
-class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
+class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelViewSet[Invoice]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
@@ -445,6 +563,16 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
         if self.action == 'list':
             return InvoiceListSerializer
         return InvoiceSerializer
+
+    def _email_pdf_filename(self, doc: Any) -> str:
+        invoice: Invoice = doc
+        return f'rechnung_{invoice.number or invoice.pk}.pdf'
+
+    def _allowed_send_statuses(self) -> tuple[str, ...]:
+        return (Invoice.Status.ISSUED, Invoice.Status.SENT)
+
+    def _after_send_status(self) -> str | None:
+        return Invoice.Status.SENT
 
     # ---- Guard: block mutations on non-draft invoices -----------------------
 
@@ -527,7 +655,9 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
     # ---- History (parent + lines merged) ------------------------------------
 
     @action(detail=True, methods=['get'], url_path='history')
-    def history(self, request: Request, pk: str | None = None) -> Response:
+    def history(  # type: ignore[override]  # intentionally richer than mixin: includes line-item entries
+        self, request: Request, pk: str | None = None,
+    ) -> Response:
         invoice: Invoice = self.get_object()
         invoice_ct = ContentType.objects.get_for_model(Invoice)
         line_ct = ContentType.objects.get_for_model(InvoiceLine)
@@ -541,7 +671,8 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
 
         data = sorted(
             [_serialize_log_entry(e, 'document') for e in parent_entries if e.changes] +
-            [_serialize_log_entry(e, 'line') for e in line_entries if e.changes],
+            [_serialize_log_entry(e, 'line')
+             for e in line_entries if e.changes],
             key=lambda x: x['timestamp'],
             reverse=True,
         )
@@ -595,7 +726,8 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
                 status=Invoice.Status.DRAFT,
             )
             _clone_lines(invoice, reverse, negate=True)
-            reverse.number = allocate_number(NumberSequence.DocType.INVOICE, reverse.document_date)
+            reverse.number = allocate_number(
+                NumberSequence.DocType.INVOICE, reverse.document_date)
             reverse.recipient_text = invoice.recipient_text
             reverse.status = Invoice.Status.ISSUED
             reverse.save(update_fields=['number', 'recipient_text', 'status'])
@@ -704,7 +836,7 @@ class InvoiceViewSet(viewsets.ModelViewSet[Invoice]):
 # Reminder
 # ---------------------------------------------------------------------------
 
-class ReminderViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Reminder]):
+class ReminderViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelViewSet[Reminder]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
@@ -720,6 +852,18 @@ class ReminderViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Reminder]):
 
     def get_serializer_class(self) -> type[BaseSerializer[Reminder]]:
         return ReminderSerializer
+
+    def _email_pdf_filename(self, doc: Any) -> str:
+        reminder: Reminder = doc
+        return f'mahnung_{reminder.number or reminder.pk}.pdf'
+
+    def _allowed_send_statuses(self) -> tuple[str, ...]:
+        # Reminders have no SENT status; allow sending once issued (and re-sending).
+        return (Reminder.Status.ISSUED,)
+
+    def _after_send_status(self) -> str | None:
+        # Reminder has no 'sent' status — leave it as 'issued'.
+        return None
 
     @action(detail=True, methods=['post'], url_path='issue')
     def issue(self, request: Request, pk: str | None = None) -> Response:

@@ -90,22 +90,24 @@ class OfferLineSerializer(serializers.ModelSerializer[OfferLine]):
 class OfferListSerializer(serializers.ModelSerializer[Offer]):
     """Lightweight serializer for list views (no nested lines)."""
     address_display = serializers.CharField(source='address.display_name', read_only=True)
+    address_email = serializers.CharField(source='address.email', read_only=True, default='')
     net_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
 
     class Meta:
         model = Offer
         fields = [
-            'id', 'number', 'status', 'address', 'address_display',
+            'id', 'number', 'status', 'address', 'address_display', 'address_email',
             'document_date', 'valid_until',
             'net_total', 'gross_total',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'number', 'address_display', 'net_total', 'gross_total', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'number', 'address_display', 'address_email', 'net_total', 'gross_total', 'created_at', 'updated_at']
 
 
 class OfferSerializer(serializers.ModelSerializer[Offer]):
     address_display = serializers.CharField(source='address.display_name', read_only=True)
+    address_email = serializers.CharField(source='address.email', read_only=True, default='')
     net_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     tax_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
@@ -114,14 +116,15 @@ class OfferSerializer(serializers.ModelSerializer[Offer]):
     class Meta:
         model = Offer
         fields = [
-            'id', 'number', 'status', 'address', 'address_display', 'recipient_text',
+            'id', 'number', 'status', 'address', 'address_display', 'address_email',
+            'recipient_text',
             'document_date', 'valid_until', 'notes',
             'net_total', 'gross_total', 'tax_total',
             'lines',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'number', 'address_display', 'recipient_text',
+            'id', 'number', 'address_display', 'address_email', 'recipient_text',
             'net_total', 'gross_total', 'tax_total',
             'created_at', 'updated_at',
         ]
@@ -166,6 +169,7 @@ class InvoiceLineSerializer(serializers.ModelSerializer[InvoiceLine]):
 class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
     """Lightweight serializer for list views (no nested lines)."""
     address_display = serializers.CharField(source='address.display_name', read_only=True)
+    address_email = serializers.CharField(source='address.email', read_only=True, default='')
     net_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     reverses_number = serializers.CharField(source='reverses.number', read_only=True, default=None)
@@ -174,14 +178,15 @@ class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'number', 'status', 'address', 'address_display', 'source_offer',
+            'id', 'number', 'status', 'address', 'address_display', 'address_email',
+            'source_offer',
             'reverses', 'reverses_number', 'reversed_by_id',
             'document_date', 'due_date', 'paid_at', 'notes',
             'net_total', 'gross_total',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'number', 'address_display',
+            'id', 'number', 'address_display', 'address_email',
             'reverses', 'reverses_number', 'reversed_by_id',
             'net_total', 'gross_total',
             'created_at', 'updated_at',
@@ -194,6 +199,7 @@ class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
 
 class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
     address_display = serializers.CharField(source='address.display_name', read_only=True)
+    address_email = serializers.CharField(source='address.email', read_only=True, default='')
     net_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     tax_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
@@ -204,7 +210,8 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'number', 'status', 'address', 'address_display', 'recipient_text',
+            'id', 'number', 'status', 'address', 'address_display', 'address_email',
+            'recipient_text',
             'source_offer',
             'reverses', 'reverses_number', 'reversed_by_id',
             'document_date', 'due_date', 'notes', 'paid_at',
@@ -213,7 +220,7 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'number', 'address_display', 'recipient_text',
+            'id', 'number', 'address_display', 'address_email', 'recipient_text',
             'reverses', 'reverses_number', 'reversed_by_id',
             'net_total', 'gross_total', 'tax_total',
             'created_at', 'updated_at',
@@ -240,11 +247,12 @@ class ReminderSerializer(serializers.ModelSerializer[Reminder]):
     open_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     invoice_number = serializers.CharField(source='invoice.number', read_only=True)
     invoice_address_display = serializers.CharField(source='invoice.address.display_name', read_only=True)
+    invoice_address_email = serializers.CharField(source='invoice.address.email', read_only=True, default='')
 
     class Meta:
         model = Reminder
         fields = [
-            'id', 'invoice', 'invoice_number', 'invoice_address_display',
+            'id', 'invoice', 'invoice_number', 'invoice_address_display', 'invoice_address_email',
             'level', 'number', 'status',
             'reminder_date', 'due_date', 'fee', 'notes',
             'open_amount',
@@ -252,7 +260,7 @@ class ReminderSerializer(serializers.ModelSerializer[Reminder]):
         ]
         read_only_fields = [
             'id', 'number', 'open_amount',
-            'invoice_number', 'invoice_address_display',
+            'invoice_number', 'invoice_address_display', 'invoice_address_email',
             'created_at', 'updated_at',
         ]
 

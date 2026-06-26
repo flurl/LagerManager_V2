@@ -49,6 +49,7 @@ INSTALLED_APPS: list[str] = [
     'stock_count',
     'staff_consumption',
     'notifications',
+    'emails',
     'billing',
     'auditlog',
 ]
@@ -190,4 +191,45 @@ CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'OFFER_NUMBER_PREFIX': ('AN', 'Nummernpräfix für Angebote', str),
     'INVOICE_NUMBER_PREFIX': ('RE', 'Nummernpräfix für Rechnungen', str),
     'REMINDER_NUMBER_PREFIX': ('MA', 'Nummernpräfix für Mahnungen', str),
+    # E-Mail templates for document dispatch ({number}, {company}, {recipient_name} are replaced)
+    'EMAIL_SUBJECT_OFFER': (
+        'Ihr Angebot {number}',
+        'E-Mail-Betreff beim Versand eines Angebots',
+        str,
+    ),
+    'EMAIL_BODY_OFFER': (
+        'Sehr geehrte Damen und Herren,\n\n'
+        'anbei erhalten Sie unser Angebot {number}.\n\n'
+        'Für Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\n'
+        'Mit freundlichen Grüßen\n{company}',
+        'E-Mail-Text beim Versand eines Angebots',
+        str,
+    ),
+    'EMAIL_SUBJECT_INVOICE': (
+        'Ihre Rechnung {number}',
+        'E-Mail-Betreff beim Versand einer Rechnung',
+        str,
+    ),
+    'EMAIL_BODY_INVOICE': (
+        'Sehr geehrte Damen und Herren,\n\n'
+        'anbei erhalten Sie Ihre Rechnung {number}.\n\n'
+        'Für Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\n'
+        'Mit freundlichen Grüßen\n{company}',
+        'E-Mail-Text beim Versand einer Rechnung',
+        str,
+    ),
+    'EMAIL_SUBJECT_REMINDER': (
+        'Zahlungserinnerung {number}',
+        'E-Mail-Betreff beim Versand einer Mahnung',
+        str,
+    ),
+    'EMAIL_BODY_REMINDER': (
+        'Sehr geehrte Damen und Herren,\n\n'
+        'wir erlauben uns, Sie an die noch offene Zahlung zu erinnern '
+        '(Mahnung {number}).\n\n'
+        'Bitte überweisen Sie den offenen Betrag bis zum angegebenen Fälligkeitsdatum.\n\n'
+        'Mit freundlichen Grüßen\n{company}',
+        'E-Mail-Text beim Versand einer Mahnung',
+        str,
+    ),
 }

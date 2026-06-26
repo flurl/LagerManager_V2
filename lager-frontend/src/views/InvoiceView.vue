@@ -55,8 +55,8 @@
               <v-tooltip v-if="item.status === 'draft'" text="Ausstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="issueInvoice(item)">mdi-file-check</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="item.status === 'issued' && !item.reverses" text="Per E-Mail versenden (demnächst)"><template #activator="{ props }">
-                <v-icon v-bind="props" size="small" class="ml-1" disabled>mdi-send</v-icon>
+              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Per E-Mail versenden"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
               <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Als bezahlt markieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="success" @click.stop="markPaid(item)">mdi-check-circle</v-icon>
@@ -138,6 +138,14 @@
     <DocumentPreviewDialog v-model="previewDialog" :doc-path="previewPath" :title="previewTitle" />
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/invoices/${historyItem.id}`" />
+
+    <SendEmailDialog
+      v-if="sendItem"
+      v-model="sendDialog"
+      :api-path="`/invoices/${sendItem.id}`"
+      :doc-label="`${sendItem.reverses ? 'Stornorechnung' : 'Rechnung'} ${sendItem.number || '#' + sendItem.id}`"
+      @sent="onSent"
+    />
 
     <!-- Mark paid dialog -->
     <v-dialog v-model="paidDialog" max-width="340">
@@ -246,6 +254,7 @@ import api from '../api'
 import InvoiceDialog from '../components/InvoiceDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
+import SendEmailDialog from '../components/SendEmailDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -283,6 +292,8 @@ const previewPath = ref(null)
 const previewTitle = ref('')
 const historyDialog = ref(false)
 const historyItem = ref(null)
+const sendDialog = ref(false)
+const sendItem = ref(null)
 const paidDialog = ref(false)
 const paidDate = ref('')
 const paidInvoiceId = ref(null)
@@ -430,6 +441,15 @@ async function createReminder(item) {
 function openHistory(item) {
   historyItem.value = item
   historyDialog.value = true
+}
+
+function openSend(item) {
+  sendItem.value = item
+  sendDialog.value = true
+}
+
+async function onSent() {
+  await fetchItems()
 }
 
 function openPreview(item) {

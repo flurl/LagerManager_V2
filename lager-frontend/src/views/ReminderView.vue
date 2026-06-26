@@ -49,8 +49,8 @@
               <v-tooltip v-if="item.status === 'draft'" text="Ausstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="issueReminder(item)">mdi-file-check</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="item.status === 'issued'" text="Per E-Mail versenden (demnächst)"><template #activator="{ props }">
-                <v-icon v-bind="props" size="small" class="ml-1" disabled>mdi-send</v-icon>
+              <v-tooltip v-if="item.status === 'issued'" text="Per E-Mail versenden"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
@@ -148,6 +148,14 @@
     <DocumentPreviewDialog v-model="previewDialog" :doc-path="previewPath" :title="previewTitle" />
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/reminders/${historyItem.id}`" />
+
+    <SendEmailDialog
+      v-if="sendItem"
+      v-model="sendDialog"
+      :api-path="`/reminders/${sendItem.id}`"
+      :doc-label="`Mahnung ${sendItem.number || '#' + sendItem.id}`"
+      @sent="onSent"
+    />
   </div>
 </template>
 
@@ -160,6 +168,7 @@ import api from '../api'
 import NumberInput from '../components/NumberInput.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
+import SendEmailDialog from '../components/SendEmailDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -192,6 +201,8 @@ const previewTitle = ref('')
 const form = ref({})
 const historyDialog = ref(false)
 const historyItem = ref(null)
+const sendDialog = ref(false)
+const sendItem = ref(null)
 
 const linesCache = ref({})
 const linesLoading = ref({})
@@ -276,6 +287,15 @@ async function issueReminder(item) {
 function openHistory(item) {
   historyItem.value = item
   historyDialog.value = true
+}
+
+function openSend(item) {
+  sendItem.value = item
+  sendDialog.value = true
+}
+
+async function onSent() {
+  await fetchItems()
 }
 
 function openPreview(item) {

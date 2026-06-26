@@ -39,8 +39,8 @@
               <v-tooltip v-if="item.status === 'draft'" text="Ausstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="issueOffer(item)">mdi-file-check</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="item.status === 'issued'" text="Per E-Mail versenden (demnächst)"><template #activator="{ props }">
-                <v-icon v-bind="props" size="small" class="ml-1" disabled>mdi-send</v-icon>
+              <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Per E-Mail versenden"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
               <v-tooltip v-if="['issued','sent','accepted'].includes(item.status)" text="In Rechnung umwandeln">
                 <template #activator="{ props }">
@@ -124,6 +124,14 @@
     />
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/offers/${historyItem.id}`" />
+
+    <SendEmailDialog
+      v-if="sendItem"
+      v-model="sendDialog"
+      :api-path="`/offers/${sendItem.id}`"
+      :doc-label="`Angebot ${sendItem.number || '#' + sendItem.id}`"
+      @sent="onSent"
+    />
   </div>
 </template>
 
@@ -136,6 +144,7 @@ import api from '../api'
 import OfferDialog from '../components/OfferDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
+import SendEmailDialog from '../components/SendEmailDialog.vue'
 
 const router = useRouter()
 const theme = useTheme()
@@ -166,6 +175,8 @@ const previewPath = ref(null)
 const previewTitle = ref('')
 const historyDialog = ref(false)
 const historyItem = ref(null)
+const sendDialog = ref(false)
+const sendItem = ref(null)
 
 const linesCache = ref({})
 const linesLoading = ref({})
@@ -248,6 +259,15 @@ function openPreview(item) {
 function openHistory(item) {
   historyItem.value = item
   historyDialog.value = true
+}
+
+function openSend(item) {
+  sendItem.value = item
+  sendDialog.value = true
+}
+
+async function onSent() {
+  await fetchItems()
 }
 
 async function duplicateItem(item) {

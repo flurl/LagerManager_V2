@@ -3,6 +3,7 @@ Document rendering service for billing documents.
 
 render_document_html(doc)  → full HTML string (browser preview via iframe)
 render_document_pdf(doc)   → PDF bytes (download endpoint)
+build_email_defaults(doc)  → {recipient, subject, body} prefilled from Constance templates
 
 WeasyPrint is used for HTML→PDF conversion.  The same Django template is used for
 both the browser preview and the PDF, ensuring pixel-consistent output.
@@ -18,6 +19,13 @@ from django.template.loader import render_to_string
 from billing.models import Invoice, Offer, Reminder
 
 DocType = Offer | Invoice | Reminder
+
+
+class _SafeFormatMap(dict):  # type: ignore[type-arg]
+    """dict subclass that returns '{key}' unchanged for missing keys."""
+
+    def __missing__(self, key: str) -> str:
+        return '{' + key + '}'
 
 
 def _build_context(doc: DocType) -> dict[str, object]:
@@ -57,6 +65,44 @@ def render_document_html(doc: DocType) -> str:
         doc.lines.select_related(
             'tax_rate', 'billing_article').all()  # force evaluation
     return render_to_string(_template_name(doc), ctx)
+
+
+def build_email_defaults(doc: DocType) -> dict[str, str]:
+    """Return prefilled {recipient, subject, body} for the send-email dialog.
+
+    Subject and body come from Constance config templates and have placeholders
+    ({number}, {company}, {recipient_name}) replaced with the actual document values.
+    recipient is the email address from the document's associated Address (may be empty).
+    """
+    company: str = getattr(config, 'COMPANY_NAME', '')
+
+    if isinstance(doc, Offer):
+        subject_tpl: str = getattr(config, 'EMAIL_SUBJECT_OFFER', 'Ihr Angebot {number}')
+        body_tpl: str = getattr(config, 'EMAIL_BODY_OFFER', '')
+        number: str = doc.number or ''
+        recipient_email: str = doc.address.email or ''
+        recipient_name: str = doc.address.display_name or ''
+    elif isinstance(doc, Invoice):
+        subject_tpl = getattr(config, 'EMAIL_SUBJECT_INVOICE', 'Ihre Rechnung {number}')
+        body_tpl = getattr(config, 'EMAIL_BODY_INVOICE', '')
+        number = doc.number or ''
+        recipient_email = doc.address.email or ''
+        recipient_name = doc.address.display_name or ''
+    elif isinstance(doc, Reminder):
+        subject_tpl = getattr(config, 'EMAIL_SUBJECT_REMINDER', 'Zahlungserinnerung {number}')
+        body_tpl = getattr(config, 'EMAIL_BODY_REMINDER', '')
+        number = doc.number or ''
+        recipient_email = doc.invoice.address.email or ''
+        recipient_name = doc.invoice.address.display_name or ''
+    else:
+        raise TypeError(f'Unknown document type: {type(doc)}')
+
+    fmt = _SafeFormatMap(number=number, company=company, recipient_name=recipient_name)
+    return {
+        'recipient': recipient_email,
+        'subject': subject_tpl.format_map(fmt),
+        'body': body_tpl.format_map(fmt),
+    }
 
 
 def render_document_pdf(doc: DocType) -> bytes:
