@@ -45,7 +45,7 @@
               class="mb-2"
             />
             <v-textarea
-              v-else-if="key.endsWith('_BODY')"
+              v-else-if="key.includes('_BODY_') || key.endsWith('_BODY')"
               v-model="formValues[key]"
               :label="configData[key]?.help_text"
               :disabled="!canEdit"
