@@ -1,9 +1,9 @@
 import subprocess
-from typing import Any
+from typing import Any, cast
 
 from constance import config as constance_cfg
 from django.conf import settings
-from django.contrib.auth.models import AbstractBaseUser
+from django.contrib.auth.models import User
 from django.db.models.query import QuerySet
 from pos_import.models import ArticleMeta
 from rest_framework import status, viewsets
@@ -87,7 +87,9 @@ class ConfigView(APIView):
                 'help_text': help_text,
                 'type': field_type.__name__,
             }
-        return Response({'can_edit': can_edit, 'config': cfg})
+        fieldsets = getattr(settings, 'CONSTANCE_CONFIG_FIELDSETS', {})
+        groups = [{'label': label, 'keys': list(keys)} for label, keys in fieldsets.items()]
+        return Response({'can_edit': can_edit, 'config': cfg, 'groups': groups})
 
     def patch(self, request: Request) -> Response:
         if not request.user.has_perm('constance.change_config'):
@@ -135,14 +137,14 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        user: AbstractBaseUser = request.user
+        user: User = cast(User, request.user)
         prefs, _ = UserPreferences.objects.get_or_create(user=user)
         return Response({
             'id': user.pk,
-            'username': user.username,  # type: ignore[attr-defined]
-            'first_name': user.first_name,  # type: ignore[attr-defined]
-            'last_name': user.last_name,  # type: ignore[attr-defined]
-            'groups': list(user.groups.values_list('name', flat=True)),  # type: ignore[attr-defined]
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'groups': list(user.groups.values_list('name', flat=True)),
             'permissions': sorted(user.get_all_permissions()),
             'preferences': UserPreferencesSerializer(prefs).data,
         })

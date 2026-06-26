@@ -168,6 +168,27 @@ CORS_ALLOWED_ORIGINS: list[str] = cast(
 CORS_ALLOW_CREDENTIALS: bool = True
 
 CONSTANCE_BACKEND: str = 'constance.backends.database.DatabaseBackend'
+CONSTANCE_CONFIG_FIELDSETS: dict[str, tuple[str, ...]] = {
+    'Allgemein': ('DEFAULT_TAX_RATE_ID',),
+    'Dokument-Import / KI': ('GEMINI_API_KEY', 'MISTRAL_API_KEY'),
+    'Unternehmen': (
+        'COMPANY_NAME', 'COMPANY_ADDRESS', 'COMPANY_ZIP', 'COMPANY_CITY',
+        'COMPANY_UID', 'COMPANY_IBAN', 'COMPANY_BIC', 'COMPANY_BANK',
+        'COMPANY_EMAIL', 'COMPANY_PHONE',
+    ),
+    'Fakturierung': (
+        'INVOICE_FOOTER_TEXT', 'INVOICE_PAYMENT_TERMS_DAYS',
+        'DEFAULT_BILLING_TAX_RATE_ID', 'REMINDER_FEE_DEFAULT',
+    ),
+    'Dokumentnummern': (
+        'OFFER_NUMBER_PREFIX', 'INVOICE_NUMBER_PREFIX', 'REMINDER_NUMBER_PREFIX',
+    ),
+    'E-Mail Vorlagen': (
+        'EMAIL_SUBJECT_OFFER', 'EMAIL_BODY_OFFER',
+        'EMAIL_SUBJECT_INVOICE', 'EMAIL_BODY_INVOICE',
+        'EMAIL_SUBJECT_REMINDER', 'EMAIL_BODY_REMINDER',
+    ),
+}
 CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'DEFAULT_TAX_RATE_ID': (0, 'Standard-Steuersatz (TaxRate-ID, 0 = keiner)', int),
     'GEMINI_API_KEY': ('', 'Google Gemini API Key für den Dokumenten-Import', str),
