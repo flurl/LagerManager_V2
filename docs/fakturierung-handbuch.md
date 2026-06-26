@@ -15,7 +15,7 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
 5. [Angebote erstellen](#5-angebote-erstellen)
 6. [Rechnungen erstellen](#6-rechnungen-erstellen)
 7. [Mahnungen erstellen](#7-mahnungen-erstellen)
-8. [Vorschau, PDF & Verlauf](#8-vorschau-pdf--verlauf)
+8. [Vorschau, PDF, Versand & Verlauf](#8-vorschau-pdf-versand--verlauf)
 9. [Statusübersicht](#9-statusübersicht)
 
 ---
@@ -34,10 +34,11 @@ Die Fakturierung umfasst vier zusammenhängende Bereiche:
 **Typischer Ablauf:**
 
 ```
-Adresse anlegen  →  Angebot  →  (Umwandeln)  →  Rechnung  →  (bei Überfälligkeit)  →  Mahnung
+Adresse anlegen  →  Angebot  →  (Umwandeln)  →  Rechnung
+→  (bei Überfälligkeit)  →  Mahnung
 ```
 
-Ein Angebot ist nicht zwingend – eine Rechnung kann auch direkt erstellt werden.
+**Ein Angebot ist nicht zwingend – eine Rechnung kann auch direkt erstellt werden.**
 
 ### Einmalige Voraussetzungen (Einstellungen)
 
@@ -50,10 +51,17 @@ Damit die erzeugten Dokumente korrekt aussehen, sollten unter **Verwaltung → E
 - **Standard-Zahlungsziel in Tagen** (Vorgabe: 14) – bestimmt das voreingestellte Fälligkeitsdatum neuer Rechnungen
 - **Standard-Mahngebühr** in Euro
 - **Nummernpräfixe** für Angebote (Vorgabe `AN`), Rechnungen (`RE`) und Mahnungen (`MA`)
+- **E-Mail-Betreff** und **E-Mail-Text** je Dokumentart (Angebot, Rechnung, Mahnung) für den [E-Mail-Versand](#8-vorschau-pdf-versand--verlauf). In den Vorlagen werden die Platzhalter `{number}` (Dokumentnummer), `{company}` (Firmenname) und `{recipient_name}` (Empfänger) beim Versand automatisch ersetzt.
 
-> Die Dokumentnummern werden automatisch im Format `PRÄFIXJJMM##` vergeben (z. B. `RE2506-01` für die erste Rechnung im Juni 2026). Die Nummer wird erst beim **Ausstellen** vergeben.
+> Die Dokumentnummern werden automatisch im Format `PRÄFIXJJMM##` vergeben (z. B. `RE260601` für die erste Rechnung im Juni 2026). Die Nummer wird erst beim **Ausstellen** vergeben.
 
 ![Einstellungen mit Firmendaten](img/fakturierung/12-einstellungen.png)
+
+Die E-Mail-Vorlagen befinden sich weiter unten auf derselben Seite:
+
+![Einstellungen – E-Mail-Vorlagen](img/fakturierung/20-einstellungen-email.png)
+
+> Der **Absender** sowie die **SMTP-Zugangsdaten** für den tatsächlichen Mailversand werden serverseitig (Umgebungs-/Serverkonfiguration) hinterlegt.
 
 ---
 
@@ -115,9 +123,9 @@ Adressen sind die Empfänger von Angeboten, Rechnungen und Mahnungen. Sie werden
 
 ---
 
-## 4. Faktura-Artikel (Stammdaten)
+## 4. Faktura-Artikel
 
-Faktura-Artikel sind wiederkehrende Positionen (z. B. „Beratungsstunde", „Lieferpauschale") mit vordefinierter Bezeichnung, Einheit, Preis und Steuersatz. Sie ersparen die manuelle Eingabe in jedem Dokument.
+Faktura-Artikel sind wiederkehrende Positionen (z. B. "Miete", „AKM") mit vordefinierter Bezeichnung, Einheit, Preis und Steuersatz. Sie ersparen die manuelle Eingabe in jedem Dokument.
 
 **Fakturierung → Artikel → Neuer Artikel:**
 
@@ -181,14 +189,14 @@ Eine Position wird über das rote Mülleimer-Symbol am Zeilenende entfernt.
 
 Ein Entwurf kann beliebig bearbeitet werden. Erst beim **Ausstellen** wird die Angebotsnummer vergeben:
 
-- In der Angebotsliste das Symbol **Ausstellen** (Häkchen-Symbol) in der Zeile anklicken und bestätigen.
+- In der Angebotsliste das Symbol **Ausstellen** (Dokument-mit-Häkchen-Symbol) in der Zeile anklicken und bestätigen.
 - Der Status wechselt von **Entwurf** auf **Ausgestellt**.
 
 ![Angebotsliste mit Aktions-Symbolen](img/fakturierung/06-angebote-liste.png)
 
 ### 5.4 Status weitersetzen
 
-Bei ausgestellten Angeboten kann der Status manuell auf **Versendet**, **Angenommen** oder **Abgelehnt** gesetzt werden (über den Bearbeiten-/Status-Dialog).
+Bei ausgestellten Angeboten kann der Status manuell auf **Versendet**, **Angenommen** oder **Abgelehnt** gesetzt werden (über den Bearbeiten-/Status-Dialog). Beim [E-Mail-Versand](#8-vorschau-pdf-versand--verlauf) wird der Status **Versendet** automatisch gesetzt.
 
 ### 5.5 Angebot in Rechnung umwandeln
 
@@ -202,7 +210,8 @@ Aus einem ausgestellten, versendeten oder angenommenen Angebot lässt sich direk
 
 ### 5.6 Weitere Aktionen
 
-- **Vorschau** (Augen-Symbol) – Dokumentvorschau, siehe [Abschnitt 8](#8-vorschau-pdf--verlauf).
+- **Vorschau** (Augen-Symbol) – Dokumentvorschau, siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf).
+- **Senden** (Papierflieger-Symbol) – Angebot per E-Mail versenden, siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf).
 - **Kopieren** (bei nicht-Entwürfen) – legt ein Duplikat als neuen Entwurf an.
 - **Bearbeiten** / **Löschen** – nur für Entwürfe verfügbar.
 - **Verlauf** (Uhr-Symbol) – Änderungshistorie.
@@ -237,7 +246,7 @@ Die Positionserfassung funktioniert identisch zum Angebot (siehe [5.2](#52-posit
 
 ### 6.3 Rechnung ausstellen
 
-Beim **Ausstellen** (Häkchen-Symbol) wird die Rechnungsnummer vergeben. Danach sind Kopfdaten und Positionen **nicht mehr veränderbar**.
+Beim **Ausstellen** (Dokument-mit-Häkchen-Symbol) wird die Rechnungsnummer vergeben. Danach sind Kopfdaten und Positionen **nicht mehr veränderbar**.
 
 Weicht das Rechnungsdatum vom heutigen Tag ab, erscheint ein Dialog mit drei Optionen:
 
@@ -268,12 +277,13 @@ Eine ausgestellte Rechnung kann nicht gelöscht, aber **storniert** werden:
 3. Wählen, ob zusätzlich ein **neuer Rechnungsentwurf** aus der Originalrechnung erstellt werden soll (z. B. für eine Korrektur).
 4. **Stornieren**.
 
-Es entsteht eine **Stornorechnung**, die in der Liste durchgestrichen/abgeschwächt dargestellt und mit dem Bezug zur Originalrechnung (↩) verknüpft wird.
+Es entsteht eine **Stornorechnung**, die mit dem Bezug zur Originalrechnung (↩) verknüpft wird.
 
 ![Dialog „Rechnung stornieren"](img/fakturierung/17-rechnung-stornieren.png)
 
 ### 6.7 Weitere Aktionen
 
+- **Senden** (Papierflieger-Symbol) – ausgestellte/versendete Rechnung per E-Mail versenden, siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf). Bei Stornorechnungen nicht verfügbar.
 - **Duplizieren** – erstellt eine Kopie als neuen Entwurf.
 - **Bearbeiten** / **Löschen** – nur für Entwürfe.
 - **Vorschau** / **Verlauf** – wie bei Angeboten.
@@ -317,9 +327,11 @@ Die Liste zeigt u. a. Mahnungsnummer, verknüpfte **Rechnung** (anklickbar zur V
 
 > Entwürfe können bearbeitet und gelöscht werden; ausgestellte Mahnungen nicht.
 
+Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E-Mail an den Empfänger verschickt werden – siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf).
+
 ---
 
-## 8. Vorschau, PDF & Verlauf
+## 8. Vorschau, PDF, Versand & Verlauf
 
 ### Vorschau / PDF
 
@@ -327,7 +339,24 @@ Die Liste zeigt u. a. Mahnungsnummer, verknüpfte **Rechnung** (anklickbar zur V
 
 ![Dokumentvorschau mit „PDF herunterladen"](img/fakturierung/14-dokument-vorschau.png)
 
-> **E-Mail-Versand:** Das Senden direkt aus der Anwendung („Per E-Mail versenden") ist vorbereitet, aber noch nicht aktiv (Symbol ausgegraut, „demnächst"). Bis dahin das PDF herunterladen und manuell versenden.
+### E-Mail-Versand
+
+Ausgestellte (und bereits versendete) Angebote, Rechnungen und Mahnungen können direkt aus der Anwendung per E-Mail an den Empfänger geschickt werden. Das Dokument wird dabei automatisch als **PDF-Anhang** beigefügt – es muss nichts manuell hochgeladen werden.
+
+1. In der jeweiligen Liste (**Angebote**, **Rechnungen** oder **Mahnungen**) in der Zeile das **Senden**-Symbol (Papierflieger) anklicken.
+2. Der Dialog **Dokument versenden** öffnet sich. Vorbelegt sind:
+   - **An** – die E-Mail-Adresse aus der hinterlegten Adresse (kann überschrieben oder ergänzt werden; Pflichtfeld).
+   - **Betreff** und **Nachricht** – aus den in den [Einstellungen](#1-überblick--voraussetzungen) hinterlegten Vorlagen, wobei Platzhalter wie `{number}` und `{company}` automatisch durch die tatsächlichen Werte ersetzt sind.
+3. Text bei Bedarf anpassen und auf **Senden** klicken.
+
+![Dialog „Dokument versenden" mit Versand-Verlauf](img/fakturierung/19-dokument-versenden.png)
+
+**Hinweise:**
+
+- Bei **Angeboten** und **Rechnungen** wechselt der Status nach erfolgreichem Versand automatisch auf **Versendet**. **Mahnungen** besitzen keinen eigenen Versendet-Status und bleiben **Ausgestellt** (sie können bei Bedarf erneut versendet werden).
+- Jeder Sendeversuch wird protokolliert: Der **Versand-Verlauf** im unteren Teil des Dialogs listet Zeitpunkt, Benutzer, Empfänger, Status (**Versendet** / **Fehler**) sowie die mitgesendeten PDF-Anhänge (anklickbar) auf.
+- Schlägt der Versand fehl (z. B. ungültige Empfängeradresse oder ein SMTP-Problem), erscheint eine Fehlermeldung; auch der Fehlversuch wird im Verlauf festgehalten.
+- **Stornorechnungen** können nicht versendet werden – für sie wird kein Senden-Symbol angezeigt.
 
 ### Verlauf
 
