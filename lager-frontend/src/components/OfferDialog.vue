@@ -134,60 +134,68 @@
         </v-col>
       </v-row>
 
-      <v-table density="compact">
-        <thead>
-          <tr>
-            <th rowspan="2" style="width:3em;vertical-align:middle">Pos</th>
-            <th>Artikel / Bezeichnung</th>
-            <th style="width:9em">Einh.</th>
-            <th style="width:11em">Menge</th>
-            <th rowspan="2" style="width:9em;vertical-align:middle">Netto</th>
-            <th rowspan="2" style="width:9em;vertical-align:middle">Brutto</th>
-            <th rowspan="2" style="width:2em;vertical-align:middle"></th>
-          </tr>
-          <tr>
-            <th style="font-weight:normal;opacity:.6">Beschreibung</th>
-            <th style="width:11em">EP (netto)</th>
-            <th style="width:15em">MwSt.</th>
-          </tr>
-        </thead>
+      <v-table density="compact" class="line-items-table">
+        <colgroup>
+          <col style="width:3em">
+          <col style="width:22em">
+          <col style="width:18em">
+          <col style="width:14em">
+          <col style="width:9em">
+          <col style="width:9em">
+          <col style="width:3em">
+        </colgroup>
         <tbody>
           <template v-for="(line, idx) in lines" :key="idx">
-            <tr style="border-bottom:none">
-              <td rowspan="2" style="vertical-align:middle;padding-top:10px">{{ idx + 1 }}</td>
+            <tr class="line-top" :class="{ 'line-alt': idx % 2 === 1 }">
+              <td rowspan="2" class="text-center text-medium-emphasis" style="vertical-align:middle">{{ idx + 1 }}</td>
               <td>
+                <div class="field-label">Artikel / Bezeichnung</div>
                 <v-autocomplete v-model="line.billing_article" :items="billingArticles" item-title="name" item-value="id"
                   density="compact" hide-details clearable placeholder="Freitext"
                   @update:model-value="onArticleSelect(line)" />
               </td>
               <td>
+                <div class="field-label">Einh.</div>
                 <v-text-field v-model="line.unit" density="compact" hide-details />
               </td>
               <td>
-                <NumberInput v-model="line.quantity" hide-controls density="compact" hide-details class="text-right" />
+                <div class="field-label">Menge</div>
+                <NumberInput v-model="line.quantity" :reverse="false" hide-controls density="compact" hide-details />
               </td>
-              <td rowspan="2" class="text-right text-no-wrap" style="vertical-align:middle">{{ lineNet(line) }} €</td>
-              <td rowspan="2" class="text-right text-no-wrap" style="vertical-align:middle">{{ lineGross(line) }} €</td>
+              <td rowspan="2" style="vertical-align:middle">
+                <div class="field-label">Netto</div>
+                <div class="text-no-wrap">{{ lineNet(line) }} €</div>
+              </td>
+              <td rowspan="2" style="vertical-align:middle">
+                <div class="field-label">Brutto</div>
+                <div class="text-no-wrap font-weight-medium">{{ lineGross(line) }} €</div>
+              </td>
               <td rowspan="2" style="vertical-align:middle">
                 <v-btn icon size="x-small" color="error" variant="text" @click="removeLine(idx)">
                   <v-icon size="small">mdi-delete</v-icon>
                 </v-btn>
               </td>
             </tr>
-            <tr>
+            <tr class="line-bottom" :class="{ 'line-alt': idx % 2 === 1 }">
               <td>
-                <v-text-field v-if="!line.billing_article" v-model="line.description" placeholder="Beschreibung"
-                  density="compact" hide-details />
-                <span v-else class="text-caption text-medium-emphasis">{{ line.description }}</span>
+                <div class="field-label">Beschreibung</div>
+                <v-textarea v-if="!line.billing_article" v-model="line.description"
+                  auto-grow rows="1" max-rows="3" density="compact" hide-details />
+                <div v-else class="text-body-2 pt-1">{{ line.description }}</div>
               </td>
               <td>
-                <NumberInput v-model="line.unit_price" :decimals="2" hide-controls density="compact" hide-details
-                  class="text-right" />
+                <div class="field-label">EP (netto)</div>
+                <NumberInput v-model="line.unit_price" :decimals="2" :reverse="false" hide-controls density="compact"
+                  hide-details />
               </td>
               <td>
-                <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id" density="compact"
-                  hide-details clearable />
+                <div class="field-label">MwSt.</div>
+                <v-select v-model="line.tax_rate" :items="taxRates" item-title="name" item-value="id"
+                  density="compact" hide-details clearable />
               </td>
+            </tr>
+            <tr v-if="idx < lines.length - 1" class="line-gap" aria-hidden="true">
+              <td colspan="7"></td>
             </tr>
           </template>
         </tbody>
@@ -388,3 +396,37 @@ onMounted(async () => {
   taxRates.value = taxRes.data.results || taxRes.data
 })
 </script>
+
+<style scoped>
+/* Each line item is a self-contained block: faint card background, no inner borders */
+.line-items-table :deep(tbody .line-top > td),
+.line-items-table :deep(tbody .line-bottom > td) {
+  background-color: rgba(128, 128, 128, 0.04);
+  border-bottom: none !important;
+}
+.line-items-table :deep(tbody .line-top > td) {
+  padding-top: 12px;
+}
+.line-items-table :deep(tbody .line-bottom > td) {
+  padding-bottom: 12px;
+}
+/* Stronger tint on alternate items to tell them apart */
+.line-items-table :deep(tbody .line-alt > td) {
+  background-color: rgba(128, 128, 128, 0.12);
+}
+/* Transparent spacer between items */
+.line-items-table :deep(tbody .line-gap > td) {
+  height: 10px;
+  padding: 0;
+  border: none !important;
+  background: transparent;
+}
+/* Small left-aligned heading above each field */
+.field-label {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-align: left;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin-bottom: 2px;
+}
+</style>
