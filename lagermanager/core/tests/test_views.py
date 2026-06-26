@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
-from core.models import Period
+from core.models import Address, Period
 
 
 class PeriodByDateViewTest(APITestCase):
@@ -55,3 +55,41 @@ class PeriodByDateViewTest(APITestCase):
         resp = self.client.get('/api/periods/by-date/', {'date': '2024-02-15'})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data['id'], later_period.pk)
+
+
+class AddressViewSetTests(APITestCase):
+    def setUp(self) -> None:
+        self.user = User.objects.create_superuser('test', 'test@example.com', 'password')
+        self.client.force_authenticate(user=self.user)
+
+    def test_list(self) -> None:
+        Address.objects.create(vorname='Max', nachname='Mustermann', ort='Wien')
+        resp = self.client.get('/api/addresses/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()['results']), 1)
+
+    def test_create(self) -> None:
+        resp = self.client.post('/api/addresses/', {
+            'vorname': 'Maria', 'nachname': 'Muster', 'ort': 'Graz',
+        })
+        self.assertEqual(resp.status_code, 201)
+        self.assertIsNone(resp.json()['wz_source_id'])
+
+    def test_update(self) -> None:
+        addr = Address.objects.create(vorname='Max', nachname='Mustermann', ort='Wien')
+        resp = self.client.patch(f'/api/addresses/{addr.pk}/', {'ort': 'Salzburg'})
+        self.assertEqual(resp.status_code, 200)
+        addr.refresh_from_db()
+        self.assertEqual(addr.ort, 'Salzburg')
+
+    def test_delete(self) -> None:
+        addr = Address.objects.create(vorname='Max', nachname='Mustermann', ort='Wien')
+        resp = self.client.delete(f'/api/addresses/{addr.pk}/')
+        self.assertEqual(resp.status_code, 204)
+
+    def test_filter_by_query(self) -> None:
+        Address.objects.create(vorname='Max', nachname='Mustermann', ort='Wien')
+        Address.objects.create(vorname='Maria', nachname='Muster', ort='Wien')
+        resp = self.client.get('/api/addresses/?q=maria')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()['results']), 1)

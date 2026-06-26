@@ -51,48 +51,6 @@ def _make_invoice(address: Address, status: str = 'draft') -> Invoice:
 
 
 # ---------------------------------------------------------------------------
-# Address
-# ---------------------------------------------------------------------------
-
-class AddressViewSetTests(APITestCase):
-    def setUp(self) -> None:
-        self.user = _create_user()
-        self.client.force_authenticate(user=self.user)
-
-    def test_list(self) -> None:
-        _make_address()
-        resp = self.client.get('/api/addresses/')
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.json()['results']), 1)
-
-    def test_create(self) -> None:
-        resp = self.client.post('/api/addresses/', {
-            'vorname': 'Maria', 'nachname': 'Muster', 'ort': 'Graz',
-        })
-        self.assertEqual(resp.status_code, 201)
-        self.assertIsNone(resp.json()['wz_source_id'])
-
-    def test_update(self) -> None:
-        addr = _make_address()
-        resp = self.client.patch(f'/api/addresses/{addr.pk}/', {'ort': 'Salzburg'})
-        self.assertEqual(resp.status_code, 200)
-        addr.refresh_from_db()
-        self.assertEqual(addr.ort, 'Salzburg')
-
-    def test_delete(self) -> None:
-        addr = _make_address()
-        resp = self.client.delete(f'/api/addresses/{addr.pk}/')
-        self.assertEqual(resp.status_code, 204)
-
-    def test_filter_by_query(self) -> None:
-        _make_address(vorname='Max')
-        _make_address(vorname='Maria', nachname='Muster')
-        resp = self.client.get('/api/addresses/?q=maria')
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.json()['results']), 1)
-
-
-# ---------------------------------------------------------------------------
 # BillingArticle
 # ---------------------------------------------------------------------------
 

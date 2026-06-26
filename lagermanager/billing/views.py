@@ -4,8 +4,8 @@ from typing import Any
 
 from auditlog.models import LogEntry
 from constance import config
-from core.models import Address
-from core.permissions import DjangoModelPermissionsWithView, require_perm
+from core.permissions import DjangoModelPermissionsWithView
+from core.views import AuditLogHistoryMixin, _serialize_log_entry
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Q, QuerySet
@@ -20,7 +20,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
-from rest_framework.views import APIView
 
 from .models import (
     BillingArticle,
@@ -32,7 +31,6 @@ from .models import (
     Reminder,
 )
 from .serializers import (
-    AddressSerializer,
     BillingArticleSerializer,
     InvoiceLineSerializer,
     InvoiceListSerializer,
@@ -41,7 +39,6 @@ from .serializers import (
     OfferListSerializer,
     OfferSerializer,
     ReminderSerializer,
-    SyncWzSerializer,
 )
 from .services.numbering import allocate_article_number, allocate_number
 from .services.render import (
@@ -54,25 +51,8 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Audit-log helpers
+# Audit-log helpers (billing-specific; _serialize_log_entry imported from core.views)
 # ---------------------------------------------------------------------------
-
-def _serialize_log_entry(e: LogEntry, source: str = 'document') -> dict[str, Any]:
-    # Plain dict instead of a DRF serializer: this is a read-only, fixed-shape
-    # response with no validation or write path, so the overhead of a serializer
-    # class adds nothing. LogEntry also lacks stubs, making a typed ModelSerializer
-    # awkward. Revisit if a schema generator (e.g. drf-spectacular) is added.
-    actor = (e.actor.get_full_name() or e.actor.username) if e.actor else None
-    return {
-        'id': e.pk,
-        'timestamp': e.timestamp,
-        'actor': actor,
-        'action': e.action,
-        'changes': e.changes,
-        'source': source,
-        'object_repr': e.object_repr,
-    }
-
 
 def _line_log_entries(
     parent_obj: Offer | Invoice,
@@ -112,23 +92,6 @@ def _line_log_entries(
         .filter(content_type=line_ct, object_pk__in=all_pks)
         .select_related('actor')
     )
-
-
-class AuditLogHistoryMixin:
-    """Adds GET /{pk}/history/ returning django-auditlog entries for this object."""
-
-    @action(detail=True, methods=['get'], url_path='history')
-    def history(self, request: Request, pk: str | None = None) -> Response:
-        obj = self.get_object()  # type: ignore[attr-defined]
-        ct = ContentType.objects.get_for_model(obj)
-        entries = (
-            LogEntry.objects
-            .filter(content_type=ct, object_pk=str(obj.pk))
-            .select_related('actor')
-            .order_by('-timestamp')
-        )
-        data = [_serialize_log_entry(e) for e in entries if e.changes]
-        return Response(data)
 
 
 class DocumentEmailMixin:
@@ -226,54 +189,6 @@ class DocumentEmailMixin:
         # Return fresh serializer data so the frontend list updates immediately.
         serializer_class = self.get_serializer_class()
         return Response(serializer_class(doc).data)
-
-
-# ---------------------------------------------------------------------------
-# Address
-# ---------------------------------------------------------------------------
-
-class AddressViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Address]):
-    queryset = Address.objects.all()
-    serializer_class = AddressSerializer
-    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
-
-    def get_queryset(self) -> Any:
-        qs = Address.objects.all()
-        q: str | None = self.request.query_params.get('q')
-        if q:
-            from django.db.models import Q
-            qs = qs.filter(
-                Q(vorname__icontains=q)
-                | Q(nachname__icontains=q)
-                | Q(firma__icontains=q)
-                | Q(email__icontains=q)
-            )
-        return qs
-
-
-class WzAddressSyncView(APIView):
-    """POST /api/addresses/sync-wz/ — sync addresses from Wiffzack MSSQL."""
-
-    permission_classes = [IsAuthenticated, require_perm('core.run_import')]
-
-    def post(self, request: Request) -> Response:
-        ser = SyncWzSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        data: dict[str, str] = ser.validated_data
-
-        try:
-            from core.services.wz_address_sync import sync_addresses
-            count: int = sync_addresses(
-                host=data['host'],
-                database=data['database'],
-                user=data['user'],
-                password=data['password'],
-            )
-        except Exception as exc:
-            logger.exception('WZ address sync failed')
-            return Response({'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({'status': 'ok', 'count': count})
 
 
 # ---------------------------------------------------------------------------
