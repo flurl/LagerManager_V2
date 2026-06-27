@@ -178,6 +178,7 @@ const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
 
 const items = ref([])
 const invoices = ref([])
+const reminderFeeDefault = ref(0)
 const filterText = ref('')
 const filterFrom = ref('')
 const filterTo = ref('')
@@ -245,19 +246,21 @@ async function fetchItems() {
   linesCache.value = {}
   linesLoading.value = {}
   try {
-    const [remRes, invRes] = await Promise.all([
+    const [remRes, invRes, cfgRes] = await Promise.all([
       api.get('/reminders/'),
       api.get('/invoices/'),
+      api.get('/config/'),
     ])
     items.value = remRes.data.results || remRes.data
     invoices.value = invRes.data.results || invRes.data
+    reminderFeeDefault.value = cfgRes.data.config?.REMINDER_FEE_DEFAULT?.value ?? 0
   } finally {
     loading.value = false
   }
 }
 
 function openNew() {
-  form.value = { invoice: null, level: 1, reminder_date: today(), due_date: '', fee: 0, notes: '' }
+  form.value = { invoice: null, level: 1, reminder_date: today(), due_date: '', fee: reminderFeeDefault.value, notes: '' }
   dialog.value = true
 }
 
