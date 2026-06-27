@@ -62,6 +62,7 @@ def _build_context(doc: DocType) -> dict[str, object]:
         'company_email': getattr(config, 'COMPANY_EMAIL', ''),
         'company_phone': getattr(config, 'COMPANY_PHONE', ''),
         'invoice_footer_text': getattr(config, 'INVOICE_FOOTER_TEXT', ''),
+        'reminder_max_level': getattr(config, 'REMINDER_MAX_LEVEL', 3),
     }
 
 

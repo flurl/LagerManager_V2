@@ -36,7 +36,7 @@
 <table class="meta-table">
   <tr><td>Mahnungsdatum</td><td>{{ doc.reminder_date|date:"d.m.Y" }}</td></tr>
   <tr><td>Zahlung bis</td><td>{{ doc.due_date|date:"d.m.Y" }}</td></tr>
-  <tr><td>Mahnstufe</td><td>{{ doc.level }}</td></tr>
+  <tr><td>Mahnstufe</td><td>{% if doc.level == reminder_max_level %}Letzte Mahnung{% else %}{{ doc.level }}{% endif %}</td></tr>
 </table>
 {% endblock %}
 

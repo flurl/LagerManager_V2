@@ -180,7 +180,7 @@ CONSTANCE_CONFIG_FIELDSETS: dict[str, tuple[str, ...]] = {
     ),
     'Fakturierung': (
         'INVOICE_FOOTER_TEXT', 'INVOICE_PAYMENT_TERMS_DAYS',
-        'DEFAULT_BILLING_TAX_RATE_ID', 'REMINDER_FEE_DEFAULT',
+        'DEFAULT_BILLING_TAX_RATE_ID', 'REMINDER_FEE_DEFAULT', 'REMINDER_MAX_LEVEL',
     ),
     'Dokumentnummern': (
         'OFFER_NUMBER_PREFIX', 'INVOICE_NUMBER_PREFIX', 'REMINDER_NUMBER_PREFIX',
@@ -211,6 +211,7 @@ CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'INVOICE_PAYMENT_TERMS_DAYS': (14, 'Standard-Zahlungsziel in Tagen', int),
     'DEFAULT_BILLING_TAX_RATE_ID': (0, 'Standard-Steuersatz für Faktura-Artikel (TaxRate-ID)', int),
     'REMINDER_FEE_DEFAULT': (0, 'Standard-Mahngebühr in Euro', int),
+    'REMINDER_MAX_LEVEL': (3, 'Maximale Mahnstufe', int),
     # Document number prefixes (format: PREFIXYYMM##)
     'OFFER_NUMBER_PREFIX': ('AN', 'Nummernpräfix für Angebote', str),
     'INVOICE_NUMBER_PREFIX': ('RE', 'Nummernpräfix für Rechnungen', str),

@@ -37,7 +37,7 @@
               <v-chip size="x-small" :color="statusColor(item.status)">{{ statusLabel(item.status) }}</v-chip>
             </template>
             <template v-else-if="col.key === 'level'">
-              <v-chip size="x-small" :color="item.level >= 3 ? 'error' : item.level === 2 ? 'warning' : 'grey'">
+              <v-chip size="x-small" :color="item.level >= reminderMaxLevel ? 'error' : item.level === reminderMaxLevel - 1 ? 'warning' : 'grey'">
                 Stufe {{ item.level }}
               </v-chip>
             </template>
@@ -123,7 +123,7 @@
             item-value="id" label="Rechnung *" />
           <v-row dense>
             <v-col cols="4">
-              <v-select v-model="form.level" :items="[1,2,3]" label="Mahnstufe" />
+              <v-select v-model="form.level" :items="reminderLevels" label="Mahnstufe" />
             </v-col>
             <v-col cols="4">
               <v-text-field v-model="form.reminder_date" label="Mahnungsdatum *" type="date" />
@@ -179,6 +179,8 @@ const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
 const items = ref([])
 const invoices = ref([])
 const reminderFeeDefault = ref(0)
+const reminderMaxLevel = ref(3)
+const reminderLevels = computed(() => Array.from({ length: reminderMaxLevel.value }, (_, i) => i + 1))
 const filterText = ref('')
 const filterFrom = ref('')
 const filterTo = ref('')
@@ -254,6 +256,7 @@ async function fetchItems() {
     items.value = remRes.data.results || remRes.data
     invoices.value = invRes.data.results || invRes.data
     reminderFeeDefault.value = cfgRes.data.config?.REMINDER_FEE_DEFAULT?.value ?? 0
+    reminderMaxLevel.value = cfgRes.data.config?.REMINDER_MAX_LEVEL?.value ?? 3
   } finally {
     loading.value = false
   }
