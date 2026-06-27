@@ -229,6 +229,13 @@
     <BillingArticleDialog :article="null" @saved="onArticleSaved" @close="articleDialogOpen = false" />
   </v-dialog>
 
+  <v-snackbar v-model="errorSnackbar" color="error" timeout="-1" location="bottom">
+    {{ errorMessage }}
+    <template #actions>
+      <v-btn variant="text" @click="errorSnackbar = false">Schließen</v-btn>
+    </template>
+  </v-snackbar>
+
 </template>
 
 <script setup>
@@ -238,6 +245,7 @@ import NumberInput from './NumberInput.vue'
 import AddressDialog from './AddressDialog.vue'
 import BillingArticleDialog from './BillingArticleDialog.vue'
 import { useLineCalculations } from '../composables/useLineCalculations'
+import { extractErrorMessage } from '../utils/errorMessage'
 
 const props = defineProps({
   offer: { type: Object, default: null },
@@ -263,6 +271,13 @@ const addressDetailOpen = ref(false)
 const addressDialogOpen = ref(false)
 const addressToEdit = ref(null)
 const articleDialogOpen = ref(false)
+const errorSnackbar = ref(false)
+const errorMessage = ref('')
+
+function showError(err, fallback) {
+  errorMessage.value = extractErrorMessage(err, fallback)
+  errorSnackbar.value = true
+}
 
 const selectedAddress = computed(() => {
   if (!form.value.address) return null
@@ -290,17 +305,21 @@ watch(() => props.offer, (o) => {
 }, { immediate: true })
 
 async function loadLines(offerId) {
-  const res = await api.get(`/offers/${offerId}/lines/`)
-  lines.value = (res.data || []).map(l => ({
-    id: l.id,
-    billing_article: l.billing_article,
-    description: l.description,
-    unit: l.unit || '',
-    quantity: Number(l.quantity),
-    unit_price: Number(l.unit_price),
-    tax_rate: l.tax_rate,
-    position: l.position,
-  }))
+  try {
+    const res = await api.get(`/offers/${offerId}/lines/`)
+    lines.value = (res.data || []).map(l => ({
+      id: l.id,
+      billing_article: l.billing_article,
+      description: l.description,
+      unit: l.unit || '',
+      quantity: Number(l.quantity),
+      unit_price: Number(l.unit_price),
+      tax_rate: l.tax_rate,
+      position: l.position,
+    }))
+  } catch (err) {
+    showError(err, 'Positionen konnten nicht geladen werden.')
+  }
 }
 
 function openNewAddress() {
@@ -386,20 +405,26 @@ async function doSave() {
     }))
     await api.post(`/offers/${id}/lines/`, linesPayload)
     emit('saved')
+  } catch (err) {
+    showError(err, 'Angebot konnte nicht gespeichert werden.')
   } finally {
     saving.value = false
   }
 }
 
 onMounted(async () => {
-  const [addrRes, artRes, taxRes] = await Promise.all([
-    api.get('/addresses/'),
-    api.get('/billing-articles/?active=true'),
-    api.get('/tax-rates/'),
-  ])
-  addresses.value = (addrRes.data.results || addrRes.data).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
-  billingArticles.value = artRes.data.results || artRes.data
-  taxRates.value = taxRes.data.results || taxRes.data
+  try {
+    const [addrRes, artRes, taxRes] = await Promise.all([
+      api.get('/addresses/'),
+      api.get('/billing-articles/?active=true'),
+      api.get('/tax-rates/'),
+    ])
+    addresses.value = (addrRes.data.results || addrRes.data).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
+    billingArticles.value = artRes.data.results || artRes.data
+    taxRates.value = taxRes.data.results || taxRes.data
+  } catch (err) {
+    showError(err, 'Stammdaten konnten nicht geladen werden.')
+  }
 })
 </script>
 

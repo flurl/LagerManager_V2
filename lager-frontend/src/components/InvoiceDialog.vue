@@ -228,6 +228,13 @@
 
   <WzImportDialog v-model="wzImportDialogOpen" @confirm="onWzImport" />
 
+  <v-snackbar v-model="errorSnackbar" color="error" timeout="-1" location="bottom">
+    {{ errorMessage }}
+    <template #actions>
+      <v-btn variant="text" @click="errorSnackbar = false">Schließen</v-btn>
+    </template>
+  </v-snackbar>
+
 </template>
 
 <script setup>
@@ -238,6 +245,7 @@ import AddressDialog from './AddressDialog.vue'
 import BillingArticleDialog from './BillingArticleDialog.vue'
 import WzImportDialog from './WzImportDialog.vue'
 import { useLineCalculations } from '../composables/useLineCalculations'
+import { extractErrorMessage } from '../utils/errorMessage'
 
 const props = defineProps({
   invoice: { type: Object, default: null },
@@ -262,6 +270,13 @@ const addressDialogOpen = ref(false)
 const addressToEdit = ref(null)
 const articleDialogOpen = ref(false)
 const wzImportDialogOpen = ref(false)
+const errorSnackbar = ref(false)
+const errorMessage = ref('')
+
+function showError(err, fallback) {
+  errorMessage.value = extractErrorMessage(err, fallback)
+  errorSnackbar.value = true
+}
 
 const selectedAddress = computed(() => {
   if (!form.value.address) return null
@@ -298,17 +313,21 @@ watch(() => props.invoice, (inv) => {
 }, { immediate: true })
 
 async function loadLines(invoiceId) {
-  const res = await api.get(`/invoices/${invoiceId}/lines/`)
-  lines.value = (res.data || []).map(l => ({
-    id: l.id,
-    billing_article: l.billing_article,
-    description: l.description,
-    unit: l.unit || '',
-    quantity: Number(l.quantity),
-    unit_price: Number(l.unit_price),
-    tax_rate: l.tax_rate,
-    position: l.position,
-  }))
+  try {
+    const res = await api.get(`/invoices/${invoiceId}/lines/`)
+    lines.value = (res.data || []).map(l => ({
+      id: l.id,
+      billing_article: l.billing_article,
+      description: l.description,
+      unit: l.unit || '',
+      quantity: Number(l.quantity),
+      unit_price: Number(l.unit_price),
+      tax_rate: l.tax_rate,
+      position: l.position,
+    }))
+  } catch (err) {
+    showError(err, 'Positionen konnten nicht geladen werden.')
+  }
 }
 
 function openNewAddress() {
@@ -403,24 +422,30 @@ async function doSave() {
     }))
     await api.post(`/invoices/${id}/lines/`, linesPayload)
     emit('saved')
+  } catch (err) {
+    showError(err, 'Rechnung konnte nicht gespeichert werden.')
   } finally {
     saving.value = false
   }
 }
 
 onMounted(async () => {
-  const [addrRes, artRes, taxRes, cfgRes] = await Promise.all([
-    api.get('/addresses/'),
-    api.get('/billing-articles/?active=true'),
-    api.get('/tax-rates/'),
-    api.get('/config/'),
-  ])
-  addresses.value = (addrRes.data.results || addrRes.data).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
-  billingArticles.value = artRes.data.results || artRes.data
-  taxRates.value = taxRes.data.results || taxRes.data
-  paymentTermsDays.value = cfgRes.data.config?.INVOICE_PAYMENT_TERMS_DAYS?.value ?? 14
-  if (!props.invoice) {
-    form.value.due_date = defaultDueDate()
+  try {
+    const [addrRes, artRes, taxRes, cfgRes] = await Promise.all([
+      api.get('/addresses/'),
+      api.get('/billing-articles/?active=true'),
+      api.get('/tax-rates/'),
+      api.get('/config/'),
+    ])
+    addresses.value = (addrRes.data.results || addrRes.data).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
+    billingArticles.value = artRes.data.results || artRes.data
+    taxRates.value = taxRes.data.results || taxRes.data
+    paymentTermsDays.value = cfgRes.data.config?.INVOICE_PAYMENT_TERMS_DAYS?.value ?? 14
+    if (!props.invoice) {
+      form.value.due_date = defaultDueDate()
+    }
+  } catch (err) {
+    showError(err, 'Stammdaten konnten nicht geladen werden.')
   }
 })
 </script>

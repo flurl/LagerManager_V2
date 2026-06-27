@@ -156,6 +156,13 @@
       :doc-label="`Mahnung ${sendItem.number || '#' + sendItem.id}`"
       @sent="onSent"
     />
+
+    <v-snackbar v-model="errorSnackbar" color="error" timeout="-1" location="bottom">
+      {{ errorMessage }}
+      <template #actions>
+        <v-btn variant="text" @click="errorSnackbar = false">Schließen</v-btn>
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
@@ -169,6 +176,7 @@ import NumberInput from '../components/NumberInput.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
+import { extractErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
 const router = useRouter()
@@ -206,6 +214,13 @@ const historyDialog = ref(false)
 const historyItem = ref(null)
 const sendDialog = ref(false)
 const sendItem = ref(null)
+const errorSnackbar = ref(false)
+const errorMessage = ref('')
+
+function showError(err, fallback) {
+  errorMessage.value = extractErrorMessage(err, fallback)
+  errorSnackbar.value = true
+}
 
 const linesCache = ref({})
 const linesLoading = ref({})
@@ -257,6 +272,8 @@ async function fetchItems() {
     invoices.value = invRes.data.results || invRes.data
     reminderFeeDefault.value = cfgRes.data.config?.REMINDER_FEE_DEFAULT?.value ?? 0
     reminderMaxLevel.value = cfgRes.data.config?.REMINDER_MAX_LEVEL?.value ?? 3
+  } catch (err) {
+    showError(err, 'Mahnungen konnten nicht geladen werden.')
   } finally {
     loading.value = false
   }
@@ -275,19 +292,27 @@ function openEdit(item) {
 function today() { return new Date().toISOString().slice(0, 10) }
 
 async function save() {
-  if (form.value.id) {
-    await api.put(`/reminders/${form.value.id}/`, form.value)
-  } else {
-    await api.post('/reminders/', form.value)
+  try {
+    if (form.value.id) {
+      await api.put(`/reminders/${form.value.id}/`, form.value)
+    } else {
+      await api.post('/reminders/', form.value)
+    }
+    dialog.value = false
+    await fetchItems()
+  } catch (err) {
+    showError(err, 'Mahnung konnte nicht gespeichert werden.')
   }
-  dialog.value = false
-  await fetchItems()
 }
 
 async function issueReminder(item) {
   if (!confirm('Mahnung ausstellen? Dabei wird eine Nummer vergeben.')) return
-  await api.post(`/reminders/${item.id}/issue/`)
-  await fetchItems()
+  try {
+    await api.post(`/reminders/${item.id}/issue/`)
+    await fetchItems()
+  } catch (err) {
+    showError(err, 'Mahnung konnte nicht ausgestellt werden.')
+  }
 }
 
 function openHistory(item) {
@@ -318,8 +343,12 @@ function openInvoicePreview(item) {
 
 async function deleteItem(item) {
   if (!confirm(`Mahnung ${item.number || '#' + item.id} wirklich löschen?`)) return
-  await api.delete(`/reminders/${item.id}/`)
-  await fetchItems()
+  try {
+    await api.delete(`/reminders/${item.id}/`)
+    await fetchItems()
+  } catch (err) {
+    showError(err, 'Mahnung konnte nicht gelöscht werden.')
+  }
 }
 
 function onRowEnter(item, event) {
