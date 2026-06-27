@@ -9,6 +9,11 @@
 
     <v-data-table :headers="headers" :items="items" :loading="loading" density="compact"
       :row-props="() => ({ style: 'cursor: pointer' })" @click:row="(_, { item }) => openEdit(item)">
+      <template #item.description="{ item }">
+        <span :title="item.description" style="display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          {{ item.description }}
+        </span>
+      </template>
       <template #item.unit_price="{ item }">{{ Number(item.unit_price).toFixed(2) }} €</template>
       <template #item.tax_rate_percent="{ item }">
         {{ item.tax_rate_percent != null ? item.tax_rate_percent + ' %' : '—' }}
@@ -43,6 +48,7 @@ const selected = ref(null)
 const headers = [
   { title: 'Art.-Nr.', key: 'article_number' },
   { title: 'Bezeichnung', key: 'name' },
+  { title: 'Beschreibung', key: 'description' },
   { title: 'Einheit', key: 'unit' },
   { title: 'Preis (netto)', key: 'unit_price', align: 'end' },
   { title: 'MwSt.', key: 'tax_rate_percent', align: 'end' },
