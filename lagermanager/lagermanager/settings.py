@@ -160,6 +160,7 @@ EMAIL_USE_TLS: bool = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_USE_SSL: bool = config('EMAIL_USE_SSL', default=False, cast=bool)
 DEFAULT_FROM_EMAIL: str = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
 SERVER_EMAIL: str = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
+DEFAULT_REPLY_TO_EMAIL: str = config('DEFAULT_REPLY_TO_EMAIL', default='')
 
 CORS_ALLOWED_ORIGINS: list[str] = cast(
     list[str],

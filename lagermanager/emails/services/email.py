@@ -63,6 +63,7 @@ def send_document_email(
     FAILED log entry.
     """
     from_email: str = settings.DEFAULT_FROM_EMAIL
+    reply_to: list[str] = [settings.DEFAULT_REPLY_TO_EMAIL] if settings.DEFAULT_REPLY_TO_EMAIL else []
     cc_list: list[str] = [a.strip() for a in cc.split(',') if a.strip()] if cc else []
 
     content_type_obj: ContentType | None = None
@@ -78,6 +79,7 @@ def send_document_email(
             from_email=from_email,
             to=[recipient],
             cc=cc_list,
+            reply_to=reply_to,
         )
         for filename, data, mime in (attachments or []):
             msg.attach(filename, data, mime)
