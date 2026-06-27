@@ -44,6 +44,7 @@ Adresse anlegen  →  Angebot  →  (Umwandeln)  →  Rechnung
 
 Damit die erzeugten Dokumente korrekt aussehen, sollten unter **Verwaltung → Einstellungen** einmalig die Firmendaten hinterlegt werden. Diese erscheinen als Absender bzw. in der Fußzeile der PDF-Dokumente:
 
+- **Firmenlogo** – Bilddatei (PNG, JPEG, GIF, WebP oder SVG), die oben im PDF erscheint. Über **Logo hochladen** auswählen; mit **Logo entfernen** wieder löschen. Eine Vorschau wird direkt angezeigt.
 - **Firmenname**, **Straße**, **PLZ**, **Ort**
 - **UID-Nummer**, **E-Mail**, **Telefon**
 - **IBAN**, **BIC**, **Bankname** (für die Zahlungsinformationen)
@@ -61,7 +62,7 @@ Die E-Mail-Vorlagen befinden sich weiter unten auf derselben Seite:
 
 ![Einstellungen – E-Mail-Vorlagen](img/fakturierung/20-einstellungen-email.png)
 
-> Der **Absender** sowie die **SMTP-Zugangsdaten** für den tatsächlichen Mailversand werden serverseitig (Umgebungs-/Serverkonfiguration) hinterlegt.
+> Der **Absender**, die **SMTP-Zugangsdaten** sowie eine optionale **Reply-To-Adresse** (`DEFAULT_REPLY_TO_EMAIL`) für den tatsächlichen Mailversand werden serverseitig (Umgebungs-/Serverkonfiguration) hinterlegt. Ist `DEFAULT_REPLY_TO_EMAIL` gesetzt, wird diese Adresse als Reply-To-Header aller ausgehenden Dokument-E-Mails verwendet.
 
 ---
 
@@ -137,6 +138,8 @@ Faktura-Artikel sind wiederkehrende Positionen (z. B. "Miete", „AKM") mit vord
 - **Steuersatz**
 - **Aktiv** (nur aktive Artikel stehen in Dokumenten zur Auswahl)
 
+Die Artikelliste zeigt die **Beschreibung** als eigene Spalte an (gekürzt mit Tooltip für längere Texte).
+
 ![Faktura-Artikel – Liste](img/fakturierung/04-artikel-liste.png)
 
 ![Dialog „Neuer Artikel"](img/fakturierung/05-artikel-dialog.png)
@@ -170,7 +173,7 @@ Pro Position werden erfasst:
 
 | Feld | Bedeutung |
 |------|-----------|
-| **Artikel / Bezeichnung** | Faktura-Artikel auswählen *oder* leer lassen für Freitext |
+| **Artikel / Bezeichnung** | Faktura-Artikel auswählen *oder* leer lassen für Freitext. Artikel mit Beschreibung werden im Dropdown als „Name – Beschreibung" angezeigt (Beschreibung auf 50 Zeichen gekürzt). |
 | **Beschreibung** | Freitext (bei Artikeln automatisch befüllt) |
 | **Einh.** | Einheit (z. B. Stk., Std.) |
 | **Menge** | Stückzahl/Menge |
