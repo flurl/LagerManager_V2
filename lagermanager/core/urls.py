@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     AddressViewSet,
+    ConfigLogoView,
     ConfigView,
     DepartmentViewSet,
     LocationViewSet,
@@ -26,6 +27,7 @@ urlpatterns = [
     path('periods/by-date/', PeriodByDateView.as_view(), name='period-by-date'),
     path('', include(router.urls)),
     path('config/', ConfigView.as_view(), name='config'),
+    path('config/logo/', ConfigLogoView.as_view(), name='config-logo'),
     path('me/', MeView.as_view(), name='me'),
     path('version/', VersionView.as_view(), name='version'),
 ]

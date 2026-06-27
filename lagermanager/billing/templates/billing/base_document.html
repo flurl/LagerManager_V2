@@ -38,6 +38,8 @@
   }
   .company-block { font-size: 9pt; color: #555; line-height: 1.5; }
   .company-block strong { font-size: 12pt; color: #1a1a1a; display: block; margin-bottom: 4px; }
+  .logo-block { display: flex; align-items: center; justify-content: center; }
+  .company-logo { max-height: 70px; max-width: 180px; }
   .doc-type-block {
     text-align: right;
   }
@@ -117,6 +119,9 @@
     color: #fff;
   }
 
+  /* ---- Line item description continuation lines ---- */
+  .description-continuation { font-size: 75%; color: #666; }
+
   /* ---- Notes ---- */
   .notes-section { margin: 24px 0; font-size: 9pt; color: #444; white-space: pre-line; }
   .notes-label { font-weight: 600; margin-bottom: 4px; color: #1a1a1a; }
@@ -163,6 +168,9 @@
       {% if company_phone %}Tel: {{ company_phone }}<br>{% endif %}
       {% if company_email %}{{ company_email }}<br>{% endif %}
       {% if company_uid %}UID: {{ company_uid }}{% endif %}
+    </div>
+    <div class="logo-block">
+      {% if company_logo_data_uri %}<img class="company-logo" src="{{ company_logo_data_uri }}" alt="{{ company_name }}">{% endif %}
     </div>
     <div class="doc-type-block">
       <h1>{% block doc_type_label %}Dokument{% endblock %}</h1>

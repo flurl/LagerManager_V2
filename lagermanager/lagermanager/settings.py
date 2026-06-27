@@ -173,6 +173,7 @@ CONSTANCE_CONFIG_FIELDSETS: dict[str, tuple[str, ...]] = {
     'Allgemein': ('DEFAULT_TAX_RATE_ID',),
     'Dokument-Import / KI': ('GEMINI_API_KEY', 'MISTRAL_API_KEY'),
     'Unternehmen': (
+        'COMPANY_LOGO',
         'COMPANY_NAME', 'COMPANY_ADDRESS', 'COMPANY_ZIP', 'COMPANY_CITY',
         'COMPANY_UID', 'COMPANY_IBAN', 'COMPANY_BIC', 'COMPANY_BANK',
         'COMPANY_EMAIL', 'COMPANY_PHONE',
@@ -195,6 +196,7 @@ CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'GEMINI_API_KEY': ('', 'Google Gemini API Key für den Dokumenten-Import', str),
     'MISTRAL_API_KEY': ('', 'Mistral API Key für den Dokumenten-Import (OCR)', str),
     # Billing / company issuer data (used in invoice/offer/reminder templates)
+    'COMPANY_LOGO': ('', 'Firmenlogo (relativer Medienpfad, wird automatisch gesetzt)', str),
     'COMPANY_NAME': ('', 'Firmenname (Absender auf Rechnungen)', str),
     'COMPANY_ADDRESS': ('', 'Straße und Hausnummer des Unternehmens', str),
     'COMPANY_ZIP': ('', 'PLZ des Unternehmens', str),

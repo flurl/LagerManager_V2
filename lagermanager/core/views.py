@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from pathlib import Path
 from typing import Any, cast
 
 from auditlog.models import LogEntry
@@ -12,6 +13,7 @@ from django.db.models.query import QuerySet
 from pos_import.models import ArticleMeta
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -115,6 +117,52 @@ class ConfigView(APIView):
                 errors[key] = f'Ungültiger Wert für Typ {field_type.__name__}.'
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': True})
+
+
+_ALLOWED_LOGO_MIME_PREFIXES = ('image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml')
+_LOGO_DEST = Path('billing') / 'logo' / 'company'
+
+
+class ConfigLogoView(APIView):
+    parser_classes = [MultiPartParser]
+
+    def get(self, request: Request) -> Response:
+        logo_path: str = getattr(constance_cfg, 'COMPANY_LOGO', '')
+        if logo_path and (Path(settings.MEDIA_ROOT) / logo_path).is_file():
+            url: str | None = request.build_absolute_uri(settings.MEDIA_URL + logo_path)
+        else:
+            url = None
+        return Response({'url': url, 'path': logo_path})
+
+    def post(self, request: Request) -> Response:
+        if not request.user.has_perm('constance.change_config'):
+            return Response({'detail': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
+        upload = request.FILES.get('logo')
+        if not upload:
+            return Response({'detail': 'Keine Datei übermittelt.'}, status=status.HTTP_400_BAD_REQUEST)
+        content_type: str = upload.content_type or ''
+        if not any(content_type.startswith(p) for p in _ALLOWED_LOGO_MIME_PREFIXES):
+            return Response({'detail': 'Nur Bilddateien erlaubt (PNG, JPEG, GIF, WebP, SVG).'}, status=status.HTTP_400_BAD_REQUEST)
+        suffix = Path(upload.name).suffix.lower() or '.png'
+        dest_rel = str(_LOGO_DEST) + suffix
+        dest_abs = Path(settings.MEDIA_ROOT) / dest_rel
+        dest_abs.parent.mkdir(parents=True, exist_ok=True)
+        with dest_abs.open('wb') as fh:
+            for chunk in upload.chunks():
+                fh.write(chunk)
+        constance_cfg.COMPANY_LOGO = dest_rel
+        return Response({'url': request.build_absolute_uri(settings.MEDIA_URL + dest_rel), 'path': dest_rel})
+
+    def delete(self, request: Request) -> Response:
+        if not request.user.has_perm('constance.change_config'):
+            return Response({'detail': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
+        logo_path: str = getattr(constance_cfg, 'COMPANY_LOGO', '')
+        if logo_path:
+            abs_path = Path(settings.MEDIA_ROOT) / logo_path
+            if abs_path.is_file():
+                abs_path.unlink()
+            constance_cfg.COMPANY_LOGO = ''
         return Response({'success': True})
 
 

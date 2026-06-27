@@ -17,8 +17,25 @@
       <v-expansion-panel v-for="group in groups" :key="group.label" :title="group.label">
         <v-expansion-panel-text>
           <template v-for="key in group.keys" :key="key">
+            <!-- Logo upload -->
+            <div v-if="key === 'COMPANY_LOGO'" class="mb-4">
+              <div class="text-caption text-medium-emphasis mb-2">{{ configData[key]?.help_text }}</div>
+              <div v-if="logoPreviewUrl" class="mb-3">
+                <img :src="logoPreviewUrl" alt="Firmenlogo" style="max-height:80px;max-width:240px;display:block;border:1px solid #e0e0e0;border-radius:4px;padding:4px;">
+              </div>
+              <div v-else class="text-body-2 text-medium-emphasis mb-3">Kein Logo gesetzt.</div>
+              <div v-if="canEdit" class="d-flex align-center gap-2">
+                <v-btn variant="tonal" size="small" :loading="logoUploading" prepend-icon="mdi-upload" @click="triggerLogoUpload">
+                  Logo hochladen
+                </v-btn>
+                <v-btn v-if="logoPreviewUrl" variant="tonal" size="small" color="error" :loading="logoDeleting" prepend-icon="mdi-delete" @click="deleteLogo">
+                  Logo entfernen
+                </v-btn>
+              </div>
+            </div>
+
             <v-select
-              v-if="key === 'DEFAULT_TAX_RATE_ID' || key === 'DEFAULT_BILLING_TAX_RATE_ID'"
+              v-else-if="key === 'DEFAULT_TAX_RATE_ID' || key === 'DEFAULT_BILLING_TAX_RATE_ID'"
               v-model="formValues[key]"
               :items="taxRateChoices"
               item-title="label"
@@ -65,6 +82,8 @@
       </v-expansion-panel>
     </v-expansion-panels>
 
+    <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style="display:none" @change="uploadLogo">
+
     <v-row v-if="canEdit && !loading" class="mt-4">
       <v-col>
         <v-btn color="primary" :loading="saving" @click="save">Speichern</v-btn>
@@ -89,6 +108,11 @@ const taxRatesLoading = ref(false)
 const error = ref('')
 const saved = ref(false)
 
+const logoPreviewUrl = ref('')
+const logoUploading = ref(false)
+const logoDeleting = ref(false)
+const logoInput = ref(null)
+
 async function fetchConfig() {
   loading.value = true
   try {
@@ -102,6 +126,15 @@ async function fetchConfig() {
     openPanels.value = groups.value.map((_, i) => i)
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchLogo() {
+  try {
+    const res = await api.get('/config/logo/')
+    logoPreviewUrl.value = res.data.url || ''
+  } catch {
+    logoPreviewUrl.value = ''
   }
 }
 
@@ -119,12 +152,51 @@ async function fetchTaxRates() {
   }
 }
 
+function triggerLogoUpload() {
+  logoInput.value?.click()
+}
+
+async function uploadLogo(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  logoUploading.value = true
+  error.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('logo', file)
+    const res = await api.post('/config/logo/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    logoPreviewUrl.value = res.data.url || ''
+  } catch (e) {
+    error.value = e.response?.data?.detail || 'Fehler beim Logo-Upload.'
+  } finally {
+    logoUploading.value = false
+    if (logoInput.value) logoInput.value.value = ''
+  }
+}
+
+async function deleteLogo() {
+  logoDeleting.value = true
+  error.value = ''
+  try {
+    await api.delete('/config/logo/')
+    logoPreviewUrl.value = ''
+  } catch (e) {
+    error.value = e.response?.data?.detail || 'Fehler beim Löschen des Logos.'
+  } finally {
+    logoDeleting.value = false
+  }
+}
+
 async function save() {
   error.value = ''
   saved.value = false
   saving.value = true
   try {
-    await api.patch('/config/', formValues.value)
+    // COMPANY_LOGO is managed via the dedicated logo endpoint, exclude from the patch
+    const payload = Object.fromEntries(
+      Object.entries(formValues.value).filter(([k]) => k !== 'COMPANY_LOGO')
+    )
+    await api.patch('/config/', payload)
     saved.value = true
   } catch (e) {
     error.value = e.response?.data?.detail || JSON.stringify(e.response?.data) || 'Fehler beim Speichern.'
@@ -135,6 +207,7 @@ async function save() {
 
 onMounted(() => {
   fetchConfig()
+  fetchLogo()
   fetchTaxRates()
 })
 </script>

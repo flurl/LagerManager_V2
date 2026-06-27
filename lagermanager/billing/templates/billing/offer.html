@@ -1,4 +1,5 @@
 {% extends "billing/base_document.html" %}
+{% load billing_extras %}
 
 {% block doc_title %}Angebot {% if doc.number %}{{ doc.number }}{% else %}(Entwurf){% endif %}{% endblock %}
 {% block doc_type_label %}Angebot{% endblock %}
@@ -29,7 +30,7 @@
     {% for line in doc.lines.all %}
     <tr>
       <td>{{ line.position }}</td>
-      <td>{{ line.description }}</td>
+      <td>{{ line.description|render_description }}</td>
       <td class="num">{{ line.quantity|floatformat:"-4" }}</td>
       <td>{{ line.unit }}</td>
       <td class="num">{{ line.unit_price|floatformat:"2" }}</td>

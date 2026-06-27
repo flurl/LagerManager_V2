@@ -13,12 +13,29 @@ works even if the system libraries are not yet installed (e.g. before rebuilding
 the Docker image).  The /preview/ endpoint works without WeasyPrint; only /pdf/
 requires it.
 """
+import base64
+import mimetypes
+from pathlib import Path
+
 from constance import config
+from django.conf import settings
 from django.template.loader import render_to_string
 
 from billing.models import Invoice, Offer, Reminder
 
 DocType = Offer | Invoice | Reminder
+
+
+def _logo_data_uri() -> str:
+    logo_path: str = getattr(config, 'COMPANY_LOGO', '')
+    if not logo_path:
+        return ''
+    file_path = Path(settings.MEDIA_ROOT) / logo_path
+    if not file_path.is_file():
+        return ''
+    mime = mimetypes.guess_type(str(file_path))[0] or 'image/png'
+    data = base64.b64encode(file_path.read_bytes()).decode('ascii')
+    return f'data:{mime};base64,{data}'
 
 
 class _SafeFormatMap(dict):  # type: ignore[type-arg]
@@ -32,6 +49,7 @@ def _build_context(doc: DocType) -> dict[str, object]:
     """Build the template context common to all document types."""
     return {
         'doc': doc,
+        'company_logo_data_uri': _logo_data_uri(),
         # Company / issuer data from Constance
         'company_name': getattr(config, 'COMPANY_NAME', ''),
         'company_address': getattr(config, 'COMPANY_ADDRESS', ''),
