@@ -150,7 +150,7 @@
               <td rowspan="2" class="text-center text-medium-emphasis" style="vertical-align:middle">{{ idx + 1 }}</td>
               <td>
                 <div class="field-label">Artikel / Bezeichnung</div>
-                <v-autocomplete v-model="line.billing_article" :items="billingArticles" item-title="name" item-value="id"
+                <v-autocomplete v-model="line.billing_article" :items="billingArticles" :item-title="articleDropdownLabel" item-value="id"
                   density="compact" hide-details clearable placeholder="Freitext"
                   @update:model-value="onArticleSelect(line)" />
               </td>
@@ -344,6 +344,12 @@ function addLine() {
 
 function removeLine(idx) {
   lines.value.splice(idx, 1)
+}
+
+function articleDropdownLabel(art) {
+  if (!art.description) return art.name
+  const desc = art.description.length > 50 ? art.description.slice(0, 50) + '…' : art.description
+  return `${art.name} – ${desc}`
 }
 
 function onArticleSelect(line) {
