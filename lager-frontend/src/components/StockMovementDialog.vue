@@ -131,6 +131,9 @@
 
     <v-card-actions>
       <v-spacer />
+      <v-btn class="mr-2" :loading="saving" @click="saveAndFlag">Speichern &amp; flaggen</v-btn>
+      <v-btn v-if="form.id" class="mr-4" :disabled="isDirty"
+        :title="isDirty ? 'Es gibt ungespeicherte Änderungen. Bitte zuerst speichern.' : ''" @click="setFlag">Flag</v-btn>
       <v-btn @click="handleClose">Abbrechen</v-btn>
       <v-btn :color="typeConfig.color" :loading="saving" @click="save">Speichern</v-btn>
     </v-card-actions>
@@ -254,20 +257,41 @@ const typeConfig = computed(() => {
 
 const form = ref({ partner: null, date: null, comment: '', period: null })
 const lines = ref([])
+const savedSnapshot = ref(null)
 
 const { getTaxPercent, lineNet, lineGross, totalNet, totalGross } = useLineCalculations(taxRates, lines)
+
+function snapshotKey() {
+  return JSON.stringify({
+    partner: form.value.partner,
+    date: form.value.date,
+    comment: form.value.comment,
+    lines: lines.value,
+  })
+}
+
+function captureSnapshot() {
+  savedSnapshot.value = snapshotKey()
+}
+
+const isDirty = computed(() => {
+  if (!savedSnapshot.value) return false
+  return snapshotKey() !== savedSnapshot.value
+})
 
 async function initForm() {
   activeTab.value = 'positions'
   dateError.value = ''
   linesError.value = ''
   pendingAttachments.value = []
+  savedSnapshot.value = null
   if (props.movement) {
     const res = await api.get(`/stock-movements/${props.movement.id}/`)
     const full = res.data
     form.value = { ...full }
     lines.value = (full.details || []).map((d) => ({ ...d }))
     originalDetailIds.value = (full.details || []).map((d) => d.id)
+    captureSnapshot()
   } else {
     form.value = {
       partner: null,
@@ -389,6 +413,7 @@ async function doSave({ silent = false } = {}) {
       )
       pendingAttachments.value = []
     }
+    captureSnapshot()
     if (!silent) emit('saved')
   } catch (err) {
     showSaveError(err)
@@ -409,6 +434,7 @@ function onPendingDeleted(att) {
 }
 
 async function handleClose() {
+  if (isDirty.value && !confirm('Es gibt ungespeicherte Änderungen. Trotzdem schließen?')) return
   if (pendingAttachments.value.length) {
     await Promise.all(pendingAttachments.value.map((a) => api.delete(`/attachments/${a.id}/`)))
     pendingAttachments.value = []
@@ -428,6 +454,25 @@ function onImportConfirm(newLines, meta) {
   if (parts.length) {
     const suffix = parts.join(', ')
     form.value.comment = form.value.comment ? `${form.value.comment}, ${suffix}` : suffix
+  }
+}
+
+async function saveAndFlag() {
+  form.value.flag = new Date().toISOString()
+  await save()
+}
+
+async function setFlag() {
+  const now = new Date().toISOString()
+  form.value.flag = now
+  if (form.value.id) {
+    try {
+      await api.patch(`/stock-movements/${form.value.id}/`, { flag: now })
+      emit('refresh')
+      emit('close')
+    } catch (err) {
+      showSaveError(err)
+    }
   }
 }
 

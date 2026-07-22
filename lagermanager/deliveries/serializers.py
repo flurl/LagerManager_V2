@@ -104,7 +104,7 @@ class StockMovementSerializer(serializers.ModelSerializer[StockMovement]):
         fields = [
             'id', 'partner', 'partner_name', 'date', 'movement_type',
             'comment', 'period', 'total_net', 'total_gross', 'details',
-            'created_at', 'updated_at',
+            'created_at', 'updated_at', 'flag',
         ]
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
@@ -138,5 +138,5 @@ class StockMovementListSerializer(serializers.ModelSerializer[StockMovement]):
         fields = [
             'id', 'partner', 'partner_name', 'date', 'movement_type',
             'comment', 'period', 'total_net', 'total_gross',
-            'attachment_count', 'created_at', 'updated_at',
+            'attachment_count', 'created_at', 'updated_at', 'flag',
         ]

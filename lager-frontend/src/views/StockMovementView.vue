@@ -36,6 +36,7 @@
           <td v-for="col in columns" :key="col.key" :class="col.align ? `text-${col.align}` : ''"
             class="v-data-table__td">
             <template v-if="col.key === 'date'">{{ formatDate(item.date) }}</template>
+            <template v-else-if="col.key === 'flag'">{{ formatDateTime(item.flag) }}</template>
             <template v-else-if="col.key === 'total_net'">{{ formatCurrency(item.total_net) }}</template>
             <template v-else-if="col.key === 'total_gross'">{{ formatCurrency(item.total_gross) }}</template>
             <template v-else-if="col.key === 'actions'">
@@ -169,6 +170,7 @@ const headers = [
   { title: 'Datum', key: 'date' },
   { title: 'Partner', key: 'partner_name' },
   { title: 'Kommentar', key: 'comment' },
+  { title: 'Flag', key: 'flag' },
   { title: 'Netto', key: 'total_net', align: 'end' },
   { title: 'Brutto', key: 'total_gross', align: 'end' },
   { title: '', key: 'actions', sortable: false, align: 'end' },
@@ -271,6 +273,10 @@ function exportCsvAction() {
 
 function formatDate(dt) {
   return dt ? new Date(dt).toLocaleDateString('de-AT') : ''
+}
+
+function formatDateTime(dt) {
+  return dt ? new Date(dt).toLocaleString('de-AT') : ''
 }
 
 function formatCurrency(val) {
