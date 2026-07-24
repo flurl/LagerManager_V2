@@ -597,18 +597,44 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
 
     @action(detail=True, methods=['post'], url_path='issue')
     def issue(self, request: Request, pk: str | None = None) -> Response:
+        """Issue a draft invoice.
+
+        document_date is no longer user-editable — it is always set to today,
+        the date of issuance. due_date may be supplied in the request body
+        (prefilled client-side to document_date + INVOICE_PAYMENT_TERMS_DAYS);
+        it otherwise falls back to that same default.
+        """
         invoice: Invoice = self.get_object()
         if invoice.status != Invoice.Status.DRAFT:
             return Response(
                 {'detail': 'Nur Entwürfe können ausgestellt werden.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        document_date = timezone.localdate()
+        due_date_str: str | None = request.data.get('due_date')
+        due_date: datetime.date
+        if due_date_str:
+            try:
+                due_date = datetime.date.fromisoformat(due_date_str)
+            except ValueError:
+                return Response({'detail': 'Ungültiges Fälligkeitsdatum.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            due_date = document_date + datetime.timedelta(days=config.INVOICE_PAYMENT_TERMS_DAYS)
+        if due_date < document_date:
+            return Response(
+                {'detail': 'Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         with transaction.atomic():
+            invoice.document_date = document_date
+            invoice.due_date = due_date
             invoice.number = allocate_number(
                 NumberSequence.DocType.INVOICE, invoice.document_date)
             _snapshot_recipient(invoice)
             invoice.status = Invoice.Status.ISSUED
-            invoice.save(update_fields=['number', 'recipient_text', 'status'])
+            invoice.save(update_fields=[
+                'document_date', 'due_date', 'number', 'recipient_text', 'status',
+            ])
         return Response(InvoiceSerializer(invoice).data)
 
     # ---- Cancel / reverse ---------------------------------------------------
@@ -635,6 +661,7 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
             reverse = Invoice.objects.create(
                 address=invoice.address,
                 document_date=today,
+                service_date=invoice.service_date,
                 due_date=today,
                 reverses=invoice,
                 notes=notes,
@@ -655,6 +682,7 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
                 draft = Invoice.objects.create(
                     address=invoice.address,
                     document_date=invoice.document_date,
+                    service_date=invoice.service_date,
                     due_date=invoice.due_date,
                     notes=invoice.notes,
                     source_offer=invoice.source_offer,
@@ -702,6 +730,7 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
             new_invoice = Invoice.objects.create(
                 address=invoice.address,
                 document_date=invoice.document_date,
+                service_date=invoice.service_date,
                 due_date=invoice.due_date,
                 notes=invoice.notes,
                 status=Invoice.Status.DRAFT,

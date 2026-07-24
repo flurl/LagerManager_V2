@@ -265,7 +265,11 @@ class Invoice(models.Model):
         help_text='Bei Stornorechnungen: die stornierte Originalrechnung.',
     )
 
-    document_date = models.DateField()
+    # No longer user-editable: set to today's date when the invoice is issued
+    # (see InvoiceViewSet.issue). Defaults to today while still a draft.
+    document_date = models.DateField(default=datetime.date.today)
+    # Leistungsdatum — optional; if unset, the invoice document date applies.
+    service_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(default=datetime.date.today)
     notes = models.TextField(blank=True)
     paid_at = models.DateField(null=True, blank=True)

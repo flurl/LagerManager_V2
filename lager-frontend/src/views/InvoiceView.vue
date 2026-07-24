@@ -47,6 +47,7 @@
             <template v-else-if="col.key === 'status'">
               <v-chip size="x-small" :color="statusColor(item.status)">{{ statusLabel(item.status) }}</v-chip>
             </template>
+            <template v-else-if="col.key === 'document_date'">{{ datumDisplay(item) }}</template>
             <template v-else-if="col.key === 'gross_total'">{{ Number(item.gross_total).toFixed(2) }} €</template>
             <template v-else-if="col.key === 'actions'">
               <v-tooltip text="Vorschau"><template #activator="{ props }">
@@ -163,7 +164,7 @@
     </v-dialog>
 
     <!-- Issue date dialog -->
-    <v-dialog v-model="issueDialog" max-width="500" persistent>
+    <v-dialog v-model="issueDialog" max-width="420" persistent>
       <v-card>
         <v-card-title>Rechnung ausstellen</v-card-title>
         <v-card-subtitle v-if="issueInvoiceItem" class="pb-0">
@@ -171,46 +172,20 @@
         </v-card-subtitle>
         <v-card-text>
           <p class="mb-3 text-body-2 text-medium-emphasis">
-            Das Rechnungsdatum ({{ fmtDate(issueInvoiceItem?.document_date) }}) entspricht nicht dem heutigen Datum.
-            Wie soll fortgefahren werden?
+            Das Rechnungsdatum wird auf das heutige Datum ({{ fmtDate(today) }}) gesetzt.
           </p>
-          <v-radio-group v-model="issueDateOption">
-            <v-radio value="both">
-              <template #label>
-                <span>
-                  Rechnungsdatum <strong>und</strong> Fälligkeitsdatum aktualisieren
-                  <div class="text-caption text-medium-emphasis">
-                    Datum: {{ fmtDate(issueToday) }} · Fällig: {{ fmtDate(issueNewDueDate) }}
-                  </div>
-                </span>
-              </template>
-            </v-radio>
-            <v-radio value="doc_only">
-              <template #label>
-                <span>
-                  Nur Rechnungsdatum aktualisieren
-                  <div class="text-caption text-medium-emphasis">
-                    Datum: {{ fmtDate(issueToday) }} · Fällig bleibt: {{ fmtDate(issueInvoiceItem?.due_date) }}
-                  </div>
-                </span>
-              </template>
-            </v-radio>
-            <v-radio value="none">
-              <template #label>
-                <span>
-                  Datum nicht ändern
-                  <div class="text-caption text-medium-emphasis">
-                    Datum: {{ fmtDate(issueInvoiceItem?.document_date) }} · Fällig: {{ fmtDate(issueInvoiceItem?.due_date) }}
-                  </div>
-                </span>
-              </template>
-            </v-radio>
-          </v-radio-group>
+          <v-text-field
+            v-model="issueDueDate"
+            label="Fälligkeitsdatum *"
+            type="date"
+            :min="today"
+            :rules="[v => !!v || 'Pflichtfeld', v => v >= today || 'Darf nicht vor dem Rechnungsdatum liegen']"
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn @click="issueDialog = false">Abbrechen</v-btn>
-          <v-btn color="primary" @click="confirmIssue">Ausstellen</v-btn>
+          <v-btn color="primary" :disabled="!issueDueDate || issueDueDate < today" @click="confirmIssue">Ausstellen</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -305,8 +280,8 @@ const cancelCreateDraft = ref(false)
 
 const issueDialog = ref(false)
 const issueInvoiceItem = ref(null)
-const issueToday = ref('')
-const issueDateOption = ref('both')
+const issueDueDate = ref('')
+const paymentTermsDays = ref(14)
 
 const linesCache = ref({})
 const linesLoading = ref({})
@@ -327,19 +302,10 @@ const overlayStyle = computed(() => {
   return { ...base, top: rowBottom.value + 'px' }
 })
 
-const issueNewDueDate = computed(() => {
-  const item = issueInvoiceItem.value
-  if (!item?.document_date || !item?.due_date) return ''
-  const diffDays = Math.round((new Date(item.due_date) - new Date(item.document_date)) / 86400000)
-  const d = new Date(issueToday.value)
-  d.setDate(d.getDate() + diffDays)
-  return d.toISOString().slice(0, 10)
-})
-
 const headers = [
   { title: 'Nr.', key: 'number' },
   { title: 'Adresse', key: 'address_display' },
-  { title: 'Datum', key: 'document_date' },
+  { title: 'Leistungsdt. (Rechnungsdt.)', key: 'document_date' },
   { title: 'Fällig', key: 'due_date' },
   { title: 'Status', key: 'status' },
   { title: 'Brutto', key: 'gross_total', align: 'end' },
@@ -373,29 +339,25 @@ function fmtDate(iso) {
   return `${d}.${m}.${y}`
 }
 
-async function issueInvoice(item) {
-  const today = new Date().toISOString().slice(0, 10)
-  if (item.document_date !== today) {
-    issueInvoiceItem.value = item
-    issueToday.value = today
-    issueDateOption.value = 'both'
-    issueDialog.value = true
-  } else {
-    if (!confirm('Rechnung ausstellen? Dabei wird eine Nummer vergeben.')) return
-    await api.post(`/invoices/${item.id}/issue/`)
-    await fetchItems()
+function datumDisplay(item) {
+  if (!item.service_date) {
+    return item.status === 'draft' ? '—' : fmtDate(item.document_date)
   }
+  return `${fmtDate(item.service_date)} (${fmtDate(item.document_date)})`
+}
+
+function issueInvoice(item) {
+  issueInvoiceItem.value = item
+  const d = new Date(today)
+  d.setDate(d.getDate() + paymentTermsDays.value)
+  issueDueDate.value = d.toISOString().slice(0, 10)
+  issueDialog.value = true
 }
 
 async function confirmIssue() {
   const item = issueInvoiceItem.value
-  if (!item) return
-  if (issueDateOption.value !== 'none') {
-    const patch = { document_date: issueToday.value }
-    if (issueDateOption.value === 'both') patch.due_date = issueNewDueDate.value
-    await api.patch(`/invoices/${item.id}/`, patch)
-  }
-  await api.post(`/invoices/${item.id}/issue/`)
+  if (!item || !issueDueDate.value) return
+  await api.post(`/invoices/${item.id}/issue/`, { due_date: issueDueDate.value })
   issueDialog.value = false
   await fetchItems()
 }
@@ -522,6 +484,12 @@ function formatCurrency(val) {
 
 onMounted(async () => {
   await fetchItems()
+  try {
+    const cfgRes = await api.get('/config/')
+    paymentTermsDays.value = cfgRes.data.config?.INVOICE_PAYMENT_TERMS_DAYS?.value ?? 14
+  } catch {
+    // keep default
+  }
   const openId = route.query.openId
   if (openId) {
     const invoice = items.value.find(i => String(i.id) === String(openId))

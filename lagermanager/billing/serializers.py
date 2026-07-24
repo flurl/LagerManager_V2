@@ -162,13 +162,16 @@ class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
             'id', 'number', 'status', 'address', 'address_display', 'address_email',
             'source_offer',
             'reverses', 'reverses_number', 'reversed_by_id',
-            'document_date', 'due_date', 'paid_at', 'notes',
+            'document_date', 'service_date', 'due_date', 'paid_at', 'notes',
             'net_total', 'gross_total',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'number', 'address_display', 'address_email',
             'reverses', 'reverses_number', 'reversed_by_id',
+            # document_date/due_date are no longer user-editable; both are set
+            # by InvoiceViewSet.issue() when the invoice is issued.
+            'document_date', 'due_date',
             'net_total', 'gross_total',
             'created_at', 'updated_at',
         ]
@@ -195,7 +198,7 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
             'recipient_text',
             'source_offer',
             'reverses', 'reverses_number', 'reversed_by_id',
-            'document_date', 'due_date', 'notes', 'paid_at',
+            'document_date', 'service_date', 'due_date', 'notes', 'paid_at',
             'net_total', 'gross_total', 'tax_total',
             'lines',
             'created_at', 'updated_at',
@@ -203,6 +206,9 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
         read_only_fields = [
             'id', 'number', 'address_display', 'address_email', 'recipient_text',
             'reverses', 'reverses_number', 'reversed_by_id',
+            # document_date/due_date are no longer user-editable; both are set
+            # by InvoiceViewSet.issue() when the invoice is issued.
+            'document_date', 'due_date',
             'net_total', 'gross_total', 'tax_total',
             'created_at', 'updated_at',
         ]
@@ -210,14 +216,6 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
     def get_reversed_by_id(self, obj: Invoice) -> int | None:
         reversal: Invoice | None = obj.reversed_by.first()
         return reversal.pk if reversal is not None else None
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        document_date = data.get('document_date', self.instance.document_date if self.instance else None)
-        due_date = data.get('due_date', self.instance.due_date if self.instance else None)
-        if document_date and due_date and due_date < document_date:
-            raise serializers.ValidationError(
-                {'due_date': 'Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen.'})
-        return data
 
 
 # ---------------------------------------------------------------------------

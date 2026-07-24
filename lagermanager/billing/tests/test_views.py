@@ -220,36 +220,55 @@ class InvoiceViewSetTests(APITestCase):
     def test_create_invoice(self) -> None:
         resp = self.client.post('/api/invoices/', {
             'address': self.address.pk,
-            'document_date': '2026-06-15',
-            'due_date': '2026-06-29',
+            'service_date': '2026-06-15',
         })
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()['status'], 'draft')
+        self.assertEqual(resp.json()['service_date'], '2026-06-15')
 
-    def test_due_date_before_document_date_rejected(self) -> None:
+    def test_document_date_and_due_date_not_user_settable_on_create(self) -> None:
+        """document_date/due_date are read-only; explicit input is ignored in favour
+        of the model default (today) — they are only set for real at issue time."""
         resp = self.client.post('/api/invoices/', {
             'address': self.address.pk,
             'document_date': '2026-06-15',
             'due_date': '2026-06-10',
         })
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn('due_date', resp.json())
-
-    def test_due_date_same_as_document_date_ok(self) -> None:
-        resp = self.client.post('/api/invoices/', {
-            'address': self.address.pk,
-            'document_date': '2026-06-15',
-            'due_date': '2026-06-15',
-        })
         self.assertEqual(resp.status_code, 201)
+        today = datetime.date.today().isoformat()
+        self.assertEqual(resp.json()['document_date'], today)
+        self.assertEqual(resp.json()['due_date'], today)
 
     @patch('billing.views.allocate_number', return_value='RE260601')
-    def test_issue_invoice(self, mock_alloc: object) -> None:
+    def test_issue_invoice_sets_document_date_to_today(self, mock_alloc: object) -> None:
         invoice = _make_invoice(self.address)
         resp = self.client.post(f'/api/invoices/{invoice.pk}/issue/')
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()['number'], 'RE260601')
-        self.assertEqual(resp.json()['status'], 'issued')
+        data = resp.json()
+        self.assertEqual(data['number'], 'RE260601')
+        self.assertEqual(data['status'], 'issued')
+        today = datetime.date.today()
+        self.assertEqual(data['document_date'], today.isoformat())
+        self.assertEqual(data['due_date'], (today + datetime.timedelta(days=14)).isoformat())
+
+    @patch('billing.views.allocate_number', return_value='RE260601')
+    def test_issue_invoice_with_explicit_due_date(self, mock_alloc: object) -> None:
+        invoice = _make_invoice(self.address)
+        today = datetime.date.today()
+        chosen_due_date = today + datetime.timedelta(days=30)
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/issue/', {'due_date': chosen_due_date.isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['due_date'], chosen_due_date.isoformat())
+
+    def test_issue_invoice_with_due_date_before_today_rejected(self) -> None:
+        invoice = _make_invoice(self.address)
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/issue/', {'due_date': yesterday.isoformat()},
+        )
+        self.assertEqual(resp.status_code, 400)
 
     @patch('billing.views.allocate_number', return_value='RE260601')
     def test_mark_paid(self, mock_alloc: object) -> None:

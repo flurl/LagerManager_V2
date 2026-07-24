@@ -26,13 +26,8 @@
             </v-tooltip>
           </div>
         </v-col>
-        <v-col cols="3">
-          <v-text-field v-model="form.document_date" label="Rechnungsdatum *" type="date" :disabled="!isDraft" />
-        </v-col>
-        <v-col cols="3">
-          <v-text-field v-model="form.due_date" label="Fälligkeitsdatum *" type="date"
-            :min="form.document_date"
-            :rules="[v => !!v || 'Pflichtfeld', v => !form.document_date || v >= form.document_date || 'Darf nicht vor dem Rechnungsdatum liegen']"
+        <v-col cols="6">
+          <v-text-field v-model="form.service_date" label="Leistungsdatum" type="date" clearable
             :disabled="!isDraft" />
         </v-col>
       </v-row>
@@ -261,9 +256,8 @@ const saving = ref(false)
 const addresses = ref([])
 const billingArticles = ref([])
 const taxRates = ref([])
-const paymentTermsDays = ref(14)
 
-const form = ref({ address: null, document_date: today(), due_date: defaultDueDate(), notes: '' })
+const form = ref({ address: null, service_date: null, notes: '' })
 const lines = ref([])
 const addressDetailOpen = ref(false)
 const addressDialogOpen = ref(false)
@@ -285,14 +279,6 @@ const selectedAddress = computed(() => {
 
 const { lineNet, lineGross, totalNet, totalGross } = useLineCalculations(taxRates, lines)
 
-function today() { return new Date().toISOString().slice(0, 10) }
-
-function defaultDueDate() {
-  const d = new Date()
-  d.setDate(d.getDate() + paymentTermsDays.value)
-  return d.toISOString().slice(0, 10)
-}
-
 watch(() => form.value.address, () => {
   addressDetailOpen.value = false
 })
@@ -301,13 +287,12 @@ watch(() => props.invoice, (inv) => {
   if (inv) {
     form.value = {
       address: inv.address,
-      document_date: inv.document_date,
-      due_date: inv.due_date || null,
+      service_date: inv.service_date || null,
       notes: inv.notes || '',
     }
     loadLines(inv.id)
   } else {
-    form.value = { address: null, document_date: today(), due_date: defaultDueDate(), notes: '' }
+    form.value = { address: null, service_date: null, notes: '' }
     lines.value = []
   }
 }, { immediate: true })
@@ -431,19 +416,14 @@ async function doSave() {
 
 onMounted(async () => {
   try {
-    const [addrRes, artRes, taxRes, cfgRes] = await Promise.all([
+    const [addrRes, artRes, taxRes] = await Promise.all([
       api.get('/addresses/'),
       api.get('/billing-articles/?active=true'),
       api.get('/tax-rates/'),
-      api.get('/config/'),
     ])
     addresses.value = (addrRes.data.results || addrRes.data).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
     billingArticles.value = artRes.data.results || artRes.data
     taxRates.value = taxRes.data.results || taxRes.data
-    paymentTermsDays.value = cfgRes.data.config?.INVOICE_PAYMENT_TERMS_DAYS?.value ?? 14
-    if (!props.invoice) {
-      form.value.due_date = defaultDueDate()
-    }
   } catch (err) {
     showError(err, 'Stammdaten konnten nicht geladen werden.')
   }

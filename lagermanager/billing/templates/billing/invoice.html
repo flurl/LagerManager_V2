@@ -7,6 +7,13 @@
 {% block meta_table %}
 <table class="meta-table">
   <tr><td>Rechnungsdatum</td><td>{{ doc.document_date|date:"d.m.Y" }}</td></tr>
+  <tr>
+    {% if doc.service_date %}
+      <td>Leistungsdatum</td><td>{{ doc.service_date|date:"d.m.Y" }}</td>
+    {% else %}
+      <td colspan="2">Leistungsdatum = Rechnungsdatum</td>
+    {% endif %}
+    </tr>
   {% if doc.due_date %}
   <tr><td>Fällig am</td><td>{{ doc.due_date|date:"d.m.Y" }}</td></tr>
   {% endif %}
