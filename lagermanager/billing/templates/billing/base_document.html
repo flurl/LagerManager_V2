@@ -125,7 +125,6 @@
 
   /* ---- Notes ---- */
   .notes-section { margin: 24px 0; font-size: 9pt; color: #444; white-space: pre-line; }
-  .notes-label { font-weight: 600; margin-bottom: 4px; color: #1a1a1a; }
 
   /* ---- Footer ---- */
   .doc-footer {
@@ -189,16 +188,15 @@
     </div>
   </div>
 
-  <!-- Document body -->
-  {% block doc_body %}{% endblock %}
-
   <!-- Notes -->
   {% if doc.notes %}
   <div class="notes-section">
-    <div class="notes-label">Anmerkungen</div>
     {{ doc.notes }}
   </div>
   {% endif %}
+
+  <!-- Document body -->
+  {% block doc_body %}{% endblock %}
 
   <!-- Footer: IBAN / bank / custom footer text -->
   <div class="doc-footer">
