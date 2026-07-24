@@ -136,7 +136,7 @@
 
       <v-table density="compact" class="line-items-table">
         <colgroup>
-          <col style="width:3em">
+          <col style="width:4.5em">
           <col style="width:22em">
           <col style="width:18em">
           <col style="width:14em">
@@ -146,8 +146,25 @@
         </colgroup>
         <tbody>
           <template v-for="(line, idx) in lines" :key="idx">
-            <tr class="line-top" :class="{ 'line-alt': idx % 2 === 1 }">
-              <td rowspan="2" class="text-center text-medium-emphasis" style="vertical-align:middle">{{ idx + 1 }}</td>
+            <tr class="line-top" :class="{ 'line-alt': idx % 2 === 1, 'line-dragging': dragIdx === idx }">
+              <td rowspan="2" class="text-center text-medium-emphasis position-cell" style="vertical-align:middle"
+                draggable="true" @dragstart="onDragStart(idx, $event)" @dragover.prevent
+                @drop="onDrop(idx, $event)" @dragend="dragIdx = null">
+                <div class="d-flex flex-column align-center">
+                  <v-icon size="x-small" class="drag-handle mb-1">mdi-drag</v-icon>
+                  <span>{{ idx + 1 }}</span>
+                  <div class="d-flex flex-column mt-1">
+                    <v-btn icon size="x-small" variant="text" density="compact" :disabled="idx === 0"
+                      @click="moveLine(idx, -1)">
+                      <v-icon size="small">mdi-arrow-up</v-icon>
+                    </v-btn>
+                    <v-btn icon size="x-small" variant="text" density="compact" :disabled="idx === lines.length - 1"
+                      @click="moveLine(idx, 1)">
+                      <v-icon size="small">mdi-arrow-down</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </td>
               <td>
                 <div class="field-label">Artikel / Bezeichnung</div>
                 <v-autocomplete v-model="line.billing_article" :items="billingArticles" :item-title="articleDropdownLabel" item-value="id"
@@ -176,7 +193,7 @@
                 </v-btn>
               </td>
             </tr>
-            <tr class="line-bottom" :class="{ 'line-alt': idx % 2 === 1 }">
+            <tr class="line-bottom" :class="{ 'line-alt': idx % 2 === 1, 'line-dragging': dragIdx === idx }">
               <td>
                 <div class="field-label">Beschreibung</div>
                 <v-textarea v-if="!line.billing_article" v-model="line.description"
@@ -365,6 +382,28 @@ function removeLine(idx) {
   lines.value.splice(idx, 1)
 }
 
+const dragIdx = ref(null)
+
+function onDragStart(idx, ev) {
+  dragIdx.value = idx
+  ev.dataTransfer.effectAllowed = 'move'
+}
+
+function onDrop(idx, ev) {
+  ev.preventDefault()
+  if (dragIdx.value === null || dragIdx.value === idx) return
+  const [moved] = lines.value.splice(dragIdx.value, 1)
+  lines.value.splice(idx, 0, moved)
+  dragIdx.value = null
+}
+
+function moveLine(idx, delta) {
+  const newIdx = idx + delta
+  if (newIdx < 0 || newIdx >= lines.value.length) return
+  const [moved] = lines.value.splice(idx, 1)
+  lines.value.splice(newIdx, 0, moved)
+}
+
 function articleDropdownLabel(art) {
   if (!art.description) return art.name
   const desc = art.description.length > 50 ? art.description.slice(0, 50) + '…' : art.description
@@ -459,5 +498,14 @@ onMounted(async () => {
   text-align: left;
   color: rgba(var(--v-theme-on-surface), 0.6);
   margin-bottom: 2px;
+}
+.drag-handle {
+  cursor: grab;
+}
+.position-cell[draggable="true"] {
+  cursor: grab;
+}
+.line-items-table :deep(tbody tr.line-dragging > td) {
+  opacity: 0.4;
 }
 </style>
