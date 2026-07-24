@@ -85,6 +85,31 @@ class DeliveriesModelTests(TestCase):
         # 10.0 * 0.98 = 9.8
         self.assertEqual(detail.unit_price, Decimal("9.8000"))
 
+    def test_stock_movement_detail_ordering(self) -> None:
+        movement = StockMovement.objects.create(
+            partner=self.partner,
+            date=date.today(),
+            movement_type=StockMovement.Type.DELIVERY,
+            period=self.period
+        )
+        # Created with sort_order out of creation-id order; retrieval must follow sort_order.
+        first = StockMovementDetail.objects.create(
+            stock_movement=movement, article=self.article,
+            quantity=Decimal("1.000"), unit_price=Decimal("1.0000"),
+            tax_rate=self.tax_rate, sort_order=2,
+        )
+        second = StockMovementDetail.objects.create(
+            stock_movement=movement, article=self.article,
+            quantity=Decimal("2.000"), unit_price=Decimal("1.0000"),
+            tax_rate=self.tax_rate, sort_order=0,
+        )
+        third = StockMovementDetail.objects.create(
+            stock_movement=movement, article=self.article,
+            quantity=Decimal("3.000"), unit_price=Decimal("1.0000"),
+            tax_rate=self.tax_rate, sort_order=1,
+        )
+        self.assertEqual(list(movement.details.all()), [second, third, first])
+
 
 class StockMovementCalculationTests(TestCase):
     """Edge-case tests for StockMovement/StockMovementDetail calculations."""

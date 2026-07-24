@@ -397,10 +397,10 @@ async function doSave({ silent = false } = {}) {
       )
       originalDetailIds.value = []
     }
-    // Create detail lines
+    // Create detail lines, preserving the order the user entered them in
     const detailResponses = await Promise.all(
-      lines.value.map((l) =>
-        api.post(`/stock-movements/${movementId}/details/`, { ...l, stock_movement: movementId })
+      lines.value.map((l, idx) =>
+        api.post(`/stock-movements/${movementId}/details/`, { ...l, stock_movement: movementId, sort_order: idx })
       )
     )
     originalDetailIds.value = detailResponses.map((r) => r.data.id)

@@ -157,9 +157,11 @@ class StockMovementDetail(models.Model):
         on_delete=models.PROTECT,
         db_column='lde_stsid',
     )
+    sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = 'lagerbewegungen_details'
+        ordering = ['sort_order', 'id']
 
     def __str__(self) -> str:
         return f"{self.stock_movement_id} – {self.article_id}"
