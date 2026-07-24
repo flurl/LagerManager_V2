@@ -13,6 +13,8 @@ from billing.models import (
     BillingArticle,
     Invoice,
     InvoiceLine,
+    InvoiceTemplate,
+    InvoiceTemplateLine,
     Offer,
     OfferLine,
     Reminder,
@@ -465,6 +467,88 @@ class InvoiceViewSetTests(APITestCase):
         resp = self.client.get(f'/api/invoices/{invoice.pk}/preview/')
         self.assertEqual(resp.status_code, 200)
         self.assertIn('text/html', resp['Content-Type'])
+
+
+# ---------------------------------------------------------------------------
+# InvoiceTemplate
+# ---------------------------------------------------------------------------
+
+class InvoiceTemplateTests(APITestCase):
+    def setUp(self) -> None:
+        self.user = _create_user()
+        self.client.force_authenticate(user=self.user)
+        self.tax = _make_tax()
+        self.address = _make_address()
+        self.invoice = _make_invoice(self.address)
+        InvoiceLine.objects.create(
+            invoice=self.invoice, position=1, description='Beratung',
+            quantity=Decimal('2'), unit_price=Decimal('100.00'), tax_rate=self.tax,
+        )
+
+    def test_save_as_template(self) -> None:
+        resp = self.client.post(
+            f'/api/invoices/{self.invoice.pk}/save-as-template/',
+            {'name': 'Standard-Beratung'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        data = resp.json()
+        self.assertEqual(data['name'], 'Standard-Beratung')
+        self.assertEqual(len(data['lines']), 1)
+        self.assertEqual(data['lines'][0]['description'], 'Beratung')
+        self.assertEqual(data['net_total'], '200.00')
+
+    def test_save_as_template_empty_name_rejected(self) -> None:
+        resp = self.client.post(
+            f'/api/invoices/{self.invoice.pk}/save-as-template/',
+            {'name': '  '},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_save_as_template_duplicate_name_rejected(self) -> None:
+        InvoiceTemplate.objects.create(name='Bestehend')
+        resp = self.client.post(
+            f'/api/invoices/{self.invoice.pk}/save-as-template/',
+            {'name': 'Bestehend'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_list_templates(self) -> None:
+        InvoiceTemplate.objects.create(name='Vorlage A')
+        InvoiceTemplate.objects.create(name='Vorlage B')
+        resp = self.client.get('/api/invoice-templates/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()['results']), 2)
+
+    def test_retrieve_template_with_lines(self) -> None:
+        template = InvoiceTemplate.objects.create(name='Vorlage A')
+        InvoiceTemplateLine.objects.create(
+            template=template, position=1, description='Wartung',
+            quantity=Decimal('1'), unit_price=Decimal('50.00'), tax_rate=self.tax,
+        )
+        resp = self.client.get(f'/api/invoice-templates/{template.pk}/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()['lines']), 1)
+
+    def test_rename_template(self) -> None:
+        template = InvoiceTemplate.objects.create(name='Alter Name')
+        resp = self.client.patch(f'/api/invoice-templates/{template.pk}/', {'name': 'Neuer Name'})
+        self.assertEqual(resp.status_code, 200)
+        template.refresh_from_db()
+        self.assertEqual(template.name, 'Neuer Name')
+
+    def test_delete_template(self) -> None:
+        template = InvoiceTemplate.objects.create(name='Zu löschen')
+        resp = self.client.delete(f'/api/invoice-templates/{template.pk}/')
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(InvoiceTemplate.objects.filter(pk=template.pk).exists())
+
+    def test_unauthenticated_rejected(self) -> None:
+        self.client.force_authenticate(user=None)
+        resp = self.client.get('/api/invoice-templates/')
+        self.assertEqual(resp.status_code, 401)
 
 
 # ---------------------------------------------------------------------------

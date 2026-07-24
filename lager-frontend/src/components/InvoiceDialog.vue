@@ -207,6 +207,9 @@
     </v-card-text>
 
     <v-card-actions>
+      <v-btn v-if="!isNew" variant="text" prepend-icon="mdi-content-save-outline" @click="openSaveTemplate">
+        Als Vorlage speichern
+      </v-btn>
       <v-spacer />
       <v-btn @click="$emit('close')">{{ isDraft ? 'Abbrechen' : 'Schließen' }}</v-btn>
       <v-btn v-if="isDraft" color="primary" :loading="saving" @click="doSave">Speichern</v-btn>
@@ -223,11 +226,32 @@
 
   <WzImportDialog v-model="wzImportDialogOpen" @confirm="onWzImport" />
 
+  <!-- Save as template dialog -->
+  <v-dialog v-model="templateNameDialog" max-width="420">
+    <v-card>
+      <v-card-title>Als Vorlage speichern</v-card-title>
+      <v-card-text>
+        <v-text-field v-model="templateName" label="Vorlagenname *" :rules="[v => !!v?.trim() || 'Pflichtfeld']"
+          autofocus @keyup.enter="confirmSaveTemplate" />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="templateNameDialog = false">Abbrechen</v-btn>
+        <v-btn color="primary" :loading="templateSaving" :disabled="!templateName?.trim()"
+          @click="confirmSaveTemplate">Speichern</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <v-snackbar v-model="errorSnackbar" color="error" timeout="-1" location="bottom">
     {{ errorMessage }}
     <template #actions>
       <v-btn variant="text" @click="errorSnackbar = false">Schließen</v-btn>
     </template>
+  </v-snackbar>
+
+  <v-snackbar v-model="successSnackbar" color="success" timeout="3000" location="bottom">
+    {{ successMessage }}
   </v-snackbar>
 
 </template>
@@ -244,6 +268,8 @@ import { extractErrorMessage } from '../utils/errorMessage'
 
 const props = defineProps({
   invoice: { type: Object, default: null },
+  /** Prefill for a new invoice created from a template: { notes, lines } */
+  prefill: { type: Object, default: null },
 })
 const emit = defineEmits(['saved', 'close'])
 
@@ -266,10 +292,20 @@ const articleDialogOpen = ref(false)
 const wzImportDialogOpen = ref(false)
 const errorSnackbar = ref(false)
 const errorMessage = ref('')
+const successSnackbar = ref(false)
+const successMessage = ref('')
+const templateNameDialog = ref(false)
+const templateName = ref('')
+const templateSaving = ref(false)
 
 function showError(err, fallback) {
   errorMessage.value = extractErrorMessage(err, fallback)
   errorSnackbar.value = true
+}
+
+function showSuccess(message) {
+  successMessage.value = message
+  successSnackbar.value = true
 }
 
 const selectedAddress = computed(() => {
@@ -283,7 +319,7 @@ watch(() => form.value.address, () => {
   addressDetailOpen.value = false
 })
 
-watch(() => props.invoice, (inv) => {
+watch(() => [props.invoice, props.prefill], ([inv, prefill]) => {
   if (inv) {
     form.value = {
       address: inv.address,
@@ -291,6 +327,17 @@ watch(() => props.invoice, (inv) => {
       notes: inv.notes || '',
     }
     loadLines(inv.id)
+  } else if (prefill) {
+    form.value = { address: null, service_date: null, notes: prefill.notes || '' }
+    lines.value = (prefill.lines || []).map((l, idx) => ({
+      billing_article: l.billing_article || null,
+      description: l.description || '',
+      unit: l.unit || '',
+      quantity: Number(l.quantity),
+      unit_price: Number(l.unit_price),
+      tax_rate: l.tax_rate || null,
+      position: idx + 1,
+    }))
   } else {
     form.value = { address: null, service_date: null, notes: '' }
     lines.value = []
@@ -384,33 +431,59 @@ function onArticleSelect(line) {
   if (art.tax_rate) line.tax_rate = art.tax_rate
 }
 
+async function persist() {
+  let id = props.invoice?.id
+  if (isNew.value) {
+    const res = await api.post('/invoices/', form.value)
+    id = res.data.id
+  } else {
+    await api.put(`/invoices/${id}/`, form.value)
+  }
+  const linesPayload = lines.value.map((l, idx) => ({
+    id: l.id,
+    invoice: id,
+    position: idx + 1,
+    billing_article: l.billing_article || null,
+    description: l.description || '',
+    unit: l.unit || '',
+    quantity: l.quantity,
+    unit_price: l.unit_price,
+    tax_rate: l.tax_rate || null,
+  }))
+  await api.post(`/invoices/${id}/lines/`, linesPayload)
+  return id
+}
+
 async function doSave() {
   saving.value = true
   try {
-    let id = props.invoice?.id
-    if (isNew.value) {
-      const res = await api.post('/invoices/', form.value)
-      id = res.data.id
-    } else {
-      await api.put(`/invoices/${id}/`, form.value)
-    }
-    const linesPayload = lines.value.map((l, idx) => ({
-      id: l.id,
-      invoice: id,
-      position: idx + 1,
-      billing_article: l.billing_article || null,
-      description: l.description || '',
-      unit: l.unit || '',
-      quantity: l.quantity,
-      unit_price: l.unit_price,
-      tax_rate: l.tax_rate || null,
-    }))
-    await api.post(`/invoices/${id}/lines/`, linesPayload)
+    await persist()
     emit('saved')
   } catch (err) {
     showError(err, 'Rechnung konnte nicht gespeichert werden.')
   } finally {
     saving.value = false
+  }
+}
+
+function openSaveTemplate() {
+  templateName.value = ''
+  templateNameDialog.value = true
+}
+
+async function confirmSaveTemplate() {
+  const name = templateName.value?.trim()
+  if (!name) return
+  templateSaving.value = true
+  try {
+    const id = isDraft.value ? await persist() : props.invoice.id
+    await api.post(`/invoices/${id}/save-as-template/`, { name })
+    templateNameDialog.value = false
+    showSuccess(`Vorlage "${name}" gespeichert.`)
+  } catch (err) {
+    showError(err, 'Vorlage konnte nicht gespeichert werden.')
+  } finally {
+    templateSaving.value = false
   }
 }
 

@@ -25,6 +25,8 @@ from .models import (
     BillingArticle,
     Invoice,
     InvoiceLine,
+    InvoiceTemplate,
+    InvoiceTemplateLine,
     NumberSequence,
     Offer,
     OfferLine,
@@ -35,6 +37,7 @@ from .serializers import (
     InvoiceLineSerializer,
     InvoiceListSerializer,
     InvoiceSerializer,
+    InvoiceTemplateSerializer,
     OfferLineSerializer,
     OfferListSerializer,
     OfferSerializer,
@@ -464,6 +467,21 @@ def _clone_lines(src: Invoice, dst: Invoice, *, negate: bool = False) -> None:
         )
 
 
+def _clone_lines_to_template(src: Invoice, dst: InvoiceTemplate) -> None:
+    """Copy all line items from an invoice to a template."""
+    for line in src.lines.select_related('billing_article', 'tax_rate'):
+        InvoiceTemplateLine.objects.create(
+            template=dst,
+            position=line.position,
+            billing_article=line.billing_article,
+            description=line.description,
+            unit=line.unit,
+            quantity=line.quantity,
+            unit_price=line.unit_price,
+            tax_rate=line.tax_rate,
+        )
+
+
 class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelViewSet[Invoice]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
@@ -738,6 +756,27 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
             _clone_lines(invoice, new_invoice)
         return Response(InvoiceSerializer(new_invoice).data, status=status.HTTP_201_CREATED)
 
+    # ---- Save as template -----------------------------------------------------
+
+    @action(detail=True, methods=['post'], url_path='save-as-template')
+    def save_as_template(self, request: Request, pk: str | None = None) -> Response:
+        invoice: Invoice = self.get_object()
+        name: str = (request.data.get('name') or '').strip()
+        if not name:
+            return Response(
+                {'detail': 'Ein Name für die Vorlage ist erforderlich.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if InvoiceTemplate.objects.filter(name=name).exists():
+            return Response(
+                {'detail': 'Name bereits vergeben.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            template = InvoiceTemplate.objects.create(name=name, notes=invoice.notes)
+            _clone_lines_to_template(invoice, template)
+        return Response(InvoiceTemplateSerializer(template).data, status=status.HTTP_201_CREATED)
+
     # ---- Create reminder (Mahnung) ------------------------------------------
 
     @action(detail=True, methods=['post'], url_path='create-reminder')
@@ -774,6 +813,20 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+
+# ---------------------------------------------------------------------------
+# InvoiceTemplate
+# ---------------------------------------------------------------------------
+
+class InvoiceTemplateViewSet(viewsets.ModelViewSet[InvoiceTemplate]):
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
+
+    def get_queryset(self) -> Any:
+        return InvoiceTemplate.objects.prefetch_related('lines__tax_rate', 'lines__billing_article')
+
+    def get_serializer_class(self) -> type[BaseSerializer[InvoiceTemplate]]:
+        return InvoiceTemplateSerializer
 
 
 # ---------------------------------------------------------------------------

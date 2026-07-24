@@ -6,6 +6,8 @@ from .models import (
     BillingArticle,
     Invoice,
     InvoiceLine,
+    InvoiceTemplate,
+    InvoiceTemplateLine,
     Offer,
     OfferLine,
     Reminder,
@@ -216,6 +218,46 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
     def get_reversed_by_id(self, obj: Invoice) -> int | None:
         reversal: Invoice | None = obj.reversed_by.first()
         return reversal.pk if reversal is not None else None
+
+
+# ---------------------------------------------------------------------------
+# InvoiceTemplate
+# ---------------------------------------------------------------------------
+
+class InvoiceTemplateLineSerializer(serializers.ModelSerializer[InvoiceTemplateLine]):
+    net_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    gross_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    tax_rate_percent = serializers.DecimalField(
+        source='tax_rate.percent', max_digits=5, decimal_places=2, read_only=True,
+    )
+    billing_article_name = serializers.CharField(source='billing_article.name', read_only=True)
+
+    class Meta:
+        model = InvoiceTemplateLine
+        fields = [
+            'id', 'position',
+            'billing_article', 'billing_article_name',
+            'description', 'unit', 'quantity', 'unit_price',
+            'tax_rate', 'tax_rate_percent',
+            'net_amount', 'gross_amount',
+        ]
+        read_only_fields = ['id', 'net_amount', 'gross_amount', 'tax_rate_percent', 'billing_article_name']
+
+
+class InvoiceTemplateSerializer(serializers.ModelSerializer[InvoiceTemplate]):
+    net_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    lines = InvoiceTemplateLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = InvoiceTemplate
+        fields = [
+            'id', 'name', 'notes',
+            'net_total', 'gross_total',
+            'lines',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'net_total', 'gross_total', 'created_at', 'updated_at']
 
 
 # ---------------------------------------------------------------------------

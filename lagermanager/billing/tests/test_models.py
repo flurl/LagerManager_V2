@@ -9,6 +9,8 @@ from django.test import TestCase
 from billing.models import (
     Invoice,
     InvoiceLine,
+    InvoiceTemplate,
+    InvoiceTemplateLine,
     Offer,
     OfferLine,
 )
@@ -128,3 +130,26 @@ class InvoiceTotalTests(TestCase):
         """Snapshot is empty until issue action sets it; here we test the address block helper."""
         block = self.address.format_address_block()
         self.assertIn('Test GmbH', block)
+
+
+class InvoiceTemplateTotalTests(TestCase):
+    def setUp(self) -> None:
+        self.tax = _make_tax_rate()
+        self.template = InvoiceTemplate.objects.create(name='Monatliche Wartung')
+
+    def test_totals_empty(self) -> None:
+        self.assertEqual(self.template.net_total, Decimal('0.00'))
+        self.assertEqual(self.template.gross_total, Decimal('0.00'))
+        self.assertEqual(self.template.tax_total, Decimal('0.00'))
+
+    def test_totals_with_lines(self) -> None:
+        InvoiceTemplateLine.objects.create(
+            template=self.template, position=1, description='Wartung',
+            quantity=Decimal('2'), unit_price=Decimal('50.00'), tax_rate=self.tax,
+        )
+        self.assertEqual(self.template.net_total, Decimal('100.00'))
+        self.assertEqual(self.template.gross_total, Decimal('120.00'))
+        self.assertEqual(self.template.tax_total, Decimal('20.00'))
+
+    def test_str(self) -> None:
+        self.assertEqual(str(self.template), 'Monatliche Wartung')

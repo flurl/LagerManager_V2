@@ -4,6 +4,8 @@ from .models import (
     BillingArticle,
     Invoice,
     InvoiceLine,
+    InvoiceTemplate,
+    InvoiceTemplateLine,
     NumberSequence,
     Offer,
     OfferLine,
@@ -16,4 +18,6 @@ admin.site.register(Offer)
 admin.site.register(OfferLine)
 admin.site.register(Invoice)
 admin.site.register(InvoiceLine)
+admin.site.register(InvoiceTemplate)
+admin.site.register(InvoiceTemplateLine)
 admin.site.register(Reminder)

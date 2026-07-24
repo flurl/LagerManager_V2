@@ -331,6 +331,64 @@ class InvoiceLine(AbstractLineItem):
 
 
 # ---------------------------------------------------------------------------
+# InvoiceTemplate
+# ---------------------------------------------------------------------------
+
+class InvoiceTemplate(models.Model):
+    """A reusable, customer-agnostic invoice blueprint (line items + notes).
+
+    Not registered with auditlog — templates don't need change history.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    if TYPE_CHECKING:
+        lines: RelatedManager["InvoiceTemplateLine"]
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Rechnungsvorlage'
+        verbose_name_plural = 'Rechnungsvorlagen'
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def net_total(self) -> Decimal:
+        return sum(
+            (line.net_amount for line in self.lines.all()),
+            Decimal('0.00'),
+        )
+
+    @property
+    def gross_total(self) -> Decimal:
+        return sum(
+            (line.gross_amount for line in self.lines.all()),
+            Decimal('0.00'),
+        )
+
+    @property
+    def tax_total(self) -> Decimal:
+        return self.gross_total - self.net_total
+
+
+class InvoiceTemplateLine(AbstractLineItem):
+    """A single line item on an invoice template."""
+
+    template = models.ForeignKey(
+        InvoiceTemplate, on_delete=models.CASCADE, related_name='lines')
+
+    class Meta(AbstractLineItem.Meta):
+        verbose_name = 'Vorlagenzeile'
+
+    def __str__(self) -> str:
+        return f'{self.template} / Pos {self.position}: {self.description}'
+
+
+# ---------------------------------------------------------------------------
 # Reminder
 # ---------------------------------------------------------------------------
 

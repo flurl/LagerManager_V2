@@ -5,6 +5,11 @@
       <v-col cols="auto">
         <v-btn color="primary" prepend-icon="mdi-plus" @click="openNew">Neue Rechnung</v-btn>
       </v-col>
+      <v-col cols="auto">
+        <v-btn variant="tonal" prepend-icon="mdi-file-document-multiple-outline" @click="openTemplatePicker">
+          Aus Vorlage
+        </v-btn>
+      </v-col>
     </v-row>
 
     <v-row dense class="mb-2" align="center">
@@ -71,6 +76,9 @@
               <v-tooltip v-if="!item.reverses" text="Duplizieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="duplicateInvoice(item)">mdi-content-copy</v-icon>
               </template></v-tooltip>
+              <v-tooltip v-if="!item.reverses" text="Als Vorlage speichern"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSaveTemplateForInvoice(item)">mdi-content-save-outline</v-icon>
+              </template></v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
               <v-tooltip text="Verlauf"><template #activator="{ props }">
@@ -133,7 +141,7 @@
     </Teleport>
 
     <v-dialog v-model="dialog" max-width="1400" persistent>
-      <InvoiceDialog :invoice="selectedInvoice" @saved="onSaved" @close="dialog = false" />
+      <InvoiceDialog :invoice="selectedInvoice" :prefill="templatePrefill" @saved="onSaved" @close="dialog = false" />
     </v-dialog>
 
     <DocumentPreviewDialog v-model="previewDialog" :doc-path="previewPath" :title="previewTitle" />
@@ -217,6 +225,77 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Template picker dialog -->
+    <v-dialog v-model="templatePickerDialog" max-width="600">
+      <v-card>
+        <v-card-title>Rechnung aus Vorlage erstellen</v-card-title>
+        <v-card-text>
+          <div v-if="templatesLoading" class="d-flex justify-center pa-4">
+            <v-progress-circular indeterminate />
+          </div>
+          <div v-else-if="!templates.length" class="text-medium-emphasis pa-2">
+            Keine Vorlagen vorhanden.
+          </div>
+          <v-list v-else>
+            <v-list-item v-for="tpl in templates" :key="tpl.id" @click="useTemplate(tpl)">
+              <v-list-item-title>{{ tpl.name }}</v-list-item-title>
+              <v-list-item-subtitle>{{ Number(tpl.gross_total).toFixed(2) }} €</v-list-item-subtitle>
+              <template #append>
+                <v-icon size="small" class="mr-3" @click.stop="renameTemplate(tpl)">mdi-pencil</v-icon>
+                <v-icon size="small" color="error" @click.stop="deleteTemplate(tpl)">mdi-delete</v-icon>
+              </template>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="templatePickerDialog = false">Schließen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Rename template dialog -->
+    <v-dialog v-model="renameTemplateDialog" max-width="380">
+      <v-card>
+        <v-card-title>Vorlage umbenennen</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="renameTemplateName" label="Name *" :rules="[v => !!v?.trim() || 'Pflichtfeld']"
+            autofocus @keyup.enter="confirmRenameTemplate" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="renameTemplateDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" :disabled="!renameTemplateName?.trim()" @click="confirmRenameTemplate">Speichern</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Save invoice as template dialog -->
+    <v-dialog v-model="saveTemplateDialog" max-width="420">
+      <v-card>
+        <v-card-title>Als Vorlage speichern</v-card-title>
+        <v-card-subtitle v-if="saveTemplateItem" class="pb-0">
+          {{ saveTemplateItem.number || '#' + saveTemplateItem.id }}
+        </v-card-subtitle>
+        <v-card-text>
+          <v-text-field v-model="saveTemplateName" label="Vorlagenname *" :rules="[v => !!v?.trim() || 'Pflichtfeld']"
+            autofocus @keyup.enter="confirmSaveTemplateForInvoice" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="saveTemplateDialog = false">Abbrechen</v-btn>
+          <v-btn color="primary" :disabled="!saveTemplateName?.trim()" @click="confirmSaveTemplateForInvoice">Speichern</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="errorSnackbar" color="error" timeout="-1" location="bottom">
+      {{ errorMessage }}
+      <template #actions>
+        <v-btn variant="text" @click="errorSnackbar = false">Schließen</v-btn>
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
@@ -225,6 +304,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { hexToRgba } from '../utils/color'
+import { extractErrorMessage } from '../utils/errorMessage'
 import api from '../api'
 import InvoiceDialog from '../components/InvoiceDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
@@ -262,6 +342,18 @@ const filteredItems = computed(() => {
 })
 const dialog = ref(false)
 const selectedInvoice = ref(null)
+const templatePrefill = ref(null)
+const templatePickerDialog = ref(false)
+const templates = ref([])
+const templatesLoading = ref(false)
+const renameTemplateDialog = ref(false)
+const renameTemplateItem = ref(null)
+const renameTemplateName = ref('')
+const saveTemplateDialog = ref(false)
+const saveTemplateItem = ref(null)
+const saveTemplateName = ref('')
+const errorSnackbar = ref(false)
+const errorMessage = ref('')
 const previewDialog = ref(false)
 const previewPath = ref(null)
 const previewTitle = ref('')
@@ -329,9 +421,67 @@ async function fetchItems() {
   }
 }
 
-function openNew() { selectedInvoice.value = null; dialog.value = true }
-function openEdit(item) { selectedInvoice.value = item; dialog.value = true }
+function openNew() { selectedInvoice.value = null; templatePrefill.value = null; dialog.value = true }
+function openEdit(item) { selectedInvoice.value = item; templatePrefill.value = null; dialog.value = true }
 async function onSaved() { dialog.value = false; await fetchItems() }
+
+async function openTemplatePicker() {
+  templatePickerDialog.value = true
+  templatesLoading.value = true
+  try {
+    const res = await api.get('/invoice-templates/')
+    templates.value = res.data.results || res.data
+  } finally {
+    templatesLoading.value = false
+  }
+}
+
+async function useTemplate(tpl) {
+  const res = await api.get(`/invoice-templates/${tpl.id}/`)
+  selectedInvoice.value = null
+  templatePrefill.value = { notes: res.data.notes, lines: res.data.lines }
+  templatePickerDialog.value = false
+  dialog.value = true
+}
+
+function renameTemplate(tpl) {
+  renameTemplateItem.value = tpl
+  renameTemplateName.value = tpl.name
+  renameTemplateDialog.value = true
+}
+
+async function confirmRenameTemplate() {
+  const name = renameTemplateName.value?.trim()
+  if (!name || !renameTemplateItem.value) return
+  const res = await api.patch(`/invoice-templates/${renameTemplateItem.value.id}/`, { name })
+  const idx = templates.value.findIndex(t => t.id === renameTemplateItem.value.id)
+  if (idx !== -1) templates.value.splice(idx, 1, res.data)
+  renameTemplateDialog.value = false
+}
+
+async function deleteTemplate(tpl) {
+  if (!confirm(`Vorlage "${tpl.name}" wirklich löschen?`)) return
+  await api.delete(`/invoice-templates/${tpl.id}/`)
+  templates.value = templates.value.filter(t => t.id !== tpl.id)
+}
+
+function openSaveTemplateForInvoice(item) {
+  saveTemplateItem.value = item
+  saveTemplateName.value = ''
+  saveTemplateDialog.value = true
+}
+
+async function confirmSaveTemplateForInvoice() {
+  const name = saveTemplateName.value?.trim()
+  if (!name || !saveTemplateItem.value) return
+  try {
+    await api.post(`/invoices/${saveTemplateItem.value.id}/save-as-template/`, { name })
+    saveTemplateDialog.value = false
+  } catch (err) {
+    errorMessage.value = extractErrorMessage(err, 'Vorlage konnte nicht gespeichert werden.')
+    errorSnackbar.value = true
+  }
+}
 
 function fmtDate(iso) {
   if (!iso) return ''
