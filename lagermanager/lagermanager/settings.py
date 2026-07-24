@@ -105,6 +105,9 @@ LANGUAGE_CODE: str = 'de-at'
 TIME_ZONE: str = 'Europe/Vienna'
 USE_I18N: bool = True
 USE_TZ: bool = True
+# Renders floatformat as "1.234,56" (de-AT grouping) instead of "1234,56" —
+# used by the billing PDF/preview templates for invoice totals and line amounts.
+USE_THOUSAND_SEPARATOR: bool = True
 
 STATIC_URL: str = '/static/'
 STATIC_ROOT: Path = BASE_DIR / 'staticfiles'
