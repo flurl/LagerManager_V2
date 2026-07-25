@@ -9,18 +9,50 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
 ## Inhaltsverzeichnis
 
 1. [Überblick & Voraussetzungen](#1-überblick--voraussetzungen)
+    - [Einmalige Voraussetzungen (Einstellungen)](#einmalige-voraussetzungen-einstellungen)
 2. [Wo finde ich die Fakturierung?](#2-wo-finde-ich-die-fakturierung)
 3. [Adressen verwalten](#3-adressen-verwalten)
-4. [Faktura-Artikel (Stammdaten)](#4-faktura-artikel-stammdaten)
+    - [3.1 Adressliste öffnen](#31-adressliste-öffnen)
+    - [3.2 Neue Adresse anlegen](#32-neue-adresse-anlegen)
+    - [3.3 Adresse bearbeiten / löschen](#33-adresse-bearbeiten--löschen)
+    - [3.4 Adressen aus Wiffzack (WZ) synchronisieren](#34-adressen-aus-wiffzack-wz-synchronisieren)
+4. [Faktura-Artikel](#4-faktura-artikel)
 5. [Angebote erstellen](#5-angebote-erstellen)
+    - [5.1 Neues Angebot anlegen](#51-neues-angebot-anlegen)
+    - [5.2 Positionen erfassen](#52-positionen-erfassen)
+    - [5.3 Angebot ausstellen](#53-angebot-ausstellen)
+    - [5.4 Status weitersetzen](#54-status-weitersetzen)
+    - [5.5 Angebot in Rechnung umwandeln](#55-angebot-in-rechnung-umwandeln)
+    - [5.6 Weitere Aktionen](#56-weitere-aktionen)
 6. [Rechnungen erstellen](#6-rechnungen-erstellen)
+    - [6.1 Neue Rechnung anlegen](#61-neue-rechnung-anlegen)
+    - [6.2 Positionen erfassen](#62-positionen-erfassen)
+    - [6.3 Rechnung ausstellen](#63-rechnung-ausstellen)
+    - [6.4 Als bezahlt markieren](#64-als-bezahlt-markieren)
+    - [6.5 Überfällige Rechnungen](#65-überfällige-rechnungen)
+    - [6.6 Rechnung stornieren (Storno)](#66-rechnung-stornieren-storno)
+    - [6.7 Weitere Aktionen](#67-weitere-aktionen)
+    - [6.8 Rechnungsvorlagen](#68-rechnungsvorlagen)
 7. [Mahnungen erstellen](#7-mahnungen-erstellen)
+    - [7.1 Mahnung aus einer überfälligen Rechnung erzeugen (empfohlen)](#71-mahnung-aus-einer-überfälligen-rechnung-erzeugen-empfohlen)
+    - [7.2 Mahnung manuell anlegen](#72-mahnung-manuell-anlegen)
+    - [7.3 Mahnung ausstellen](#73-mahnung-ausstellen)
+    - [7.4 Mahnungsliste](#74-mahnungsliste)
 8. [Vorschau, PDF, Versand & Verlauf](#8-vorschau-pdf-versand--verlauf)
+    - [Vorschau / PDF](#vorschau--pdf)
+    - [E-Mail-Versand](#e-mail-versand)
+    - [Verlauf](#verlauf)
 9. [Statusübersicht](#9-statusübersicht)
+    - [Angebote](#angebote)
+    - [Rechnungen](#rechnungen)
+    - [Mahnungen](#mahnungen)
+10. [Anhang: Änderungsprotokoll](#anhang-änderungsprotokoll)
 
 ---
 
 ## 1. Überblick & Voraussetzungen
+
+Die Fakturierung ist Teil des Lager Managers V2 und unter [https://172.16.73.1/invoices](https://172.16.73.1/invoices) erreichbar (Voraussetzung: aktives VPN).
 
 Die Fakturierung umfasst vier zusammenhängende Bereiche:
 
@@ -49,8 +81,9 @@ Damit die erzeugten Dokumente korrekt aussehen, sollten unter **Verwaltung → E
 - **UID-Nummer**, **E-Mail**, **Telefon**
 - **IBAN**, **BIC**, **Bankname** (für die Zahlungsinformationen)
 - **Fußzeilen-Text** für Rechnungen/Angebote
-- **Standard-Zahlungsziel in Tagen** (Vorgabe: 14) – bestimmt das voreingestellte Fälligkeitsdatum neuer Rechnungen
+- **Standard-Zahlungsziel in Tagen** (Vorgabe: 14) – bestimmt das beim Ausstellen einer Rechnung vorgeschlagene Fälligkeitsdatum
 - **Standard-Mahngebühr** in Euro
+- **Maximale Mahnstufe** (Vorgabe: 3) – ist die höchste Mahnstufe erreicht, erscheint auf der Mahnung „Letzte Mahnung" statt der Stufennummer
 - **Nummernpräfixe** für Angebote (Vorgabe `AN`), Rechnungen (`RE`) und Mahnungen (`MA`)
 - **E-Mail-Betreff** und **E-Mail-Text** je Dokumentart (Angebot, Rechnung, Mahnung) für den [E-Mail-Versand](#8-vorschau-pdf-versand--verlauf). In den Vorlagen werden die Platzhalter `{number}` (Dokumentnummer), `{company}` (Firmenname) und `{recipient_name}` (Empfänger) beim Versand automatisch ersetzt.
 
@@ -186,6 +219,10 @@ Eine Position wird über das rote Mülleimer-Symbol am Zeilenende entfernt.
 
 > Die Positionstabelle mit den automatisch berechneten Netto-/Bruttosummen ist im Dialog-Screenshot oben sichtbar.
 
+> **Positionen umsortieren:** Solange das Dokument bearbeitbar ist, kann die Reihenfolge der Positionen per **Drag-and-Drop** an der Positionsnummer oder über die kleinen **Pfeil-hoch/-runter-Symbole** daneben geändert werden. Die Reihenfolge bestimmt die Position („Pos"-Spalte) auf dem gedruckten Dokument.
+
+> **Tipp – Formeln in Zahlenfeldern:** In Zahlenfeldern wie **Menge** oder **EP (netto)** kann statt eines Werts auch eine einfache Rechenformel eingegeben werden, beginnend mit `=` (z. B. `=12*3,5` oder `=(2+3)*4`). Nach Bestätigen mit Enter oder Verlassen des Felds wird das Ergebnis berechnet und eingesetzt. Ist die Formel ungültig, wird `NaN` angezeigt und das Speichern verhindert; beim erneuten Anklicken des Felds erscheint die ursprüngliche Formel wieder zur Korrektur.
+
 4. **Speichern**. Das Angebot wird zunächst als **Entwurf** angelegt.
 
 ### 5.3 Angebot ausstellen
@@ -231,9 +268,10 @@ Aus einem ausgestellten, versendeten oder angenommenen Angebot lässt sich direk
 2. **Neue Rechnung** anklicken.
 3. **Kopfdaten** ausfüllen:
    - **Adresse** (Pflichtfeld).
-   - **Rechnungsdatum** (Pflichtfeld, vorbelegt mit heute).
-   - **Fälligkeitsdatum** (Pflichtfeld) – vorbelegt anhand des Standard-Zahlungsziels (z. B. heute + 14 Tage). Darf nicht vor dem Rechnungsdatum liegen.
+   - **Leistungsdatum** (optional) – Datum, an dem die Leistung tatsächlich erbracht wurde. Bleibt es leer, gilt auf dem Dokument das Rechnungsdatum als Leistungsdatum.
    - **Anmerkungen**.
+
+> Ein **Rechnungsdatum** wird im Entwurf nicht mehr manuell erfasst: Es wird zusammen mit dem Fälligkeitsdatum erst beim [Ausstellen](#63-rechnung-ausstellen) automatisch gesetzt.
 
 ![Rechnung – Dialog mit Kopfbereich und Positionen](img/fakturierung/09-rechnung-dialog.png)
 
@@ -251,11 +289,7 @@ Die Positionserfassung funktioniert identisch zum Angebot (siehe [5.2](#52-posit
 
 Beim **Ausstellen** (Dokument-mit-Häkchen-Symbol) wird die Rechnungsnummer vergeben. Danach sind Kopfdaten und Positionen **nicht mehr veränderbar**.
 
-Weicht das Rechnungsdatum vom heutigen Tag ab, erscheint ein Dialog mit drei Optionen:
-
-1. **Rechnungs- und Fälligkeitsdatum aktualisieren** (auf heute, Frist bleibt gleich lang) – Standard.
-2. **Nur Rechnungsdatum aktualisieren** (Fälligkeit bleibt unverändert).
-3. **Datum nicht ändern**.
+Das **Rechnungsdatum** wird dabei automatisch auf das heutige Datum gesetzt. Im Dialog muss nur noch das **Fälligkeitsdatum** bestätigt bzw. angepasst werden – vorbelegt anhand des Standard-Zahlungsziels (heute + konfigurierte Anzahl Tage, siehe [Einstellungen](#1-überblick--voraussetzungen)). Es darf nicht vor dem heutigen Tag liegen.
 
 ![Dialog „Rechnung ausstellen" mit Datumsoptionen](img/fakturierung/18-rechnung-ausstellen.png)
 
@@ -290,12 +324,32 @@ Es entsteht eine **Stornorechnung**, die mit dem Bezug zur Originalrechnung (↩
 - **Duplizieren** – erstellt eine Kopie als neuen Entwurf.
 - **Bearbeiten** / **Löschen** – nur für Entwürfe.
 - **Vorschau** / **Verlauf** – wie bei Angeboten.
+- **Als Vorlage speichern** – siehe [Abschnitt 6.8](#68-rechnungsvorlagen).
+
+### 6.8 Rechnungsvorlagen
+
+Wiederkehrende Rechnungen (z. B. immer gleiche Positionen für einen bestimmten Zweck) lassen sich als **Vorlage** speichern und für neue Rechnungsentwürfe wiederverwenden. Eine Vorlage enthält die **Positionen** und **Anmerkungen**, jedoch **keine Adresse** – diese wird bei jeder neuen Rechnung individuell gewählt.
+
+**Rechnung als Vorlage speichern:**
+
+- Im Rechnungsdialog einer bereits gespeicherten Rechnung über die Schaltfläche **Als Vorlage speichern** unten im Dialog, oder
+- direkt aus der Rechnungsliste über das Speichern-Symbol in der jeweiligen Zeile (nicht bei Stornorechnungen verfügbar).
+
+In beiden Fällen wird ein **Vorlagenname** abgefragt und die Vorlage gespeichert.
+
+**Neue Rechnung aus Vorlage erstellen:**
+
+1. In der Rechnungsliste oben die Schaltfläche **Aus Vorlage** anklicken.
+2. Im Auswahldialog die gewünschte Vorlage anklicken (Name und Bruttosumme werden angezeigt).
+3. Es öffnet sich ein neuer Rechnungsentwurf mit den Positionen und Anmerkungen der Vorlage; nur die **Adresse** muss noch ergänzt werden.
+
+Im selben Auswahldialog können Vorlagen über die Symbole am rechten Rand **umbenannt** oder **gelöscht** werden.
 
 ---
 
 ## 7. Mahnungen erstellen
 
-Mahnungen sind Zahlungserinnerungen zu überfälligen Rechnungen und werden in drei **Mahnstufen** geführt.
+Mahnungen sind Zahlungserinnerungen zu überfälligen Rechnungen und werden in **Mahnstufen** geführt. Die Anzahl der Stufen ist über die Einstellung **Maximale Mahnstufe** konfigurierbar (Vorgabe: 3).
 
 ### 7.1 Mahnung aus einer überfälligen Rechnung erzeugen (empfohlen)
 
@@ -309,7 +363,7 @@ Mahnungen sind Zahlungserinnerungen zu überfälligen Rechnungen und werden in d
 1. **Fakturierung → Mahnungen → Neue Mahnung**.
 2. Felder ausfüllen:
    - **Rechnung** (Pflichtfeld) – die zu mahnende Rechnung auswählen.
-   - **Mahnstufe** (1, 2 oder 3).
+   - **Mahnstufe** (1 bis zur konfigurierten maximalen Mahnstufe).
    - **Mahnungsdatum** (Pflichtfeld, vorbelegt mit heute).
    - **Zahlungsfrist** (Pflichtfeld) – darf nicht vor dem Mahnungsdatum liegen.
    - **Mahngebühr (€)** – vorbelegt mit der Standard-Mahngebühr.
@@ -324,11 +378,13 @@ Mahnungen sind Zahlungserinnerungen zu überfälligen Rechnungen und werden in d
 
 ### 7.4 Mahnungsliste
 
-Die Liste zeigt u. a. Mahnungsnummer, verknüpfte **Rechnung** (anklickbar zur Vorschau), Adresse, **Stufe** (farblich: Stufe 3 rot, Stufe 2 orange), Datum, Fälligkeit, Status und den **offenen Betrag**.
+Die Liste zeigt u. a. Mahnungsnummer, verknüpfte **Rechnung** (anklickbar zur Vorschau), Adresse, **Stufe** (farblich: höchste konfigurierte Stufe rot, vorletzte Stufe orange), Datum, Fälligkeit, Status und den **offenen Betrag**.
 
 ![Mahnungsliste](img/fakturierung/10-mahnungen-liste.png)
 
 > Entwürfe können bearbeitet und gelöscht werden; ausgestellte Mahnungen nicht.
+
+> Ist bei einer Mahnung die **höchste konfigurierte Mahnstufe** erreicht, wird auf dem Mahnungsdokument statt der Stufennummer der Text **„Letzte Mahnung"** angezeigt.
 
 Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E-Mail an den Empfänger verschickt werden – siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf).
 
@@ -336,11 +392,15 @@ Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E
 
 ## 8. Vorschau, PDF, Versand & Verlauf
 
+> Schlägt eine Aktion in den Dialogen für Angebote, Rechnungen oder Mahnungen fehl (z. B. beim Speichern oder Laden), erscheint unten am Bildschirmrand eine Fehlermeldung mit dem Grund, statt dass die Aktion ohne Rückmeldung erfolglos bleibt.
+
 ### Vorschau / PDF
 
 Über das **Augen-Symbol** (oder Klick auf eine ausgestellte Zeile) öffnet sich die **Dokumentvorschau** als fertig gesetztes Dokument. Oben rechts steht **PDF herunterladen** zur Verfügung, um das Dokument als PDF zu speichern und anschließend zu drucken oder zu versenden.
 
 ![Dokumentvorschau mit „PDF herunterladen"](img/fakturierung/14-dokument-vorschau.png)
+
+> Vorhandene **Anmerkungen** werden auf dem Dokument oberhalb der Positionstabelle angezeigt (ohne eigene Überschrift). Geldbeträge werden mit Tausenderpunkt dargestellt, z. B. `1.234,56 €`.
 
 ### E-Mail-Versand
 
@@ -402,4 +462,22 @@ Das **Uhr-Symbol** (Verlauf) zeigt zu jedem Dokument und jeder Adresse die Ände
 
 ---
 
-*Stand: Juni 2026*
+## Anhang: Änderungsprotokoll
+
+Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren Überarbeitung dieses Handbuchs, neueste zuerst:
+
+| Datum | Änderung |
+|-------|----------|
+| Juli 2026 | Neues Feld **Leistungsdatum** bei Rechnungen; **Rechnungsdatum** und **Fälligkeitsdatum** werden nicht mehr im Entwurf erfasst, sondern automatisch beim Ausstellen gesetzt. |
+| Juli 2026 | Geldbeträge auf Angeboten, Rechnungen und Mahnungen werden jetzt mit Tausenderpunkt dargestellt (z. B. `1.234,56 €`). |
+| Juli 2026 | Anmerkungen erscheinen auf dem Dokument jetzt oberhalb der Positionen, ohne eigene Überschrift „Anmerkungen". |
+| Juli 2026 | Neu: **Rechnungsvorlagen** – Positionen und Anmerkungen einer Rechnung als Vorlage speichern und für neue Rechnungen wiederverwenden. |
+| Juli 2026 | Positionen in Angeboten und Rechnungen können jetzt per Drag-and-Drop oder über Pfeiltasten neu angeordnet werden. |
+| Juli 2026 | Zahlenfelder (z. B. Menge, Preis) unterstützen jetzt einfache Rechenformeln, z. B. `=12*3,5`. |
+| Juli 2026 | Fehler beim Speichern oder Laden von Angeboten, Rechnungen und Mahnungen werden jetzt als Meldung angezeigt, statt kommentarlos zu scheitern. |
+| Juni 2026 | Die maximale Mahnstufe ist jetzt über die Einstellungen konfigurierbar; bei Erreichen erscheint auf der Mahnung „Letzte Mahnung" statt der Stufennummer. |
+| Juni 2026 | Die Mahngebühr wird beim Anlegen einer neuen Mahnung automatisch aus den Einstellungen vorbefüllt. |
+
+---
+
+*Stand: Juli 2026*
