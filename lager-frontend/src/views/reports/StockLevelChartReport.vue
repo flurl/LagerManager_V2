@@ -196,6 +196,15 @@ const chartOptions = {
     },
     tooltip: {
       callbacks: {
+        label: (context) => {
+          if (context.dataset.label.endsWith('-gezaehlt') && showCountDiff.value) {
+            // Y-axis holds the diff while this mode is on — show the actual count instead
+            const originalCount = rawData.value?.counted_datasets?.find((d) => d.label === context.dataset.label)?.data?.[context.dataIndex]
+            const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2)
+            return `${context.dataset.label}: ${originalCount == null ? '-' : fmt(originalCount)}`
+          }
+          return `${context.dataset.label}: ${context.formattedValue}`
+        },
         afterLabel: (context) => {
           if (context.dataset.label.endsWith('-gezaehlt')) {
             const articleName = context.dataset.label.replace('-gezaehlt', '')
@@ -203,16 +212,17 @@ const chartOptions = {
             const stockValue = stockDataset?.data?.[context.dataIndex]
             const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2)
             if (showCountDiff.value) {
-              // Y-axis is diff — show the original count in the tooltip
-              const originalCount = rawData.value?.counted_datasets?.find((d) => d.label === context.dataset.label)?.data?.[context.dataIndex]
-              if (originalCount == null) return []
-              return [`  Gezählt: ${fmt(originalCount)}`]
+              // Y-axis already holds the diff (count - stock) in this mode
+              if (context.parsed.y == null) return []
+              const diff = context.parsed.y
+              const sign = diff >= 0 ? '+' : ''
+              return [`  Diff: ${sign}${fmt(diff)}`]
             } else {
               // Y-axis is count — show the diff in the tooltip
               if (stockValue == null || context.parsed.y == null) return []
               const diff = context.parsed.y - stockValue
               const sign = diff >= 0 ? '+' : ''
-              return [`  Differenz: ${sign}${fmt(diff)}`]
+              return [`  Diff: ${sign}${fmt(diff)}`]
             }
           }
           const movements = rawData.value?.movement_meta?.[context.label]?.[context.dataset.label]
