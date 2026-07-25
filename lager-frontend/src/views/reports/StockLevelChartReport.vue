@@ -25,6 +25,9 @@
       <v-col v-if="hasCountedData" cols="auto">
         <v-checkbox v-model="showCountDiff" label="Zählungen diff anzeigen" density="compact" hide-details />
       </v-col>
+      <v-col v-if="hasCountedData" cols="auto">
+        <v-checkbox v-model="onlyCountedDays" label="Nur Tage mit Zählung anzeigen" density="compact" hide-details />
+      </v-col>
     </v-row>
 
     <v-row class="mb-2">
@@ -76,6 +79,7 @@ const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenA
 
 const showNegativeOnly = ref(false)
 const showCountDiff = ref(false)
+const onlyCountedDays = ref(false)
 
 const articlesWithNegative = computed(() => {
   const result = new Set()
@@ -87,6 +91,15 @@ const articlesWithNegative = computed(() => {
 
 const hasNegativeArticles = computed(() => articlesWithNegative.value.size > 0)
 const hasCountedData = computed(() => (rawData.value?.counted_datasets?.length ?? 0) > 0)
+
+// Per-day flag: true if at least one article has a physical count that day.
+// Same length as labels (never sliced), so the x/y scales — and any active
+// zoom/pan — stay put when this filter is toggled; only the data points change.
+const countedDayMask = computed(() => {
+  const labels = rawData.value?.labels || []
+  const countedDatasets = rawData.value?.counted_datasets || []
+  return labels.map((_, i) => countedDatasets.some((d) => d.data[i] != null))
+})
 
 const COLORS = [
   '#1565C0', '#E53935', '#43A047', '#FB8C00', '#8E24AA',
@@ -122,19 +135,26 @@ function toggleAll() {
 const chartData = computed(() => {
   if (!rawData.value) return null
 
+  const mask = onlyCountedDays.value ? countedDayMask.value : null
+  const pick = (arr) => mask ? arr.map((v, i) => (mask[i] ? v : null)) : arr
+
   const stockDatasets = rawData.value.datasets
     .filter((d) => shouldInclude(d.label) && activeArticles.value.includes(d.label))
-    .map((d) => ({
-      label: d.label,
-      data: d.data,
-      borderColor: colorMap.value[d.label],
-      backgroundColor: 'transparent',
-      tension: 0.1,
-      pointRadius: d.data.map((v) => v < 0 ? 6 : 2),
-      pointStyle: d.data.map((v) => v < 0 ? 'triangle' : 'circle'),
-      pointBackgroundColor: d.data.map((v) => v < 0 ? '#E53935' : 'transparent'),
-      pointBorderColor: d.data.map((v) => v < 0 ? '#E53935' : colorMap.value[d.label]),
-    }))
+    .map((d) => {
+      const data = pick(d.data)
+      return {
+        label: d.label,
+        data,
+        borderColor: colorMap.value[d.label],
+        backgroundColor: 'transparent',
+        tension: 0.1,
+        spanGaps: true,
+        pointRadius: data.map((v) => v < 0 ? 6 : 2),
+        pointStyle: data.map((v) => v < 0 ? 'triangle' : 'circle'),
+        pointBackgroundColor: data.map((v) => v < 0 ? '#E53935' : 'transparent'),
+        pointBorderColor: data.map((v) => v < 0 ? '#E53935' : colorMap.value[d.label]),
+      }
+    })
 
   const countedDatasets = (rawData.value.counted_datasets || [])
     .filter((d) => {
@@ -145,9 +165,11 @@ const chartData = computed(() => {
       const articleName = d.label.replace('-gezaehlt', '')
       const countedColor = shadeColor(colorMap.value[articleName], +35)
       const stockDataset = rawData.value.datasets.find((s) => s.label === articleName)
+      const countedData = pick(d.data)
+      const stockData = pick(stockDataset?.data || [])
       const data = showCountDiff.value
-        ? d.data.map((v, i) => (v != null && stockDataset?.data?.[i] != null) ? v - stockDataset.data[i] : null)
-        : d.data
+        ? countedData.map((v, i) => (v != null && stockData[i] != null) ? v - stockData[i] : null)
+        : countedData
       return {
         label: d.label,
         data,
