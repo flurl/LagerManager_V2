@@ -231,7 +231,6 @@ const dateError = ref('')
 const linesError = ref('')
 const defaultTaxRateId = ref(null)
 const config = ref({})
-const originalDetailIds = ref([])
 
 const isNew = computed(() => !props.movement?.id && !form.value.id)
 
@@ -290,7 +289,6 @@ async function initForm() {
     const full = res.data
     form.value = { ...full }
     lines.value = (full.details || []).map((d) => ({ ...d }))
-    originalDetailIds.value = (full.details || []).map((d) => d.id)
     captureSnapshot()
   } else {
     form.value = {
@@ -391,19 +389,16 @@ async function doSave({ silent = false } = {}) {
       form.value.id = movementId
     } else {
       await api.put(`/stock-movements/${movementId}/`, form.value)
-      // Delete all existing details and re-create
-      await Promise.all(
-        originalDetailIds.value.map((id) => api.delete(`/stock-movements/${movementId}/details/${id}/`))
-      )
-      originalDetailIds.value = []
     }
-    // Create detail lines, preserving the order the user entered them in
-    const detailResponses = await Promise.all(
-      lines.value.map((l, idx) =>
-        api.post(`/stock-movements/${movementId}/details/`, { ...l, stock_movement: movementId, sort_order: idx })
-      )
-    )
-    originalDetailIds.value = detailResponses.map((r) => r.data.id)
+    // Replace all detail lines in one atomic backend request, preserving entry order
+    const linesPayload = lines.value.map((l) => ({
+      article: l.article,
+      quantity: l.quantity,
+      unit_price: l.unit_price,
+      tax_rate: l.tax_rate,
+    }))
+    const detailsRes = await api.post(`/stock-movements/${movementId}/details/`, linesPayload)
+    lines.value = detailsRes.data
     // Assign any pending (orphaned) attachments to the newly created movement
     if (isNew.value && pendingAttachments.value.length) {
       await Promise.all(

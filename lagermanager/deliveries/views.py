@@ -1,5 +1,8 @@
+from typing import Any
+
 from core.permissions import DjangoModelPermissionsWithView
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import transaction
 from django.db.models import Count, QuerySet
 from django.http import HttpResponse
 from rest_framework import status, viewsets
@@ -14,7 +17,6 @@ from .models import (
     Attachment,
     Partner,
     StockMovement,
-    StockMovementDetail,
     TaxRate,
 )
 from .serializers import (
@@ -81,16 +83,40 @@ class StockMovementViewSet(viewsets.ModelViewSet[StockMovement]):
         movement.apply_skonto(float(percent))
         return Response(StockMovementSerializer(movement, context={'request': request}).data)
 
+    @action(detail=True, methods=['get', 'post'], url_path='details')
+    def details(self, request: Request, pk: int | None = None) -> Response:
+        movement: StockMovement = self.get_object()
+        if request.method == 'GET':
+            qs = movement.details.select_related('article', 'tax_rate')
+            return Response(StockMovementDetailSerializer(qs, many=True).data)
 
-class StockMovementDetailViewSet(viewsets.ModelViewSet[StockMovementDetail]):
-    serializer_class = StockMovementDetailSerializer
-    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
+        # POST — replace all detail lines. Validate every line up front, then delete-and-recreate
+        # inside one transaction, so a single invalid line rejects the whole request instead of
+        # leaving orphaned rows behind for a later save to duplicate on top of.
+        lines_data: list[dict[str, Any]] = request.data if isinstance(
+            request.data, list) else []
 
-    def get_queryset(self) -> QuerySet[StockMovementDetail]:
-        movement_pk = self.kwargs.get('movement_pk')
-        return StockMovementDetail.objects.filter(
-            stock_movement_id=movement_pk
-        ).select_related('article', 'tax_rate')
+        line_serializers: list[StockMovementDetailSerializer] = []
+        for idx, item in enumerate(lines_data):
+            payload: dict[str, Any] = {
+                'stock_movement': movement.pk,
+                'sort_order': idx,
+                'article': item.get('article'),
+                'quantity': item.get('quantity', 0),
+                'unit_price': item.get('unit_price', 0),
+                'tax_rate': item.get('tax_rate'),
+            }
+            ser = StockMovementDetailSerializer(data=payload)
+            ser.is_valid(raise_exception=True)
+            line_serializers.append(ser)
+
+        with transaction.atomic():
+            movement.details.all().delete()
+            for ser in line_serializers:
+                ser.save()
+
+        qs = movement.details.select_related('article', 'tax_rate')
+        return Response(StockMovementDetailSerializer(qs, many=True).data, status=status.HTTP_200_OK)
 
 
 ACCEPTED_MIME_PREFIXES = ('image/',)
