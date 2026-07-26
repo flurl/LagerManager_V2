@@ -25,10 +25,25 @@
       <v-col v-if="hasCountedData" cols="auto">
         <v-checkbox v-model="showCountDiff" label="Zählungen diff anzeigen" density="compact" hide-details />
       </v-col>
-      <v-col v-if="hasCountedData" cols="auto">
-        <v-checkbox v-model="onlyCountedDays" label="Nur Tage mit Zählung anzeigen" density="compact" hide-details />
-      </v-col>
     </v-row>
+
+    <v-expand-transition>
+      <v-sheet v-if="showCountDiff && hasCountedData" class="mb-2 pl-4 py-2 border-s-md" color="transparent">
+        <v-row align="center" dense>
+          <v-col cols="auto">
+            <v-checkbox v-model="showTrendLine" label="Ausgleichgerade" density="compact" hide-details />
+          </v-col>
+          <v-col cols="12" sm="4" md="3">
+            <v-slider v-model="r2Threshold" label="R² Schwelle" :disabled="!showTrendLine" min="0" max="1" step="0.01"
+              thumb-label density="compact" hide-details />
+          </v-col>
+          <v-col cols="auto">
+            <v-checkbox v-model="onlyCountedDays" label="Nur Tage mit Zählung anzeigen" density="compact"
+              hide-details />
+          </v-col>
+        </v-row>
+      </v-sheet>
+    </v-expand-transition>
 
     <v-row class="mb-2">
       <v-col>
@@ -79,7 +94,13 @@ const { hasHiddenArticles, hiddenCount, showHidden, shouldInclude } = useHiddenA
 
 const showNegativeOnly = ref(false)
 const showCountDiff = ref(false)
+const showTrendLine = ref(false)
+const r2Threshold = ref(1)
 const onlyCountedDays = ref(false)
+
+watch(showCountDiff, (enabled) => {
+  if (!enabled) showTrendLine.value = false
+})
 
 const articlesWithNegative = computed(() => {
   const result = new Set()
@@ -115,10 +136,64 @@ function shadeColor(hex, percent) {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
 }
 
+const TREND_SUFFIX = '-ausgleichsgerade'
+
+// Ordinary least squares fit (y = slope*x + intercept) over non-null points,
+// plus R² (coefficient of determination) as a goodness-of-fit measure.
+function leastSquaresFit(points) {
+  const n = points.length
+  if (n < 2) return null
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0
+  for (const { x, y } of points) {
+    sumX += x
+    sumY += y
+    sumXY += x * y
+    sumXX += x * x
+  }
+  const denom = n * sumXX - sumX * sumX
+  if (denom === 0) return null
+  const slope = (n * sumXY - sumX * sumY) / denom
+  const intercept = (sumY - slope * sumX) / n
+
+  const meanY = sumY / n
+  let ssRes = 0, ssTot = 0
+  for (const { x, y } of points) {
+    const yHat = slope * x + intercept
+    ssRes += (y - yHat) ** 2
+    ssTot += (y - meanY) ** 2
+  }
+  const r2 = ssTot === 0 ? 1 : 1 - ssRes / ssTot
+
+  return { slope, intercept, r2 }
+}
+
+// R² of the count-vs-stock trend line per article, independent of the current
+// article selection so it can be used to filter the selectable article list.
+const articleR2Map = computed(() => {
+  const map = {}
+  if (!rawData.value) return map
+  ;(rawData.value.counted_datasets || []).forEach((d) => {
+    const articleName = d.label.replace('-gezaehlt', '')
+    const stockDataset = rawData.value.datasets.find((s) => s.label === articleName)
+    if (!stockDataset) return
+    const points = d.data
+      .map((v, i) => {
+        const stockValue = stockDataset.data[i]
+        return { x: i, y: (v != null && stockValue != null) ? v - stockValue : null }
+      })
+      .filter((p) => p.y != null)
+    const fit = leastSquaresFit(points)
+    if (fit) map[articleName] = fit.r2
+  })
+  return map
+})
+
 const allArticles = computed(() =>
   (rawData.value?.datasets || [])
     .map((d) => d.label)
-    .filter((label) => shouldInclude(label) && (!showNegativeOnly.value || articlesWithNegative.value.has(label)))
+    .filter((label) => shouldInclude(label)
+      && (!showNegativeOnly.value || articlesWithNegative.value.has(label))
+      && (!showTrendLine.value || articleR2Map.value[label] <= r2Threshold.value))
 )
 
 // Stable color map keyed by article name so colors don't shift when filtering
@@ -183,7 +258,29 @@ const chartData = computed(() => {
       }
     })
 
-  return { labels: rawData.value.labels, datasets: [...stockDatasets, ...countedDatasets] }
+  const trendDatasets = []
+  if (showCountDiff.value && showTrendLine.value) {
+    countedDatasets.forEach((d) => {
+      const articleName = d.label.replace('-gezaehlt', '')
+      const points = d.data
+        .map((v, i) => ({ x: i, y: v }))
+        .filter((p) => p.y != null)
+      const fit = leastSquaresFit(points)
+      if (!fit) return
+      trendDatasets.push({
+        label: `${articleName}${TREND_SUFFIX}`,
+        data: rawData.value.labels.map((_, i) => fit.slope * i + fit.intercept),
+        borderColor: colorMap.value[articleName],
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        r2: fit.r2,
+      })
+    })
+  }
+
+  return { labels: rawData.value.labels, datasets: [...stockDatasets, ...countedDatasets, ...trendDatasets] }
 })
 
 const chartOptions = {
@@ -192,11 +289,28 @@ const chartOptions = {
   plugins: {
     legend: {
       position: 'top',
-      labels: { filter: (item) => !item.text.endsWith('-gezaehlt') },
+      labels: {
+        filter: (item) => !item.text.endsWith('-gezaehlt'),
+        generateLabels: (chart) => {
+          const items = ChartJS.defaults.plugins.legend.labels.generateLabels(chart)
+          items.forEach((item) => {
+            const dataset = chart.data.datasets[item.datasetIndex]
+            if (dataset?.label?.endsWith(TREND_SUFFIX) && dataset.r2 != null) {
+              const articleName = dataset.label.replace(TREND_SUFFIX, '')
+              item.text = `${articleName} Ausgleichgerade (R²=${dataset.r2.toFixed(2)})`
+            }
+          })
+          return items
+        },
+      },
     },
     tooltip: {
       callbacks: {
         label: (context) => {
+          if (context.dataset.label.endsWith(TREND_SUFFIX)) {
+            const articleName = context.dataset.label.replace(TREND_SUFFIX, '')
+            return `${articleName} (Ausgleichgerade): ${context.formattedValue}`
+          }
           if (context.dataset.label.endsWith('-gezaehlt') && showCountDiff.value) {
             // Y-axis holds the diff while this mode is on — show the actual count instead
             const originalCount = rawData.value?.counted_datasets?.find((d) => d.label === context.dataset.label)?.data?.[context.dataIndex]
@@ -255,7 +369,7 @@ async function fetchData() {
   }
 }
 
-watch(showNegativeOnly, () => {
+watch([showNegativeOnly, showTrendLine, r2Threshold], () => {
   activeArticles.value = activeArticles.value.filter((a) => allArticles.value.includes(a))
 })
 
