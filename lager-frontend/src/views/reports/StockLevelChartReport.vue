@@ -25,6 +25,9 @@
       <v-col v-if="hasCountedData" cols="auto">
         <v-checkbox v-model="showCountDiff" label="Zählungen diff anzeigen" density="compact" hide-details />
       </v-col>
+      <v-col cols="auto">
+        <v-checkbox v-model="onlyCountedDays" label="Nur Tage mit Zählung anzeigen" density="compact" hide-details />
+      </v-col>
     </v-row>
 
     <v-expand-transition>
@@ -34,12 +37,24 @@
             <v-checkbox v-model="showTrendLine" label="Ausgleichgerade" density="compact" hide-details />
           </v-col>
           <v-col cols="12" sm="4" md="3">
-            <v-slider v-model="r2Threshold" label="R² Schwelle" :disabled="!showTrendLine" min="0" max="1" step="0.01"
-              thumb-label density="compact" hide-details />
+            <v-slider v-model="relSlopeThreshold" label="Rel. Steigung Grenzwert (%/Tag)" :disabled="!showTrendLine"
+              min="0" max="50" step="1" thumb-label density="compact" hide-details />
           </v-col>
           <v-col cols="auto">
-            <v-checkbox v-model="onlyCountedDays" label="Nur Tage mit Zählung anzeigen" density="compact"
+            <v-checkbox v-model="minMeanStockEnabled" label="Min. Stand" :disabled="!showTrendLine" density="compact"
               hide-details />
+          </v-col>
+          <v-col cols="auto" style="width: 5em">
+            <v-text-field v-model.number="minMeanStock" label="Min St." :disabled="!showTrendLine || !minMeanStockEnabled"
+              type="number" min="0" step="1" density="compact" hide-details />
+          </v-col>
+          <v-col cols="12" sm="4" md="3">
+            <v-slider v-model="slopeThreshold" label="Steigung Grenzwert" :disabled="!showTrendLine" min="0" max="5"
+              step="0.1" thumb-label density="compact" hide-details />
+          </v-col>
+          <v-col cols="12" sm="4" md="3">
+            <v-slider v-model="r2Threshold" label="R² Grenzwert" :disabled="!showTrendLine" min="0" max="1" step="0.01"
+              thumb-label density="compact" hide-details />
           </v-col>
         </v-row>
       </v-sheet>
@@ -77,12 +92,36 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
   Title, Tooltip, Legend,
 } from 'chart.js'
+import { toFont } from 'chart.js/helpers'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { usePeriodStore } from '../../stores/period'
 import { useHiddenArticles } from '../../composables/useHiddenArticles'
 import api from '../../api'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, zoomPlugin)
+// Chart.js's horizontal (top) legend only reserves single-line height per item —
+// unlike the vertical legend, it ignores multi-line array `text` — so the
+// Ausgleichgerade legend's second line gets clipped by the plot area. Patch each
+// chart's legend.fit() to add the missing height for the tallest multi-line item.
+const legendMultilineFix = {
+  id: 'legendMultilineFix',
+  afterInit(chart) {
+    const legend = chart.legend
+    if (!legend) return
+    const originalFit = legend.fit.bind(legend)
+    legend.fit = function () {
+      originalFit()
+      const maxLines = this.legendItems.reduce(
+        (max, item) => Math.max(max, Array.isArray(item.text) ? item.text.length : 1), 1)
+      if (maxLines > 1) {
+        this.height += (maxLines - 1) * toFont(this.options.labels.font).lineHeight
+      }
+    }
+  },
+}
+
+ChartJS.register(
+  CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, zoomPlugin, legendMultilineFix,
+)
 
 const periodStore = usePeriodStore()
 const chartRef = ref(null)
@@ -96,6 +135,10 @@ const showNegativeOnly = ref(false)
 const showCountDiff = ref(false)
 const showTrendLine = ref(false)
 const r2Threshold = ref(1)
+const slopeThreshold = ref(0)
+const relSlopeThreshold = ref(0)
+const minMeanStockEnabled = ref(true)
+const minMeanStock = ref(5)
 const onlyCountedDays = ref(false)
 
 watch(showCountDiff, (enabled) => {
@@ -167,12 +210,19 @@ function leastSquaresFit(points) {
   return { slope, intercept, r2 }
 }
 
-// R² of the count-vs-stock trend line per article, independent of the current
+function average(values) {
+  return values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0
+}
+
+// Best-fit slope/R² of the count-vs-stock trend line per article, plus the
+// average stock level and slope relative to it (%/day) — normalizing the
+// slope this way keeps a small loss on a rarely-stocked article and a large
+// loss on a heavily-stocked one comparable, independent of the current
 // article selection so it can be used to filter the selectable article list.
-const articleR2Map = computed(() => {
+const articleFitMap = computed(() => {
   const map = {}
-  if (!rawData.value) return map
-  ;(rawData.value.counted_datasets || []).forEach((d) => {
+  if (!rawData.value) return map;
+  (rawData.value.counted_datasets || []).forEach((d) => {
     const articleName = d.label.replace('-gezaehlt', '')
     const stockDataset = rawData.value.datasets.find((s) => s.label === articleName)
     if (!stockDataset) return
@@ -183,7 +233,10 @@ const articleR2Map = computed(() => {
       })
       .filter((p) => p.y != null)
     const fit = leastSquaresFit(points)
-    if (fit) map[articleName] = fit.r2
+    if (!fit) return
+    const meanStock = average(stockDataset.data.filter((v) => v != null))
+    const relSlopePercent = meanStock ? (fit.slope / meanStock) * 100 : null
+    map[articleName] = { ...fit, meanStock, relSlopePercent }
   })
   return map
 })
@@ -193,7 +246,10 @@ const allArticles = computed(() =>
     .map((d) => d.label)
     .filter((label) => shouldInclude(label)
       && (!showNegativeOnly.value || articlesWithNegative.value.has(label))
-      && (!showTrendLine.value || articleR2Map.value[label] <= r2Threshold.value))
+      && (!showTrendLine.value || articleFitMap.value[label]?.r2 <= r2Threshold.value)
+      && (!showTrendLine.value || Math.abs(articleFitMap.value[label]?.slope) >= slopeThreshold.value)
+      && (!showTrendLine.value || Math.abs(articleFitMap.value[label]?.relSlopePercent) >= relSlopeThreshold.value)
+      && (!showTrendLine.value || !minMeanStockEnabled.value || articleFitMap.value[label]?.meanStock >= minMeanStock.value))
 )
 
 // Stable color map keyed by article name so colors don't shift when filtering
@@ -262,10 +318,7 @@ const chartData = computed(() => {
   if (showCountDiff.value && showTrendLine.value) {
     countedDatasets.forEach((d) => {
       const articleName = d.label.replace('-gezaehlt', '')
-      const points = d.data
-        .map((v, i) => ({ x: i, y: v }))
-        .filter((p) => p.y != null)
-      const fit = leastSquaresFit(points)
+      const fit = articleFitMap.value[articleName]
       if (!fit) return
       trendDatasets.push({
         label: `${articleName}${TREND_SUFFIX}`,
@@ -276,6 +329,9 @@ const chartData = computed(() => {
         borderDash: [6, 4],
         pointRadius: 0,
         r2: fit.r2,
+        slope: fit.slope,
+        meanStock: fit.meanStock,
+        relSlopePercent: fit.relSlopePercent,
       })
     })
   }
@@ -290,14 +346,18 @@ const chartOptions = {
     legend: {
       position: 'top',
       labels: {
-        filter: (item) => !item.text.endsWith('-gezaehlt'),
+        filter: (item) => !(Array.isArray(item.text) ? item.text.join(' ') : item.text).endsWith('-gezaehlt'),
         generateLabels: (chart) => {
           const items = ChartJS.defaults.plugins.legend.labels.generateLabels(chart)
           items.forEach((item) => {
             const dataset = chart.data.datasets[item.datasetIndex]
             if (dataset?.label?.endsWith(TREND_SUFFIX) && dataset.r2 != null) {
               const articleName = dataset.label.replace(TREND_SUFFIX, '')
-              item.text = `${articleName} Ausgleichgerade (R²=${dataset.r2.toFixed(2)})`
+              const relSlope = dataset.relSlopePercent != null ? `${dataset.relSlopePercent.toFixed(1)}%/Tag` : '–'
+              item.text = [
+                `${articleName} Ausgleichgerade`,
+                `(R²=${dataset.r2.toFixed(2)}, Ø-Bestand=${dataset.meanStock.toFixed(1)}, Steigung=${dataset.slope.toFixed(2)}, rel.=${relSlope})`,
+              ]
             }
           })
           return items
@@ -369,9 +429,12 @@ async function fetchData() {
   }
 }
 
-watch([showNegativeOnly, showTrendLine, r2Threshold], () => {
-  activeArticles.value = activeArticles.value.filter((a) => allArticles.value.includes(a))
-})
+watch(
+  [showNegativeOnly, showTrendLine, r2Threshold, slopeThreshold, relSlopeThreshold, minMeanStockEnabled, minMeanStock],
+  () => {
+    activeArticles.value = activeArticles.value.filter((a) => allArticles.value.includes(a))
+  },
+)
 
 watch(() => periodStore.currentPeriodId, fetchData)
 onMounted(fetchData)
