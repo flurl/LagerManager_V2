@@ -37,19 +37,20 @@
             <v-checkbox v-model="showTrendLine" label="Ausgleichgerade" density="compact" hide-details />
           </v-col>
           <v-col cols="12" sm="4" md="3">
-            <v-slider v-model="relSlopeThreshold" label="Rel. Steigung Grenzwert (%/Tag)" :disabled="!showTrendLine"
-              min="0" max="50" step="1" thumb-label density="compact" hide-details />
+            <v-slider v-model="relSlopeThreshold" label="Schwund (%/Tag)" :disabled="!showTrendLine" min="0" max="50"
+              step="1" thumb-label density="compact" hide-details />
           </v-col>
           <v-col cols="auto">
             <v-checkbox v-model="minMeanStockEnabled" label="Min. Stand" :disabled="!showTrendLine" density="compact"
               hide-details />
           </v-col>
           <v-col cols="auto" style="width: 5em">
-            <v-text-field v-model.number="minMeanStock" label="Min St." :disabled="!showTrendLine || !minMeanStockEnabled"
-              type="number" min="0" step="1" density="compact" hide-details />
+            <v-text-field v-model.number="minMeanStock" label="Min St."
+              :disabled="!showTrendLine || !minMeanStockEnabled" type="number" min="0" step="1" density="compact"
+              hide-details />
           </v-col>
           <v-col cols="12" sm="4" md="3">
-            <v-slider v-model="slopeThreshold" label="Steigung Grenzwert" :disabled="!showTrendLine" min="0" max="5"
+            <v-slider v-model="slopeThreshold" label="Schwund (Abs/Tag)" :disabled="!showTrendLine" min="0" max="5"
               step="0.1" thumb-label density="compact" hide-details />
           </v-col>
           <v-col cols="12" sm="4" md="3">
