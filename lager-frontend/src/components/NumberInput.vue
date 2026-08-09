@@ -35,12 +35,6 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
-  // Kept for call-site compatibility: the field is a text input, so it never has
-  // spinner controls to hide.
-  hideControls: {
-    type: Boolean,
-    default: false,
-  },
 })
 
 const emit = defineEmits(['update:modelValue'])

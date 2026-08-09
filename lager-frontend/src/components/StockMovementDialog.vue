@@ -66,11 +66,11 @@
                     item-value="article" density="compact" hide-details style="min-width: 180px" />
                 </td>
                 <td>
-                  <NumberInput v-model="line.quantity" hide-controls density="compact" hide-details style="width: 120px" />
+                  <NumberInput v-model="line.quantity" density="compact" hide-details style="width: 120px" />
                 </td>
                 <td>
                   <div class="d-flex align-center">
-                    <NumberInput v-model="line.unit_price" :decimals="4" hide-controls density="compact" hide-details
+                    <NumberInput v-model="line.unit_price" :decimals="4" density="compact" hide-details
                       style="width: 130px" />
                     <v-icon size="small" class="ml-1 text-medium-emphasis" style="cursor: pointer"
                       title="Gesamtpreis durch Menge teilen"

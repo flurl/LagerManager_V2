@@ -168,7 +168,7 @@
               </td>
               <td>
                 <div class="field-label">Menge</div>
-                <NumberInput v-model="line.quantity" :reverse="false" hide-controls density="compact" hide-details
+                <NumberInput v-model="line.quantity" :reverse="false" density="compact" hide-details
                   :disabled="!isDraft" />
               </td>
               <td rowspan="2" style="vertical-align:middle">
@@ -194,7 +194,7 @@
               </td>
               <td>
                 <div class="field-label">EP (netto)</div>
-                <NumberInput v-model="line.unit_price" :decimals="2" :reverse="false" hide-controls density="compact"
+                <NumberInput v-model="line.unit_price" :decimals="2" :reverse="false" density="compact"
                   hide-details :disabled="!isDraft" />
               </td>
               <td>

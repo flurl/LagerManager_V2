@@ -12,7 +12,7 @@
 
     <v-data-table :headers="headers" :items="items" :loading="loading" density="compact">
       <template #item.quantity="{ item }">
-        <NumberInput v-model="item.quantity" :decimals="0" hide-controls density="compact" hide-details
+        <NumberInput v-model="item.quantity" :decimals="0" density="compact" hide-details
           style="width: 100px" @change="saveItem(item)" />
       </template>
     </v-data-table>
