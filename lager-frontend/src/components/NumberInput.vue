@@ -1,10 +1,9 @@
 <template>
   <v-text-field
     v-bind="$attrs"
-    :type="inputType"
-    :step="step"
+    type="text"
+    inputmode="decimal"
     :reverse="reverse"
-    :class="{ 'hide-controls': hideControls }"
     :model-value="displayValue"
     @update:model-value="onUpdate"
     @focus="onFocus"
@@ -17,8 +16,11 @@
 <script setup>
 import { computed, ref, useAttrs } from 'vue'
 import { evaluateFormula } from '../utils/formula'
+import { formatNumber, formatNumberRaw, localeFromLanguage, parseNumber } from '../utils/number'
+import { useAuthStore } from '../stores/auth'
 
 const attrs = useAttrs()
+const auth = useAuthStore()
 
 const props = defineProps({
   modelValue: {
@@ -33,6 +35,8 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  // Kept for call-site compatibility: the field is a text input, so it never has
+  // spinner controls to hide.
   hideControls: {
     type: Boolean,
     default: false,
@@ -45,42 +49,49 @@ const isFocused = ref(false)
 const rawValue = ref('')
 const lastFormula = ref(null)
 const lastFormulaResult = ref(null)
-const invalidFormula = ref(null)
+// Input that could not be interpreted — kept verbatim so the user can come back and fix it.
+const invalidInput = ref(null)
+const invalidMessage = ref('')
 
-const step = computed(() => (props.decimals === 0 ? '1' : (10 ** -props.decimals).toFixed(props.decimals)))
-const inputType = computed(() => (isFocused.value || invalidFormula.value !== null ? 'text' : 'number'))
+const locale = computed(() => localeFromLanguage(auth.preferences?.language))
 
 const rules = computed(() => {
   const parentRules = attrs.rules ? (Array.isArray(attrs.rules) ? attrs.rules : [attrs.rules]) : []
-  return [...parentRules, () => invalidFormula.value === null || 'Ungültige Formel']
+  return [...parentRules, () => invalidInput.value === null || invalidMessage.value]
 })
 
 const displayValue = computed(() => {
   if (isFocused.value) return rawValue.value
-  if (invalidFormula.value !== null) return 'NaN'
+  if (invalidInput.value !== null) return 'NaN'
   const num = typeof props.modelValue === 'string' ? parseFloat(props.modelValue) : props.modelValue
   if (num === null || num === undefined || isNaN(num)) return props.modelValue
-  return num.toFixed(props.decimals)
+  return formatNumber(num, props.decimals, locale.value)
 })
 
 function onFocus() {
   isFocused.value = true
-  if (invalidFormula.value !== null) {
-    rawValue.value = invalidFormula.value
-    invalidFormula.value = null
+  if (invalidInput.value !== null) {
+    rawValue.value = invalidInput.value
+    invalidInput.value = null
     return
   }
   if (lastFormula.value !== null && props.modelValue === lastFormulaResult.value) {
     rawValue.value = lastFormula.value
     return
   }
-  rawValue.value = props.modelValue !== null && props.modelValue !== undefined ? String(props.modelValue) : ''
+  rawValue.value = formatNumberRaw(props.modelValue, locale.value)
 }
 
 function onUpdate(val) {
   rawValue.value = val ?? ''
-  const num = val === '' || val === null ? null : parseFloat(val)
-  emit('update:modelValue', isNaN(num) ? null : num)
+  let num = null
+  try {
+    num = parseNumber(rawValue.value)
+  } catch {
+    // incomplete or malformed while typing — reported on blur
+    num = null
+  }
+  emit('update:modelValue', num)
 }
 
 function onBlur() {
@@ -90,21 +101,27 @@ function onBlur() {
     try {
       const result = evaluateFormula(trimmed.slice(1))
       const rounded = parseFloat(result.toFixed(props.decimals))
-      invalidFormula.value = null
+      invalidInput.value = null
       lastFormula.value = trimmed
       lastFormulaResult.value = rounded
       emit('update:modelValue', rounded)
     } catch {
-      // invalid formula: keep it around (shown as NaN) so the user can come back and fix it
-      invalidFormula.value = trimmed
+      invalidInput.value = trimmed
+      invalidMessage.value = 'Ungültige Formel'
     }
     return
   }
-  invalidFormula.value = null
   lastFormula.value = null
-  if (props.modelValue === null || props.modelValue === undefined) return
-  const rounded = parseFloat(props.modelValue.toFixed(props.decimals))
-  if (rounded !== props.modelValue) emit('update:modelValue', rounded)
+  try {
+    const num = parseNumber(trimmed)
+    invalidInput.value = null
+    if (num === null) return
+    const rounded = parseFloat(num.toFixed(props.decimals))
+    if (rounded !== props.modelValue) emit('update:modelValue', rounded)
+  } catch (e) {
+    invalidInput.value = trimmed
+    invalidMessage.value = e.message
+  }
 }
 
 function onEnter(event) {
@@ -115,15 +132,3 @@ function onEnter(event) {
 <script>
 export default { inheritAttrs: false }
 </script>
-
-<style scoped>
-.hide-controls :deep(input[type='number']::-webkit-inner-spin-button),
-.hide-controls :deep(input[type='number']::-webkit-outer-spin-button) {
-  -webkit-appearance: none;
-  appearance: none;
-}
-.hide-controls :deep(input[type='number']) {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-</style>
