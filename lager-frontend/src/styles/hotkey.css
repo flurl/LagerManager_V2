@@ -1,0 +1,13 @@
+/*
+ * VHotkey keycap hints (Alt+N, Alt+S, ...) shown inside buttons.
+ *
+ * Vuetify's .v-kbd deliberately resets the browser's native <kbd> monospace to the body font,
+ * and .v-hotkey__key pins an absolute 0.75rem, so both need an override at matching specificity
+ * to make the hints read as keycaps rather than as part of the button label.
+ */
+.v-hotkey__key.v-kbd {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
