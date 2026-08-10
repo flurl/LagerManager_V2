@@ -8,7 +8,9 @@
         </v-btn-toggle>
       </v-col>
       <v-col cols="auto">
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openNew">Neu</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openNew">
+          Neu <v-hotkey keys="alt+n" inline variant="flat" class="ml-2" />
+        </v-btn>
         <v-btn class="ml-2" prepend-icon="mdi-download" @click="exportCsvAction">CSV</v-btn>
       </v-col>
     </v-row>
@@ -99,15 +101,15 @@
     </Teleport>
 
     <v-dialog v-model="dialog" max-width="1100" persistent>
-      <StockMovementDialog :movement="selectedMovement" :movement-type="movementType" @saved="onSaved"
-        @refresh="fetchMovements" @close="dialog = false" />
+      <StockMovementDialog ref="movementDialog" :movement="selectedMovement" :movement-type="movementType"
+        @saved="onSaved" @refresh="fetchMovements" @close="dialog = false" />
     </v-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useTheme } from 'vuetify'
+import { useHotkey, useTheme } from 'vuetify'
 import { usePeriodStore } from '../stores/period'
 import { useCsvExport } from '../composables/useCsvExport'
 import { hexToRgba } from '../utils/color'
@@ -125,6 +127,7 @@ const movements = ref([])
 const loading = ref(false)
 const movementType = ref('delivery')
 const dialog = ref(false)
+const movementDialog = ref(null)
 const selectedMovement = ref(null)
 const detailsCache = ref({})
 const detailsLoading = ref({})
@@ -282,6 +285,23 @@ function formatDateTime(dt) {
 function formatCurrency(val) {
   return val != null ? Number(val).toFixed(2) + '\u00a0€' : ''
 }
+
+useHotkey('alt+n', () => {
+  if (dialog.value) movementDialog.value?.hotkeyAddLine()
+  else openNew()
+}, { inputs: true })
+
+useHotkey('alt+d', () => {
+  if (dialog.value) movementDialog.value?.hotkeyRemoveLine()
+}, { inputs: true })
+
+useHotkey('alt+s', () => {
+  if (dialog.value) movementDialog.value?.hotkeySave()
+}, { inputs: true })
+
+useHotkey('alt+c', () => {
+  if (dialog.value) movementDialog.value?.hotkeyClose()
+}, { inputs: true })
 
 watch(() => periodStore.currentPeriodId, () => {
   filterPartner.value = null

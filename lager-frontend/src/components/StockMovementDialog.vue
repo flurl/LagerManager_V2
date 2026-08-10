@@ -43,7 +43,9 @@
             </v-col>
             <v-col cols="auto" class="d-flex gap-2">
               <v-btn size="small" prepend-icon="mdi-import" @click="openImportDialog">Importieren</v-btn>
-              <v-btn size="small" prepend-icon="mdi-plus" @click="addLine">Position hinzufügen</v-btn>
+              <v-btn size="small" prepend-icon="mdi-plus" @click="addLine">
+                Position hinzufügen <v-hotkey keys="alt+n" inline variant="flat" class="ml-2" />
+              </v-btn>
             </v-col>
           </v-row>
 
@@ -60,10 +62,11 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(line, idx) in lines" :key="idx">
+              <tr v-for="(line, idx) in lines" :key="idx" :data-line-index="idx">
                 <td>
-                  <v-autocomplete v-model="line.article" :items="warehouseArticles" item-title="article_name"
-                    item-value="article" density="compact" hide-details style="min-width: 180px" />
+                  <v-autocomplete :ref="el => (articleRefs[idx] = el)" v-model="line.article"
+                    :items="warehouseArticles" item-title="article_name" item-value="article" density="compact"
+                    hide-details style="min-width: 180px" />
                 </td>
                 <td>
                   <NumberInput v-model="line.quantity" density="compact" hide-details style="width: 120px" />
@@ -93,7 +96,8 @@
                 <td class="text-right">{{ lineNet(line) }}</td>
                 <td class="text-right">{{ lineGross(line) }}</td>
                 <td>
-                  <v-icon size="small" color="error" @click="removeLine(idx)">mdi-delete</v-icon>
+                  <v-icon size="small" color="error" title="Position löschen (Alt+D)"
+                    @click="removeLine(idx)">mdi-delete</v-icon>
                 </td>
               </tr>
             </tbody>
@@ -134,8 +138,12 @@
       <v-btn class="mr-2" :loading="saving" @click="saveAndFlag">Speichern &amp; flaggen</v-btn>
       <v-btn v-if="form.id" class="mr-4" :disabled="isDirty"
         :title="isDirty ? 'Es gibt ungespeicherte Änderungen. Bitte zuerst speichern.' : ''" @click="setFlag">Flag</v-btn>
-      <v-btn @click="handleClose">Abbrechen</v-btn>
-      <v-btn :color="typeConfig.color" :loading="saving" @click="save">Speichern</v-btn>
+      <v-btn @click="handleClose">
+        Abbrechen <v-hotkey keys="alt+c" inline variant="flat" class="ml-2" />
+      </v-btn>
+      <v-btn :color="typeConfig.color" :loading="saving" @click="save">
+        Speichern <v-hotkey keys="alt+s" inline variant="flat" class="ml-2" />
+      </v-btn>
     </v-card-actions>
   </v-card>
 
@@ -199,7 +207,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { usePeriodStore } from '../stores/period'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
@@ -256,6 +264,7 @@ const typeConfig = computed(() => {
 
 const form = ref({ partner: null, date: null, comment: '', period: null })
 const lines = ref([])
+const articleRefs = ref([])
 const savedSnapshot = ref(null)
 
 const { getTaxPercent, lineNet, lineGross, totalNet, totalGross } = useLineCalculations(taxRates, lines)
@@ -307,12 +316,27 @@ async function loadPartners() {
   partners.value = res.data.results || res.data
 }
 
-function addLine() {
+async function addLine() {
   lines.value.push({ article: null, quantity: 1, unit_price: 0, tax_rate: defaultTaxRateId.value })
+  activeTab.value = 'positions'
+  await nextTick()
+  articleRefs.value[lines.value.length - 1]?.focus()
 }
 
 function removeLine(idx) {
   lines.value.splice(idx, 1)
+  articleRefs.value.splice(idx, 1)
+}
+
+// Deletes the line the focus currently sits in; a no-op anywhere else in the dialog.
+// Focus moves to the line that takes its place, or to the new last line if it was the last one.
+async function removeFocusedLine() {
+  const row = document.activeElement?.closest('[data-line-index]')
+  if (!row) return
+  const idx = Number(row.dataset.lineIndex)
+  removeLine(idx)
+  await nextTick()
+  articleRefs.value[Math.min(idx, lines.value.length - 1)]?.focus()
 }
 
 
@@ -518,6 +542,34 @@ onMounted(async () => {
   await loadPartners()
   await initForm()
 })
+
+// Entry points for the hotkeys the parent view routes here while the dialog is open. The nested
+// Import/Skonto/Duplikat dialogs sit on top of this one, so the keys stay out of their way.
+const nestedDialogOpen = computed(
+  () => importDialog.value || skontoSaveDialog.value || duplicateDialog.value
+)
+
+function hotkeyAddLine() {
+  if (nestedDialogOpen.value) return
+  addLine()
+}
+
+function hotkeyRemoveLine() {
+  if (nestedDialogOpen.value) return
+  removeFocusedLine()
+}
+
+function hotkeySave() {
+  if (nestedDialogOpen.value || saving.value) return
+  save()
+}
+
+function hotkeyClose() {
+  if (nestedDialogOpen.value) return
+  handleClose()
+}
+
+defineExpose({ hotkeyAddLine, hotkeyRemoveLine, hotkeySave, hotkeyClose })
 
 watch(() => props.movement, initForm)
 watch(effectiveType, loadPartners)
