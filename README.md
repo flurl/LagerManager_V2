@@ -74,22 +74,37 @@ Vite proxies all `/api/*` requests to the Django backend.
 
 Uses `docker-compose.prod.yml` with Gunicorn, Nginx (HTTPS), and a built frontend bundle.
 
-### Build frontend
+### First-time setup
 
 ```bash
-cd lager-frontend
-npm run build
-```
-
-### Start production stack
-
-```bash
+npm --prefix lager-frontend ci
+npm --prefix lager-frontend run build
 docker compose -f docker-compose.prod.yml up -d
 ```
 
 Migrations and `collectstatic` run automatically on backend startup.  
 Nginx serves the frontend bundle and static files, and terminates TLS.  
 Place your certificates in `./certs/` (referenced in `nginx.conf`).
+
+### Deploying an update
+
+```bash
+./scripts/deploy.sh
+```
+
+Pulls the latest code, reinstalls frontend dependencies, rebuilds the bundle,
+then rebuilds and restarts the `backend` and `cron` containers. Both build from
+`./lagermanager`, so both have to be rebuilt — restarting only `backend` leaves
+the scheduled jobs running the previous code.
+
+**Use `npm ci`, never `npm install`, on the server.** `npm ci` installs strictly
+from `package-lock.json` and never writes to it; `npm install` rewrites the
+lockfile, and the resulting local modification makes the next `git pull` fail.
+If that has already happened, discard the change once:
+
+```bash
+git checkout -- lager-frontend/package-lock.json
+```
 
 ---
 
