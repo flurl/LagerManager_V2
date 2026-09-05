@@ -31,7 +31,7 @@
     <tr>
       <td>{{ line.position }}</td>
       <td>{{ line.description|render_description }}</td>
-      <td class="num">{{ line.quantity|floatformat:"-4" }}</td>
+      <td class="num">{{ line.quantity|trim_zeros }}</td>
       <td>{{ line.unit }}</td>
       <td class="num">{{ line.unit_price|floatformat:"2" }}</td>
       <td class="num">{% if line.tax_rate %}{{ line.tax_rate.percent|floatformat:"-2" }} %{% else %}—{% endif %}</td>
