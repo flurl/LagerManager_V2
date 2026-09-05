@@ -51,4 +51,17 @@ docker compose -f "$COMPOSE_FILE" build backend cron
 echo "  Restarting backend and cron..."
 docker compose -f "$COMPOSE_FILE" up -d backend cron
 
+# ---------------------------------------------------------------------------
+# 4. nginx
+# ---------------------------------------------------------------------------
+# `up -d backend` recreates the backend container, giving it a new IP. nginx
+# now re-resolves the upstream per request (see the resolver in nginx.conf), so
+# it recovers on its own, but restart it anyway: it costs a moment of downtime,
+# picks up nginx.conf changes, and keeps the deploy working even if the
+# resolver setup ever stops applying. A plain `up -d nginx` would not do it —
+# compose leaves the container alone when neither its image nor its service
+# definition changed.
+echo "  Restarting nginx..."
+docker compose -f "$COMPOSE_FILE" restart nginx
+
 echo "[$(date)] Deploy complete."

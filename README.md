@@ -93,9 +93,18 @@ Place your certificates in `./certs/` (referenced in `nginx.conf`).
 ```
 
 Pulls the latest code, reinstalls frontend dependencies, rebuilds the bundle,
-then rebuilds and restarts the `backend` and `cron` containers. Both build from
-`./lagermanager`, so both have to be rebuilt — restarting only `backend` leaves
-the scheduled jobs running the previous code.
+then rebuilds and restarts the `backend` and `cron` containers, and finally
+restarts `nginx`. Both backend and cron build from `./lagermanager`, so both
+have to be rebuilt — restarting only `backend` leaves the scheduled jobs
+running the previous code.
+
+**Why nginx is restarted too.** Recreating the backend container gives it a new
+IP. A bare hostname in `proxy_pass` is resolved once when nginx loads its
+config and cached for the life of the process, so nginx kept proxying to the
+old address and every `/api/` request returned 502 while the SPA itself still
+loaded fine. `nginx.conf` now resolves the upstream per request (see the
+`resolver` there), which fixes it on its own; the restart in the deploy is a
+second line of defence and also picks up `nginx.conf` edits.
 
 **Use `npm ci`, never `npm install`, on the server.** `npm ci` installs strictly
 from `package-lock.json` and never writes to it; `npm install` rewrites the
