@@ -132,6 +132,24 @@
   </v-dialog>
 
   <v-main>
+    <!-- Nags until the page is reloaded onto the deployed version -->
+    <v-alert v-if="versionOutdated && !versionSnoozed" type="warning" variant="tonal" density="compact"
+      icon="mdi-update" class="ma-2" border="start">
+      <div class="text-subtitle-2">Neue Version verfügbar</div>
+      <div class="text-body-2">
+        Diese Seite läuft noch auf Frontend V2.{{ frontendCommitCount }} ({{ frontendCommitHash }}),
+        am Server liegt bereits {{ versionBackendHash }}.
+        Bitte laden Sie die Seite so bald wie möglich neu.
+        Es kann sein, dass dafür mehrere Neuladevorgänge nötig sind.
+      </div>
+      <template #append>
+        <v-btn color="warning" variant="flat" size="small" class="mr-2" @click="reloadApp()">
+          Jetzt neu laden
+        </v-btn>
+        <v-btn variant="text" size="small" @click="snoozeVersionNag()">Später</v-btn>
+      </template>
+    </v-alert>
+
     <v-container fluid>
       <router-view />
     </v-container>
@@ -144,6 +162,7 @@ import { usePeriodStore } from '../stores/period'
 import { useAuthStore } from '../stores/auth'
 import NumberInput from './NumberInput.vue'
 import NotificationBell from './NotificationBell.vue'
+import { useVersionCheck } from '../composables/useVersionCheck'
 import api from '../api'
 
 const periodStore = usePeriodStore()
@@ -326,6 +345,16 @@ async function savePrefs() {
 const frontendCommitCount = __APP_COMMIT_COUNT__
 const frontendCommitHash = __APP_COMMIT_HASH__
 /* eslint-enable no-undef */
+
+// Version check: warns when the deployed backend is newer than this bundle
+const {
+  outdated: versionOutdated,
+  snoozed: versionSnoozed,
+  backendHash: versionBackendHash,
+  reload: reloadApp,
+  snooze: snoozeVersionNag,
+} = useVersionCheck(frontendCommitHash)
+
 const aboutDialog = ref(false)
 const aboutLoading = ref(false)
 const aboutVersion = ref('')
