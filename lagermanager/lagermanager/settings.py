@@ -61,7 +61,8 @@ MIDDLEWARE: list[str] = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'auditlog.middleware.AuditlogMiddleware',
+    # Subclass of auditlog's own middleware; resolves the actor for JWT requests too.
+    'core.middleware.DRFAuditlogMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
