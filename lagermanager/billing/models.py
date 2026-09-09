@@ -99,6 +99,28 @@ class NumberSequence(models.Model):
         return f'{self.doc_type} {self.year}/{self.month:02d}: {self.last_value}'
 
 
+class ContinuousNumberSequence(models.Model):
+    """
+    Per-document-type counter that never resets.
+
+    Its value is appended to the monthly number as a suffix (e.g. -00001) so that
+    documents carry a gapless, strictly increasing number across months and years.
+    allocate_number() in services/numbering.py is the only code that should mutate
+    last_value.
+    """
+
+    doc_type = models.CharField(
+        max_length=20, choices=NumberSequence.DocType.choices, unique=True)
+    last_value = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Fortlaufende Nummernfolge'
+        verbose_name_plural = 'Fortlaufende Nummernfolgen'
+
+    def __str__(self) -> str:
+        return f'{self.doc_type} (fortlaufend): {self.last_value}'
+
+
 # ---------------------------------------------------------------------------
 # Offer
 # ---------------------------------------------------------------------------

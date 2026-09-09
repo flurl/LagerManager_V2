@@ -1,29 +1,37 @@
 """
 Gapless document number allocation for offers, invoices and reminders.
 
-Format: {PREFIX}{YY}{MM}{NN}
+Format: {PREFIX}{YY}{MM}{NN}[-{CCCCC}]
   PREFIX  — per-document-type prefix from Constance (e.g. AN / RE / MA)
   YY      — 2-digit year  (e.g. 26 for 2026)
   MM      — 2-digit month (e.g. 06 for June)
   NN      — sequential counter, zero-padded to ≥2 digits, widening past 99 automatically
+  CCCCC   — continuous counter that never resets, zero-padded to ≥5 digits, widening
+            past 99999 automatically.  Only appended for the document types listed in
+            _CONTINUOUS_DOC_TYPES (currently invoices).
 
-The counter resets every month (keyed on doc_type + year + month).
+The NN counter resets every month (keyed on doc_type + year + month); the CCCCC counter
+runs continuously per doc_type and starts at 1.
 Numbers are only allocated on document *issue*; drafts never consume a number.
 
-Example: 3rd offer issued in June 2026 with prefix AN → AN260603
+Examples: 3rd offer issued in June 2026 with prefix AN     → AN260603
+          3rd invoice ever, issued in June 2026, prefix PG → PG260603-00003
 """
 import datetime
 
 from constance import config
 from django.db import transaction
 
-from billing.models import NumberSequence
+from billing.models import ContinuousNumberSequence, NumberSequence
 
 _PREFIX_ATTR: dict[str, str] = {
     NumberSequence.DocType.OFFER: 'OFFER_NUMBER_PREFIX',
     NumberSequence.DocType.INVOICE: 'INVOICE_NUMBER_PREFIX',
     NumberSequence.DocType.REMINDER: 'REMINDER_NUMBER_PREFIX',
 }
+
+# Document types that carry the never-resetting continuous suffix.
+_CONTINUOUS_DOC_TYPES: frozenset[str] = frozenset({NumberSequence.DocType.INVOICE})
 
 
 def allocate_article_number() -> str:
@@ -79,6 +87,18 @@ def allocate_number(doc_type: str, document_date: datetime.date) -> str:
         seq.save(update_fields=['last_value'])
         n = seq.last_value
 
+        suffix = ''
+        if doc_type in _CONTINUOUS_DOC_TYPES:
+            cont, _ = (
+                ContinuousNumberSequence.objects
+                .select_for_update()
+                .get_or_create(doc_type=doc_type, defaults={'last_value': 0})
+            )
+            cont.last_value += 1
+            cont.save(update_fields=['last_value'])
+            # Zero-pad to at least 5 digits; widens automatically for values ≥ 100000
+            suffix = f'-{cont.last_value:05d}'
+
     # Zero-pad to at least 2 digits; widens automatically for values ≥ 100
     nn = f'{n:02d}'
-    return f'{prefix}{year:02d}{month:02d}{nn}'
+    return f'{prefix}{year:02d}{month:02d}{nn}{suffix}'
