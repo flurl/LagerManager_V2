@@ -595,7 +595,7 @@ class Payment(models.Model):
         verbose_name_plural = 'Zahlungen'
         constraints = [
             models.CheckConstraint(
-                check=models.Q(amount__gt=0),
+                condition=models.Q(amount__gt=0),
                 name='payment_amount_positive',
             ),
         ]
