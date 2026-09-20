@@ -22,6 +22,18 @@ cd lager-frontend && npm run dev
 
 Vite proxies `/api/*` to the Django backend on `:8000`.
 
+### Per-branch databases
+
+Branches whose migrations change the schema get their own database inside the
+same `db` container, selected by `DB_NAME` in `.env` (substituted into
+`DATABASE_URL` in `docker-compose.yml`). Managed with `scripts/branch-db.sh`
+(`status` / `create` / `switch` / `drop` / `list`), and switched automatically
+on checkout by the `post-checkout` hook from `scripts/hooks/`
+(`./scripts/branch-db.sh install-hook`). `master`/`main` use the base database
+`lagermanager`. Before running `migrate` on a feature branch, check that the
+active database is the branch's own (`./scripts/branch-db.sh status`) — see the
+README for details.
+
 ### Backend (without Docker)
 ```bash
 cd lagermanager

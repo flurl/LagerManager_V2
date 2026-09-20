@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# git post-checkout hook: point the dev stack at the database belonging to the
+# branch that was just checked out (see scripts/branch-db.sh).
+#
+# Install with:  ./scripts/branch-db.sh install-hook
+#
+# Arguments: $1 previous HEAD, $2 new HEAD, $3 1 for a branch checkout / 0 for
+# a file checkout. Never fails the checkout — if Docker is down or the branch
+# has no database yet, it prints a hint and gets out of the way.
+[ "${3:-0}" = "1" ] || exit 0
+
+toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -x "$toplevel/scripts/branch-db.sh" ] || exit 0
+
+"$toplevel/scripts/branch-db.sh" sync || true
+exit 0

@@ -1,3 +1,6 @@
+# Development stack. DB_NAME selects the database the app talks to and defaults
+# to `lagermanager`; scripts/branch-db.sh sets it in .env to give each feature
+# branch its own database (see README, "Per-branch databases").
 services:
   db:
     image: postgres:16-alpine
@@ -25,7 +28,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/lagermanager
+      DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/${DB_NAME:-lagermanager}
       DJANGO_DEBUG: "True"
       DJANGO_SECRET_KEY: dev-secret-key-change-in-production
       CORS_ALLOWED_ORIGINS: http://localhost:5173
@@ -37,7 +40,7 @@ services:
     build: ./lagermanager
     command: /usr/local/bin/supercronic /app/crontab
     environment:
-      DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/lagermanager
+      DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/${DB_NAME:-lagermanager}
       DJANGO_DEBUG: "True"
       DJANGO_SECRET_KEY: dev-secret-key-change-in-production
       TZ: Europe/Vienna
