@@ -30,6 +30,14 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+To (re)create the local `.venv` — e.g. after a system Python upgrade strands it:
+```bash
+rm -rf .venv && python3 -m venv .venv && .venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r lagermanager/requirements.txt -r lagermanager/requirements-dev.txt
+```
+`requirements-dev.txt` holds the pinned lint/type-check tooling (mypy, pyright, ruff);
+it is deliberately *not* copied into the Docker image.
+
 ### Frontend
 ```bash
 cd lager-frontend

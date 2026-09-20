@@ -1,18 +1,27 @@
+# Runtime dependencies, pinned exactly.
+#
+# This is a deployed application, not a library: the versions below are the ones
+# the test suite ran green against, so a rebuild reproduces the artefact that was
+# tested.  Loose `>=` pins previously let an unrelated change pull in a WeasyPrint
+# major bump on rebuild.  Upgrade deliberately, then re-run the tests.
+#
+# Dev-only tooling (mypy, pyright, ruff) lives in requirements-dev.txt.
+
 Django==5.2
-gunicorn>=22.0
+gunicorn==26.2.0
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
 django-cors-headers==4.4.0
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.13
 dj-database-url==2.2.0
 pymssql==2.3.1
-pymysql>=1.1
-types-PyMySQL
+pymysql==1.2.3
+types-PyMySQL==1.2.0.20260807
 python-decouple==3.8
-django-constance
-django-stubs
-djangorestframework-stubs
-Pillow>=10.0
-PyMuPDF>=1.24
-weasyprint>=62.0
-django-auditlog>=3.0
+django-constance==4.3.5
+django-stubs==6.1.1
+djangorestframework-stubs==3.18.1
+Pillow==12.3.0
+PyMuPDF==1.28.2
+weasyprint==70.0
+django-auditlog==3.4.1

@@ -1,0 +1,5 @@
+# Dev-only tooling (linting / type checking). Not installed in the Docker image.
+#   pip install -r requirements.txt -r requirements-dev.txt
+mypy==1.19.1
+pyright==1.1.408
+ruff==0.15.7
