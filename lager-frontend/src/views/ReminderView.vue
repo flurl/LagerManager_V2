@@ -41,6 +41,7 @@
                 Stufe {{ item.level }}
               </v-chip>
             </template>
+            <template v-else-if="col.key === 'cumulative_fee'">{{ formatCurrency(item.cumulative_fee) }}</template>
             <template v-else-if="col.key === 'open_amount'">{{ formatCurrency(item.open_amount) }}</template>
             <template v-else-if="col.key === 'actions'">
               <v-tooltip text="Vorschau"><template #activator="{ props }">
@@ -118,9 +119,11 @@
       <v-card>
         <v-card-title>{{ form.id ? 'Mahnung bearbeiten' : 'Neue Mahnung' }}</v-card-title>
         <v-card-text>
-          <v-autocomplete v-model="form.invoice" :items="invoices"
-            :item-title="inv => (inv.number || '#' + inv.id) + ' — ' + (inv.address_display || '')"
-            item-value="id" label="Rechnung *" />
+          <v-autocomplete v-model="form.invoice" :items="selectableInvoices"
+            :item-title="inv => (inv.number || '#' + inv.id) + ' — ' + (inv.customer_display || inv.address_display || '')"
+            item-value="id" label="Rechnung *"
+            :disabled="!!form.id"
+            :hint="form.id ? '' : 'Nur offene Rechnungen können gemahnt werden.'" persistent-hint />
           <v-row dense>
             <v-col cols="4">
               <v-select v-model="form.level" :items="reminderLevels" label="Mahnstufe" />
@@ -134,7 +137,14 @@
                 :rules="[v => !!v || 'Pflichtfeld', v => !form.reminder_date || v >= form.reminder_date || 'Darf nicht vor dem Mahnungsdatum liegen']" />
             </v-col>
           </v-row>
-          <NumberInput v-model="form.fee" label="Mahngebühr (€)" class="mt-2" />
+          <NumberInput
+            v-model="form.fee"
+            label="Mahngebühr (€)"
+            class="mt-2"
+            :disabled="!isDraftForm"
+            :hint="isDraftForm ? '' : 'Nach dem Ausstellen ist die Gebühr auf dem Kundenkonto gebucht und kann nicht mehr geändert werden.'"
+            persistent-hint
+          />
           <v-textarea v-model="form.notes" label="Anmerkungen" rows="2" auto-grow class="mt-2" />
         </v-card-text>
         <v-card-actions>
@@ -186,6 +196,14 @@ const highlightColor = computed(() => hexToRgba(primaryColor.value, 0.12))
 
 const items = ref([])
 const invoices = ref([])
+
+// Only an invoice with something still owed can be dunned; the API refuses the
+// rest. An already-linked invoice stays listed so editing a draft whose invoice
+// was settled meanwhile does not blank the field.
+const OPEN_INVOICE_STATUSES = ['issued', 'sent', 'partially_paid']
+const selectableInvoices = computed(() => invoices.value.filter(
+  inv => OPEN_INVOICE_STATUSES.includes(inv.status) || inv.id === form.value.invoice,
+))
 const reminderFeeDefault = ref(0)
 const reminderMaxLevel = ref(3)
 const reminderLevels = computed(() => Array.from({ length: reminderMaxLevel.value }, (_, i) => i + 1))
@@ -210,6 +228,10 @@ const previewDialog = ref(false)
 const previewPath = ref(null)
 const previewTitle = ref('')
 const form = ref({})
+
+// The fee is booked on the customer's account when the reminder is issued, so
+// the API only accepts fee changes while it is still a draft.
+const isDraftForm = computed(() => !form.value.id || form.value.status === 'draft')
 const historyDialog = ref(false)
 const historyItem = ref(null)
 const sendDialog = ref(false)
@@ -249,6 +271,7 @@ const headers = [
   { title: 'Datum', key: 'reminder_date' },
   { title: 'Fällig', key: 'due_date' },
   { title: 'Status', key: 'status' },
+  { title: 'Gebühren (gesamt)', key: 'cumulative_fee', align: 'end' },
   { title: 'Offen', key: 'open_amount', align: 'end' },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
@@ -395,11 +418,19 @@ function formatCurrency(val) {
 
 onMounted(async () => {
   await fetchItems()
-  const openId = route.query.openId
+  applyQueryParams()
+})
+
+// ?q= prefills the search box (e.g. arriving from the Kundenkonto, which links
+// by document number); ?openId= opens one document straight away.
+function applyQueryParams() {
+  const { q, openId } = route.query
+  if (!q && !openId) return
+  if (q) filterText.value = String(q)
   if (openId) {
     const reminder = items.value.find(i => String(i.id) === String(openId))
     if (reminder) openEdit(reminder)
-    router.replace({ path: '/reminders' })
   }
-})
+  router.replace({ path: '/reminders' })
+}
 </script>

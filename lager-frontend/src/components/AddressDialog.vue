@@ -28,6 +28,22 @@
       <v-row dense>
         <v-col cols="12"><v-textarea v-model="form.anmerkung" label="Anmerkung" rows="2" auto-grow /></v-col>
       </v-row>
+      <v-row dense>
+        <v-col cols="12">
+          <v-autocomplete
+            v-model="form.customer"
+            :items="customers"
+            :loading="loadingCustomers"
+            item-title="display_name"
+            item-value="id"
+            label="Kunde"
+            clearable
+            :hint="form.customer ? '' : 'Ohne Kunden wird beim Speichern automatisch einer angelegt.'"
+            persistent-hint
+            @update:search="onCustomerSearch"
+          />
+        </v-col>
+      </v-row>
     </v-card-text>
     <v-card-actions>
       <v-spacer />
@@ -38,8 +54,14 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import api from '../api'
+
+const EMPTY = {
+  anrede: '', vorname: '', nachname: '', firma: '', abteilung: '',
+  strasse: '', plz: '', ort: '', telefon: '', email: '', uid: '', anmerkung: '',
+  customer: null,
+}
 
 const props = defineProps({
   address: { type: Object, default: null },
@@ -47,14 +69,42 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'close'])
 
 const saving = ref(false)
-const form = ref({})
+const form = ref({ ...EMPTY })
+const customers = ref([])
+const loadingCustomers = ref(false)
+let customerSearchTimeout = null
 
+// Merged onto EMPTY so a partial seed (e.g. { customer: 7 } from the customer
+// editor) still yields a complete form.
 watch(() => props.address, (a) => {
-  form.value = a ? { ...a } : {
-    anrede: '', vorname: '', nachname: '', firma: '', abteilung: '',
-    strasse: '', plz: '', ort: '', telefon: '', email: '', uid: '', anmerkung: '',
-  }
+  form.value = { ...EMPTY, ...(a || {}) }
+  ensureCustomerLoaded()
 }, { immediate: true })
+
+async function fetchCustomers(q) {
+  loadingCustomers.value = true
+  try {
+    const res = await api.get('/customers/', { params: q ? { q } : {} })
+    customers.value = res.data.results || res.data
+  } finally {
+    loadingCustomers.value = false
+  }
+}
+
+function onCustomerSearch(q) {
+  clearTimeout(customerSearchTimeout)
+  customerSearchTimeout = setTimeout(() => fetchCustomers(q || undefined), 300)
+}
+
+async function ensureCustomerLoaded() {
+  // The preselected customer may not be in the first page of results.
+  const id = form.value.customer
+  if (!id || customers.value.some((c) => c.id === id)) return
+  try {
+    const res = await api.get(`/customers/${id}/`)
+    customers.value = [res.data, ...customers.value]
+  } catch { /* the autocomplete just shows the raw id */ }
+}
 
 async function save() {
   saving.value = true
@@ -67,4 +117,6 @@ async function save() {
     saving.value = false
   }
 }
+
+onMounted(() => fetchCustomers())
 </script>

@@ -20,11 +20,13 @@ class Command(BaseCommand):
     def handle(self, *args: object, **options: object) -> None:
         today: datetime.date = _get_today()
 
+        # OPEN_STATUSES rather than just issued/sent: a partially paid invoice
+        # still has an open amount and must keep being dunned.
         overdue: list[Invoice] = list(
             Invoice.objects.filter(
-                status__in=[Invoice.Status.ISSUED, Invoice.Status.SENT],
+                status__in=Invoice.OPEN_STATUSES,
                 due_date__lt=today,
-            ).select_related('address').order_by('due_date')
+            ).select_related('address', 'customer').order_by('due_date')
         )
 
         if not overdue:

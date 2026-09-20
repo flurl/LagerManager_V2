@@ -4,13 +4,15 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from core.models import Address
+from core.services.customers import ensure_customer_for_address
 from deliveries.models import TaxRate
 from django.contrib.auth.models import User
-from django.test import override_settings
+from django.test import TestCase, override_settings
+from emails.models import EmailLog
 from rest_framework.test import APITestCase
 
-from billing.models import Invoice, InvoiceLine, Offer, OfferLine, Reminder
-from emails.models import EmailLog
+from billing.models import Invoice, InvoiceLine, Offer, Reminder
+from billing.services.render import build_email_defaults
 
 
 def _create_user() -> User:
@@ -23,7 +25,10 @@ def _make_address(**kwargs: object) -> Address:
         'email': 'max@mustermann.at',
     }
     defaults.update(kwargs)
-    return Address.objects.create(**defaults)
+    address = Address.objects.create(**defaults)
+    # Mirrors the API and the WZ sync: every address has a customer.
+    ensure_customer_for_address(address)
+    return address
 
 
 def _make_tax() -> TaxRate:
@@ -32,6 +37,7 @@ def _make_tax() -> TaxRate:
 
 def _make_offer(address: Address, status: str = 'issued', number: str = 'AN2601-001') -> Offer:
     offer = Offer.objects.create(
+        customer=address.customer,
         address=address,
         document_date=datetime.date(2026, 1, 15),
         status=status,
@@ -42,6 +48,7 @@ def _make_offer(address: Address, status: str = 'issued', number: str = 'AN2601-
 
 def _make_invoice(address: Address, status: str = 'issued') -> Invoice:
     inv = Invoice.objects.create(
+        customer=address.customer,
         address=address,
         document_date=datetime.date(2026, 1, 15),
         due_date=datetime.date(2026, 1, 29),
@@ -205,3 +212,106 @@ class SendEmailActionTests(APITestCase):
         # Reminder has no SENT status — should remain issued
         self.assertEqual(reminder.status, 'issued')
         self.assertEqual(EmailLog.objects.count(), 1)
+
+
+class NamelessAddressLabelTests(TestCase):
+    """A nameless address must not leak "Adresse #<pk>" to the customer."""
+
+    def test_email_defaults_use_the_postal_address_as_the_name(self) -> None:
+        from billing.services.render import build_email_defaults
+
+        address = Address.objects.create(
+            strasse='Papiermühlgasse 18/2/4', plz='8020', ort='Graz',
+            email='kunde@example.com')
+        ensure_customer_for_address(address)
+        invoice = _make_invoice(address)
+
+        defaults = build_email_defaults(invoice)
+        blob = f'{defaults["subject"]} {defaults["body"]}'
+        self.assertNotIn(f'Adresse #{address.pk}', blob)
+
+    def test_invoice_list_shows_the_postal_address(self) -> None:
+        from billing.serializers import InvoiceListSerializer
+
+        address = Address.objects.create(
+            strasse='Papiermühlgasse 18/2/4', plz='8020', ort='Graz')
+        ensure_customer_for_address(address)
+        invoice = _make_invoice(address)
+
+        data = InvoiceListSerializer(invoice).data
+        self.assertEqual(data['address_display'], 'Papiermühlgasse 18/2/4, 8020 Graz')
+
+
+class RecipientResolutionTests(TestCase):
+    """Address first, customer's billing e-mail as the fallback."""
+
+    def _address(self, **kwargs: object) -> Address:
+        defaults: dict[str, object] = {'vorname': 'Max', 'nachname': 'Mustermann'}
+        defaults.update(kwargs)
+        address = Address.objects.create(**defaults)
+        ensure_customer_for_address(address)
+        return address
+
+    def test_the_documents_address_wins(self) -> None:
+        address = self._address(email='addr@example.com')
+        customer = address.customer
+        customer.email = 'kunde@example.com'
+        customer.save(update_fields=['email'])
+
+        invoice = _make_invoice(address)
+        self.assertEqual(
+            build_email_defaults(invoice)['recipient'], 'addr@example.com')
+
+    def test_falls_back_to_the_customers_own_email(self) -> None:
+        address = self._address()  # no e-mail on the address
+        customer = address.customer
+        customer.email = 'kunde@example.com'
+        customer.save(update_fields=['email'])
+
+        invoice = _make_invoice(address)
+        self.assertEqual(
+            build_email_defaults(invoice)['recipient'], 'kunde@example.com')
+
+    def test_falls_back_to_the_customers_default_address(self) -> None:
+        """A second address without an e-mail borrows the default address's."""
+        default = self._address(email='default@example.com')
+        customer = default.customer
+        delivery = Address.objects.create(
+            customer=customer, strasse='Lieferstr. 1', plz='1010', ort='Wien')
+
+        invoice = _make_invoice(delivery)
+        self.assertEqual(
+            build_email_defaults(invoice)['recipient'], 'default@example.com')
+
+    def test_empty_when_nothing_is_on_file(self) -> None:
+        address = self._address()
+        invoice = _make_invoice(address)
+        self.assertEqual(build_email_defaults(invoice)['recipient'], '')
+
+    def test_a_reminder_uses_its_invoices_address(self) -> None:
+        address = self._address(email='addr@example.com')
+        invoice = _make_invoice(address)
+        reminder = Reminder.objects.create(
+            invoice=invoice, level=1, number='MA1',
+            status=Reminder.Status.ISSUED,
+            reminder_date=datetime.date(2026, 7, 1),
+            due_date=datetime.date(2026, 7, 15),
+        )
+        self.assertEqual(
+            build_email_defaults(reminder)['recipient'], 'addr@example.com')
+
+    def test_a_reminder_falls_back_through_the_customer_too(self) -> None:
+        address = self._address()
+        customer = address.customer
+        customer.email = 'kunde@example.com'
+        customer.save(update_fields=['email'])
+
+        invoice = _make_invoice(address)
+        reminder = Reminder.objects.create(
+            invoice=invoice, level=1, number='MA1',
+            status=Reminder.Status.ISSUED,
+            reminder_date=datetime.date(2026, 7, 1),
+            due_date=datetime.date(2026, 7, 15),
+        )
+        self.assertEqual(
+            build_email_defaults(reminder)['recipient'], 'kunde@example.com')

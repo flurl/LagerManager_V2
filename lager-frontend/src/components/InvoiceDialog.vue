@@ -13,22 +13,31 @@
     <v-card-text>
       <v-row dense>
         <v-col cols="6">
+          <v-autocomplete v-model="form.customer" :items="customers" :item-title="c => c.display_name"
+            item-value="id" label="Kunde *" :rules="[v => !!v || 'Pflichtfeld']"
+            :disabled="!isDraft" />
+        </v-col>
+        <v-col cols="6">
+          <v-text-field v-model="form.service_date" label="Leistungsdatum" type="date" clearable
+            :disabled="!isDraft" />
+        </v-col>
+      </v-row>
+      <v-row dense>
+        <v-col cols="6">
           <div class="d-flex align-start gap-1">
-            <v-autocomplete v-model="form.address" :items="addresses" :item-title="a => a.display_name"
+            <v-autocomplete v-model="form.address" :items="customerAddresses" :item-title="addressTitle"
               item-value="id" label="Adresse *" :rules="[v => !!v || 'Pflichtfeld']" class="flex-grow-1"
-              :disabled="!isDraft" />
-            <v-tooltip v-if="isDraft" text="Neue Adresse erstellen">
+              :disabled="!isDraft || !form.customer"
+              :hint="form.customer ? '' : 'Zuerst einen Kunden wählen.'" persistent-hint />
+            <v-tooltip v-if="isDraft" text="Neue Adresse für diesen Kunden erstellen">
               <template #activator="{ props: tip }">
-                <v-btn v-bind="tip" icon size="small" variant="text" class="mt-2" @click="openNewAddress">
+                <v-btn v-bind="tip" icon size="small" variant="text" class="mt-2"
+                  :disabled="!form.customer" @click="openNewAddress">
                   <v-icon>mdi-plus-circle-outline</v-icon>
                 </v-btn>
               </template>
             </v-tooltip>
           </div>
-        </v-col>
-        <v-col cols="6">
-          <v-text-field v-model="form.service_date" label="Leistungsdatum" type="date" clearable
-            :disabled="!isDraft" />
         </v-col>
       </v-row>
 
@@ -282,6 +291,7 @@ import BillingArticleDialog from './BillingArticleDialog.vue'
 import WzImportDialog from './WzImportDialog.vue'
 import { useLineCalculations } from '../composables/useLineCalculations'
 import { extractErrorMessage } from '../utils/errorMessage'
+import { pickAddressForCustomer } from '../utils/documentAddress'
 
 const props = defineProps({
   invoice: { type: Object, default: null },
@@ -297,10 +307,12 @@ const isNew = computed(() => !props.invoice?.id)
 const isDraft = computed(() => isNew.value || props.invoice?.status === 'draft')
 const saving = ref(false)
 const addresses = ref([])
+const customers = ref([])
+const masterDataLoaded = ref(false)
 const billingArticles = ref([])
 const taxRates = ref([])
 
-const form = ref({ address: null, service_date: null, notes: '' })
+const form = ref({ customer: null, address: null, service_date: null, notes: '' })
 const lines = ref([])
 const addressDetailOpen = ref(false)
 const addressDialogOpen = ref(false)
@@ -330,22 +342,56 @@ const selectedAddress = computed(() => {
   return addresses.value.find(a => a.id === form.value.address) ?? null
 })
 
+// The document is sent to one of its customer's own addresses; the API rejects
+// any other pairing.
+const customerAddresses = computed(() => {
+  if (!form.value.customer) return []
+  return addresses.value.filter(a => a.customer === form.value.customer)
+})
+
+const selectedCustomer = computed(
+  () => customers.value.find(c => c.id === form.value.customer) ?? null)
+
+// The customer is already chosen here, so display_name is no help: it is the
+// same name on every address they have. postal_label adds the street, which is
+// what actually tells them apart.
+function addressTitle(addr) {
+  return addr.id === selectedCustomer.value?.default_address
+    ? `${addr.postal_label} (Standard)`
+    : addr.postal_label
+}
+
 const { lineNet, lineGross, totalNet, totalGross } = useLineCalculations(taxRates, lines)
 
 watch(() => form.value.address, () => {
   addressDetailOpen.value = false
 })
 
+watch(() => form.value.customer, (customerId) => {
+  // Master data drives the decision, so stay out of the way until it is loaded.
+  // This watcher also fires when an existing document is loaded into the form,
+  // and against an empty address list every address looks foreign — which used
+  // to silently clear the address the document was actually sent to.
+  if (!masterDataLoaded.value) return
+  form.value.address = pickAddressForCustomer({
+    customerId,
+    currentAddressId: form.value.address,
+    addresses: addresses.value,
+    defaultAddressId: selectedCustomer.value?.default_address ?? null,
+  })
+})
+
 watch(() => [props.invoice, props.prefill], ([inv, prefill]) => {
   if (inv) {
     form.value = {
+      customer: inv.customer,
       address: inv.address,
       service_date: inv.service_date || null,
       notes: inv.notes || '',
     }
     loadLines(inv.id)
   } else if (prefill) {
-    form.value = { address: null, service_date: null, notes: prefill.notes || '' }
+    form.value = { customer: null, address: null, service_date: null, notes: prefill.notes || '' }
     lines.value = (prefill.lines || []).map((l, idx) => ({
       billing_article: l.billing_article || null,
       description: l.description || '',
@@ -356,7 +402,7 @@ watch(() => [props.invoice, props.prefill], ([inv, prefill]) => {
       position: idx + 1,
     }))
   } else {
-    form.value = { address: null, service_date: null, notes: '' }
+    form.value = { customer: null, address: null, service_date: null, notes: '' }
     lines.value = []
   }
 }, { immediate: true })
@@ -380,7 +426,8 @@ async function loadLines(invoiceId) {
 }
 
 function openNewAddress() {
-  addressToEdit.value = null
+  // Seed the customer so the API does not auto-create a second one.
+  addressToEdit.value = { customer: form.value.customer }
   addressDialogOpen.value = true
 }
 
@@ -529,14 +576,17 @@ async function confirmSaveTemplate() {
 
 onMounted(async () => {
   try {
-    const [addrRes, artRes, taxRes] = await Promise.all([
+    const [addrRes, custRes, artRes, taxRes] = await Promise.all([
       api.get('/addresses/'),
+      api.get('/customers/'),
       api.get('/billing-articles/?active=true'),
       api.get('/tax-rates/'),
     ])
     addresses.value = (addrRes.data.results || addrRes.data).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
+    customers.value = (custRes.data.results || custRes.data).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
     billingArticles.value = artRes.data.results || artRes.data
     taxRates.value = taxRes.data.results || taxRes.data
+    masterDataLoaded.value = true
   } catch (err) {
     showError(err, 'Stammdaten konnten nicht geladen werden.')
   }

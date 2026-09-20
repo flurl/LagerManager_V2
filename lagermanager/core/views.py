@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -8,7 +9,9 @@ from constance import config as constance_cfg
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import Case, DecimalField, F, IntegerField, Q, Sum, Value, When
+from django.db.models.functions import Coalesce
 from django.db.models.query import QuerySet
 from pos_import.models import ArticleMeta
 from rest_framework import status, viewsets
@@ -20,10 +23,11 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
-from .models import Address, Department, Location, Period, UserPreferences
+from .models import Address, Customer, Department, Location, Period, UserPreferences
 from .permissions import DjangoModelPermissionsWithView, require_perm
 from .serializers import (
     AddressSerializer,
+    CustomerSerializer,
     DepartmentSerializer,
     LocationSerializer,
     PeriodSerializer,
@@ -262,7 +266,7 @@ class AddressViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Address]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
-        qs = Address.objects.all()
+        qs = Address.objects.select_related('customer')
         q: str | None = self.request.query_params.get('q')
         if q:
             qs = qs.filter(
@@ -271,7 +275,180 @@ class AddressViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Address]):
                 | Q(firma__icontains=q)
                 | Q(email__icontains=q)
             )
+        customer_id: str | None = self.request.query_params.get('customer_id')
+        if customer_id:
+            try:
+                qs = qs.filter(customer_id=int(customer_id))
+            except ValueError:
+                pass
+        unassigned: str | None = self.request.query_params.get('unassigned')
+        if unassigned is not None and unassigned.lower() in ('1', 'true', 'yes'):
+            qs = qs.filter(customer__isnull=True)
         return qs
+
+    def perform_create(self, serializer: BaseSerializer[Address]) -> None:
+        """Every address belongs to a customer.
+
+        When none is supplied, create one 1:1 from the address itself — the same
+        guarantee the Wiffzack sync gives for imported addresses — so a balance
+        can always be kept for whoever the document is billed to.
+        """
+        from .services.customers import ensure_customer_for_address
+
+        with transaction.atomic():
+            address: Address = serializer.save()
+            ensure_customer_for_address(address)
+
+
+class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
+    """Kunden — the party a document is billed to and the balance is kept for."""
+
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+    permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
+
+    def get_queryset(self) -> Any:
+        qs = (
+            Customer.objects
+            .select_related('default_address')
+            .prefetch_related('addresses')
+            .annotate(
+                balance_sum=Coalesce(
+                    Sum('ledger_entries__amount'),
+                    Decimal('0.00'),
+                    output_field=DecimalField(max_digits=18, decimal_places=2),
+                ),
+            )
+        )
+        q: str | None = self.request.query_params.get('q')
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(customer_number__icontains=q)
+                | Q(email__icontains=q)
+                | Q(addresses__email__icontains=q)
+            ).distinct()
+        active: str | None = self.request.query_params.get('active')
+        if active is not None:
+            qs = qs.filter(is_active=active.lower() in ('1', 'true', 'yes'))
+        return qs
+
+    def perform_create(self, serializer: BaseSerializer[Customer]) -> None:
+        from .services.numbering import allocate_customer_number
+        with transaction.atomic():
+            serializer.save(customer_number=allocate_customer_number())
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Refuse to delete a customer that documents or money still point at.
+
+        The FKs are PROTECT, so without this the ProtectedError would surface as
+        a 500 instead of a message the user can act on.
+        """
+        customer: Customer = self.get_object()
+        blockers: list[str] = []
+        if customer.invoices.exists():
+            blockers.append('Rechnungen')
+        if customer.offers.exists():
+            blockers.append('Angebote')
+        if customer.payments.exists():
+            blockers.append('Zahlungen')
+        if customer.ledger_entries.exists():
+            blockers.append('Kontobewegungen')
+        if blockers:
+            return Response(
+                {'detail': 'Kunde kann nicht gelöscht werden — es gibt noch '
+                           f'{", ".join(blockers)}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['get'], url_path='balance')
+    def balance(self, request: Request, pk: str | None = None) -> Response:
+        # Lazy import: core must not depend on billing at module level.
+        from billing.services.ledger import available_credit, customer_balance
+        customer: Customer = self.get_object()
+        return Response({
+            'balance': str(customer_balance(customer)),
+            'available_credit': str(available_credit(customer)),
+        })
+
+    @action(detail=True, methods=['get'], url_path='ledger')
+    def ledger(self, request: Request, pk: str | None = None) -> Response:
+        """Every movement on this customer's account, with a running balance.
+
+        The acting user comes from the audit log's CREATE entry for each row, so
+        the dialog can show who booked what without duplicating the actor on the
+        ledger model itself.
+        """
+        from billing.models import CustomerLedgerEntry
+
+        customer: Customer = self.get_object()
+        # Ordered by content rather than by insertion: entry_date, then the
+        # invoice the movement belongs to, then what kind of movement it is.
+        # Grouping by invoice number keeps a Storno directly under the invoice
+        # it reverses, and the type rank keeps a charge above the payment that
+        # settles it on the same day.  entry_date is only a date, so insertion
+        # order carries no intra-day truth worth preserving — and the backfill
+        # wrote historic rows newest-first, so pk order is actively misleading.
+        entries = (
+            CustomerLedgerEntry.objects
+            .filter(customer=customer)
+            .select_related('invoice', 'reminder')
+            .annotate(type_rank=Case(
+                When(entry_type=CustomerLedgerEntry.EntryType.INVOICE, then=Value(0)),
+                When(entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE, then=Value(1)),
+                When(entry_type=CustomerLedgerEntry.EntryType.PAYMENT, then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            ))
+            .order_by(
+                'entry_date',
+                F('invoice__number').asc(nulls_last=True),
+                'type_rank',
+                'pk',
+            )
+        )
+        actors = _create_actors(CustomerLedgerEntry, [e.pk for e in entries])
+
+        running = Decimal('0.00')
+        data: list[dict[str, Any]] = []
+        for e in entries:
+            running += e.amount
+            data.append({
+                'id': e.pk,
+                'entry_date': e.entry_date,
+                'entry_type': e.entry_type,
+                'entry_type_display': e.get_entry_type_display(),
+                'description': e.description,
+                'amount': str(e.amount),
+                'running_balance': str(running),
+                'invoice': e.invoice_id,
+                'invoice_number': e.invoice.number if e.invoice_id and e.invoice else None,
+                # A reminder-fee movement links to the Mahnung that charged it,
+                # not only to the invoice it was charged against.
+                'reminder': e.reminder_id,
+                'reminder_number': e.reminder.number if e.reminder_id and e.reminder else None,
+                'is_reversal': e.is_reversal,
+                'actor': actors.get(str(e.pk)),
+            })
+        return Response({'balance': str(running), 'entries': data})
+
+
+def _create_actors(model: type[Any], pks: list[int]) -> dict[str, str | None]:
+    """Map object_pk → actor name, taken from each object's CREATE log entry."""
+    if not pks:
+        return {}
+    ct = ContentType.objects.get_for_model(model)
+    entries = (
+        LogEntry.objects
+        .filter(content_type=ct, object_pk__in=[str(pk) for pk in pks],
+                action=LogEntry.Action.CREATE)
+        .select_related('actor')
+    )
+    return {
+        e.object_pk: (e.actor.get_full_name() or e.actor.username) if e.actor else None
+        for e in entries
+    }
 
 
 class WzAddressSyncView(APIView):

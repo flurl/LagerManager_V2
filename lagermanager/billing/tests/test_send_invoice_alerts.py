@@ -3,6 +3,7 @@ from io import StringIO
 from unittest.mock import patch
 
 from core.models import Address
+from core.services.customers import ensure_customer_for_address
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.test import TestCase
@@ -16,7 +17,10 @@ _TOMORROW = _TODAY + datetime.timedelta(days=1)
 
 
 def _make_address() -> Address:
-    return Address.objects.create(vorname='Max', nachname='Mustermann')
+    address = Address.objects.create(vorname='Max', nachname='Mustermann')
+    # Mirrors the API and the WZ sync: every address has a customer.
+    ensure_customer_for_address(address)
+    return address
 
 
 def _make_invoice(
@@ -31,6 +35,7 @@ def _make_invoice(
         status=status,
         due_date=due_date,
         document_date=due_date - datetime.timedelta(days=14),
+        customer=address.customer,
         address=address,
     )
 
@@ -71,6 +76,14 @@ class SendInvoiceAlertsCommandTest(TestCase):
         out = self._call()
         self.assertIn('No overdue invoices', out)
         self.assertEqual(Notification.objects.count(), 0)
+
+    def test_partially_paid_invoice_still_counted(self) -> None:
+        """It still has an open amount, so it must keep being dunned."""
+        _make_invoice(status=Invoice.Status.PARTIALLY_PAID, due_date=_YESTERDAY)
+        self._subscribe()
+
+        self._call()
+        self.assertEqual(Notification.objects.count(), 1)
 
     def test_cancelled_invoice_not_counted(self) -> None:
         _make_invoice(status=Invoice.Status.CANCELLED, due_date=_YESTERDAY)
@@ -173,3 +186,4 @@ class InvoiceAlertSubscriptionModelTest(TestCase):
         from django.db import IntegrityError
         with self.assertRaises(IntegrityError):
             InvoiceAlertSubscription.objects.create(user=user)
+

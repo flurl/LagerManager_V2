@@ -1,7 +1,8 @@
 """
 Billing app models — Offers, Invoices, Reminders, BillingArticles.
 
-Addresses live in core.Address (global, optionally synced from Wiffzack POS).
+Customers live in core.Customer; their addresses in core.Address (global,
+optionally synced from Wiffzack POS).
 
 Documents (Offer, Invoice, Reminder) are global — a continuous numbered ledger
 independent of the accounting-period selector.
@@ -140,6 +141,13 @@ class Offer(models.Model):
                               blank=True, db_index=True)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DRAFT)
+    # Who the document is for.  Nullable at DB level only so that the
+    # backfill_customers_and_ledger command can run on pre-existing rows; the
+    # serializers require it for every new document.
+    customer = models.ForeignKey(
+        'core.Customer', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='offers')
+    # Which of the customer's addresses the document is sent to.
     address = models.ForeignKey(
         'core.Address', on_delete=models.PROTECT, related_name='offers')
 
@@ -259,13 +267,25 @@ class Invoice(models.Model):
         DRAFT = 'draft', 'Entwurf'
         ISSUED = 'issued', 'Ausgestellt'
         SENT = 'sent', 'Versendet'
+        PARTIALLY_PAID = 'partially_paid', 'Teilweise bezahlt'
         PAID = 'paid', 'Bezahlt'
         CANCELLED = 'cancelled', 'Storniert'
+
+    #: Statuses of an issued, not-yet-settled invoice — the ones that accept
+    #: payments, reminders, sending and cancellation.
+    OPEN_STATUSES = (Status.ISSUED, Status.SENT, Status.PARTIALLY_PAID)
 
     number = models.CharField(max_length=50, null=True,
                               blank=True, db_index=True)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DRAFT)
+    # Who owes the money.  Nullable at DB level only so that the
+    # backfill_customers_and_ledger command can run on pre-existing rows; the
+    # serializers require it for every new document.
+    customer = models.ForeignKey(
+        'core.Customer', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='invoices')
+    # Which of the customer's addresses the invoice is sent to.
     address = models.ForeignKey(
         'core.Address', on_delete=models.PROTECT, related_name='invoices')
 
@@ -294,6 +314,9 @@ class Invoice(models.Model):
     service_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(default=datetime.date.today)
     notes = models.TextField(blank=True)
+    # Derived, never set by hand: the payment_date of the payment that settled
+    # the invoice.  services/ledger.recalculate_invoice_status() owns this field
+    # and clears it whenever the invoice reopens.
     paid_at = models.DateField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -302,6 +325,8 @@ class Invoice(models.Model):
     if TYPE_CHECKING:
         lines: RelatedManager["InvoiceLine"]
         reversed_by: RelatedManager["Invoice"]
+        reminders: RelatedManager["Reminder"]
+        payments: RelatedManager["Payment"]
 
     class Meta:
         ordering = ['-document_date', '-pk']
@@ -333,6 +358,42 @@ class Invoice(models.Model):
     @property
     def tax_total(self) -> Decimal:
         return self.gross_total - self.net_total
+
+    # -- Payment state -----------------------------------------------------
+
+    @property
+    def reminder_fee_total(self) -> Decimal:
+        """Fees of every reminder of this invoice that has been issued.
+
+        Draft reminders are excluded: their fee is not owed until the reminder
+        goes out.
+        """
+        return sum(
+            (r.fee for r in self.reminders.all()
+             if r.status != Reminder.Status.DRAFT),
+            Decimal('0.00'),
+        )
+
+    @property
+    def total_due(self) -> Decimal:
+        """Everything the customer owes on this invoice, reminder fees included."""
+        return self.gross_total + self.reminder_fee_total
+
+    @property
+    def paid_amount(self) -> Decimal:
+        """Sum of all payments booked against this invoice, credit included."""
+        return sum(
+            (p.amount for p in self.payments.all()),
+            Decimal('0.00'),
+        )
+
+    @property
+    def open_amount(self) -> Decimal:
+        return self.total_due - self.paid_amount
+
+    @property
+    def is_fully_paid(self) -> bool:
+        return self.total_due > 0 and self.open_amount <= 0
 
 
 # ---------------------------------------------------------------------------
@@ -450,9 +511,179 @@ class Reminder(models.Model):
         return self.number or f'Mahnung #{self.pk} (Entwurf)'
 
     @property
+    def cumulative_fee(self) -> Decimal:
+        """Fees of this reminder and every earlier level on the same invoice.
+
+        A level-2 reminder duns the level-1 fee as well, so the fees accumulate.
+        Other drafts are excluded — their fee is not owed yet — but this
+        reminder's own fee always counts, even while it is still a draft, so a
+        preview shows what the customer will be asked to pay.
+        """
+        return sum(
+            (r.fee for r in self.invoice.reminders.all()
+             if r.level <= self.level
+             and (r.pk == self.pk or r.status != Reminder.Status.DRAFT)),
+            Decimal('0.00'),
+        )
+
+    @property
     def open_amount(self) -> Decimal:
-        """Invoice gross total + reminder fee."""
-        return self.invoice.gross_total + self.fee
+        """What the customer still owes: invoice + cumulative fees − payments."""
+        return (
+            self.invoice.gross_total
+            + self.cumulative_fee
+            - self.invoice.paid_amount
+        )
+
+    @property
+    def payments(self) -> "list[Payment]":
+        """Payments booked against the dunned invoice, for the PDF template."""
+        return list(self.invoice.payments.all())
+
+
+# ---------------------------------------------------------------------------
+# Payment
+# ---------------------------------------------------------------------------
+
+class Payment(models.Model):
+    """
+    Zahlung — money received from a customer, or existing credit applied.
+
+    An invoice may have many payments; it counts as settled once their sum
+    reaches the invoice's total_due (gross total plus any issued reminder fees).
+
+    invoice=None marks a prepayment that is not tied to any document.  It simply
+    raises the customer's balance, and that positive balance is the credit which
+    can later be applied to an invoice.
+
+    method=CREDIT is special.  It records the *application* of existing credit to
+    an invoice rather than a fresh inflow of money: that money already entered
+    the ledger when the original prepayment was recorded, so a CREDIT payment
+    deliberately produces NO CustomerLedgerEntry.  Booking one would count the
+    same money twice.  See affects_balance and services/ledger.record_payment().
+    """
+
+    class Method(models.TextChoices):
+        TRANSFER = 'transfer', 'Überweisung'
+        CASH = 'cash', 'Bar'
+        CARD = 'card', 'Karte'
+        CREDIT = 'credit', 'Guthaben'
+        OTHER = 'other', 'Sonstiges'
+
+    customer = models.ForeignKey(
+        'core.Customer', on_delete=models.PROTECT, related_name='payments')
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='payments',
+    )
+
+    payment_date = models.DateField(verbose_name='Zahlungsdatum')
+    amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='Betrag')
+    method = models.CharField(
+        max_length=20, choices=Method.choices, default=Method.TRANSFER,
+        verbose_name='Zahlungsart')
+    note = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['payment_date', 'pk']
+        verbose_name = 'Zahlung'
+        verbose_name_plural = 'Zahlungen'
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(amount__gt=0),
+                name='payment_amount_positive',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.payment_date:%d.%m.%Y} {self.amount} € ({self.get_method_display()})'
+
+    @property
+    def affects_balance(self) -> bool:
+        """False for credit applications — see the class docstring."""
+        return self.method != Payment.Method.CREDIT
+
+
+# ---------------------------------------------------------------------------
+# CustomerLedgerEntry
+# ---------------------------------------------------------------------------
+
+class CustomerLedgerEntry(models.Model):
+    """
+    One movement on a customer's account.
+
+    The customer's balance is the sum of these entries and is never stored, so
+    it cannot drift.  Amounts are signed: negative means the customer was
+    charged (an invoice, a reminder fee), positive means money came in.  A
+    negative balance means the customer owes us; a positive one is credit.
+
+    Entries are append-only by convention — a correction is a new entry, never
+    an edit.  services/ledger.py is the only code that creates them.
+    """
+
+    class EntryType(models.TextChoices):
+        INVOICE = 'invoice', 'Rechnung'
+        REMINDER_FEE = 'reminder_fee', 'Mahngebühr'
+        PAYMENT = 'payment', 'Zahlung'
+        ADJUSTMENT = 'adjustment', 'Korrektur'
+
+    customer = models.ForeignKey(
+        'core.Customer', on_delete=models.PROTECT, related_name='ledger_entries')
+    entry_type = models.CharField(max_length=20, choices=EntryType.choices)
+    entry_date = models.DateField()
+    amount = models.DecimalField(
+        max_digits=18, decimal_places=2,
+        help_text='Signed: negative = charge, positive = payment.')
+    description = models.CharField(max_length=255, blank=True)
+
+    invoice = models.ForeignKey(
+        Invoice, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ledger_entries')
+    reminder = models.ForeignKey(
+        'Reminder', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ledger_entries')
+    payment = models.ForeignKey(
+        Payment, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ledger_entries')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['entry_date', 'pk']
+        verbose_name = 'Kontobewegung'
+        verbose_name_plural = 'Kontobewegungen'
+        indexes = [
+            models.Index(fields=['customer', 'entry_date'],
+                         name='ledger_customer_date_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.entry_date:%d.%m.%Y} {self.get_entry_type_display()}: {self.amount} €'
+
+    @property
+    def is_reversal(self) -> bool:
+        """True for a movement that undoes an earlier charge.
+
+        Both kinds read as a plain "Rechnung"/"Mahngebühr" otherwise, which is
+        misleading next to the charge they cancel:
+
+        - a Storno invoice's charge, which is positive because its lines are
+          negated (see services/ledger.record_invoice_issued);
+        - a reminder fee credited back when an invoice is cancelled
+          (services/ledger.reverse_reminder_fees), which is the only way a fee
+          entry can come out positive.
+        """
+        if self.entry_type == CustomerLedgerEntry.EntryType.INVOICE:
+            return bool(
+                self.invoice_id and self.invoice and self.invoice.is_reversal)
+        if self.entry_type == CustomerLedgerEntry.EntryType.REMINDER_FEE:
+            return self.amount > 0
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -465,3 +696,5 @@ auditlog.register(OfferLine)
 auditlog.register(Invoice)
 auditlog.register(InvoiceLine)
 auditlog.register(Reminder)
+auditlog.register(Payment)
+auditlog.register(CustomerLedgerEntry)

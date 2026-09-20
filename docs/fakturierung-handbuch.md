@@ -11,11 +11,9 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
 1. [Überblick & Voraussetzungen](#1-überblick--voraussetzungen)
     - [Einmalige Voraussetzungen (Einstellungen)](#einmalige-voraussetzungen-einstellungen)
 2. [Wo finde ich die Fakturierung?](#2-wo-finde-ich-die-fakturierung)
-3. [Adressen verwalten](#3-adressen-verwalten)
-    - [3.1 Adressliste öffnen](#31-adressliste-öffnen)
-    - [3.2 Neue Adresse anlegen](#32-neue-adresse-anlegen)
-    - [3.3 Adresse bearbeiten / löschen](#33-adresse-bearbeiten--löschen)
-    - [3.4 Adressen aus Wiffzack (WZ) synchronisieren](#34-adressen-aus-wiffzack-wz-synchronisieren)
+3. [Kunden & Adressen verwalten](#3-kunden--adressen-verwalten)
+    - [3.0 Kunden](#30-kunden)
+    - [3.1 Adressen](#31-adressen)
 4. [Faktura-Artikel](#4-faktura-artikel)
 5. [Angebote erstellen](#5-angebote-erstellen)
     - [5.1 Neues Angebot anlegen](#51-neues-angebot-anlegen)
@@ -28,7 +26,7 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
     - [6.1 Neue Rechnung anlegen](#61-neue-rechnung-anlegen)
     - [6.2 Positionen erfassen](#62-positionen-erfassen)
     - [6.3 Rechnung ausstellen](#63-rechnung-ausstellen)
-    - [6.4 Als bezahlt markieren](#64-als-bezahlt-markieren)
+    - [6.4 Zahlungen erfassen (auch Teilzahlungen)](#64-zahlungen-erfassen-auch-teilzahlungen)
     - [6.5 Überfällige Rechnungen](#65-überfällige-rechnungen)
     - [6.6 Rechnung stornieren (Storno)](#66-rechnung-stornieren-storno)
     - [6.7 Weitere Aktionen](#67-weitere-aktionen)
@@ -54,11 +52,12 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
 
 Die Fakturierung ist Teil des Lager Managers V2 und unter [https://172.16.73.1/invoices](https://172.16.73.1/invoices) erreichbar (Voraussetzung: aktives VPN).
 
-Die Fakturierung umfasst vier zusammenhängende Bereiche:
+Die Fakturierung umfasst fünf zusammenhängende Bereiche:
 
 | Bereich | Zweck |
 |---------|-------|
-| **Adressen** | Empfänger (Kunden, Firmen) für Dokumente |
+| **Kunden** | Rechnungsempfänger; trägt Kundennummer und Saldo |
+| **Adressen** | Anschriften eines Kunden; eine davon ist die Standardadresse |
 | **Angebote** | Unverbindliche Kostenvoranschläge, können in Rechnungen umgewandelt werden |
 | **Rechnungen** | Verbindliche Zahlungsaufforderungen |
 | **Mahnungen** | Zahlungserinnerungen zu überfälligen Rechnungen |
@@ -66,7 +65,7 @@ Die Fakturierung umfasst vier zusammenhängende Bereiche:
 **Typischer Ablauf:**
 
 ```
-Adresse anlegen  →  Angebot  →  (Umwandeln)  →  Rechnung
+Kunde + Adresse anlegen  →  Angebot  →  (Umwandeln)  →  Rechnung
 →  (bei Überfälligkeit)  →  Mahnung
 ```
 
@@ -108,25 +107,60 @@ Alle Funktionen befinden sich in der oberen Navigationsleiste im Menü **Fakturi
 - **Rechnungen**
 - **Mahnungen**
 
-Die **Adressen** befinden sich im Menü **Stammdaten → Adressen**.
+**Kunden** und **Adressen** befinden sich im Menü **Stammdaten**.
 
 ![Menü „Fakturierung" aufgeklappt](img/fakturierung/01-fakturierung-menue.png)
 
-> **Berechtigungen:** Die einzelnen Punkte sind nur sichtbar, wenn das Benutzerkonto die jeweilige Berechtigung besitzt (Angebote, Rechnungen, Mahnungen, Adressen). Fehlt eine Berechtigung, ist der Menüpunkt ausgeblendet.
+> **Berechtigungen:** Die einzelnen Punkte sind nur sichtbar, wenn das Benutzerkonto die jeweilige Berechtigung besitzt (Angebote, Rechnungen, Mahnungen, Kunden, Adressen). Fehlt eine Berechtigung, ist der Menüpunkt ausgeblendet.
 
 ---
 
-## 3. Adressen verwalten
+## 3. Kunden & Adressen verwalten
+
+### 3.0 Kunden
+
+Ein **Kunde** ist der Empfänger einer Rechnung und derjenige, für den ein **Saldo** geführt wird.
+Jeder Kunde kann **mehrere Adressen** haben (z. B. Rechnungs- und Lieferadresse); eine davon ist die
+**Standardadresse** und wird bei neuen Dokumenten vorausgewählt.
+
+Menü **Stammdaten → Kunden**:
+
+- Jeder Kunde erhält automatisch eine **Kundennummer** (K0001, K0002, …), die auch auf der Rechnung erscheint.
+- Die Spalte **Saldo** zeigt den Kontostand: **rot/negativ** = der Kunde schuldet Geld,
+  **grün/positiv** = der Kunde hat ein **Guthaben**.
+- Das Symbol **Kundenkonto** (Buch) listet alle Bewegungen mit Datum, Betrag, laufendem Saldo und
+  Benutzer auf. Ein Klick auf eine Bewegung öffnet die gefilterte Rechnungs- bzw. Mahnungsliste.
+
+Der Saldo ergibt sich automatisch:
+
+| Vorgang | Wirkung auf den Saldo |
+|---------|------------------------|
+| Rechnung ausstellen | − Rechnungsbetrag (brutto) |
+| Mahnung mit Gebühr ausstellen | − Mahngebühr |
+| Zahlung erfassen | + Zahlbetrag |
+| Rechnung stornieren | Rechnungsbetrag und Mahngebühren werden gutgeschrieben |
+
+**Anzahlung erfassen:** im Kundenkonto auf **Zahlung erfassen** klicken. Der Betrag erhöht den Saldo
+und steht als **Guthaben** bereit, ohne einer Rechnung zugeordnet zu sein.
+
+> **Saldo ≠ verfügbares Guthaben.** Der Saldo ist der Kontostand insgesamt. Verrechnet werden kann
+> nur das **verfügbare Guthaben** – eingegangenes Geld, das noch keiner Rechnung zugeordnet ist
+> (Anzahlungen, Überzahlungen, Zahlungen auf eine später stornierte Rechnung).
+
+> Beim Anlegen einer Adresse ohne Kunden wird automatisch ein passender Kunde erzeugt. Beim
+> WZ-Abgleich erhält jede importierte Adresse ebenfalls einen eigenen Kunden.
+
+### 3.1 Adressen
 
 Adressen sind die Empfänger von Angeboten, Rechnungen und Mahnungen. Sie werden einmal angelegt und können danach in beliebig vielen Dokumenten verwendet werden.
 
-### 3.1 Adressliste öffnen
+#### Adressliste öffnen
 
 **Stammdaten → Adressen**. Die Tabelle zeigt Name/Firma, Ort, E-Mail und Telefon. Über das Suchfeld kann nach beliebigem Text gefiltert werden.
 
 ![Adressliste](img/fakturierung/02-adressen-liste.png)
 
-### 3.2 Neue Adresse anlegen
+#### Neue Adresse anlegen
 
 1. Schaltfläche **Neu** (oben rechts) anklicken.
 2. Im Dialog die Felder ausfüllen:
@@ -142,12 +176,12 @@ Adressen sind die Empfänger von Angeboten, Rechnungen und Mahnungen. Sie werden
 
 ![Dialog „Neue Adresse"](img/fakturierung/03-adresse-dialog.png)
 
-### 3.3 Adresse bearbeiten / löschen
+#### Adresse bearbeiten / löschen
 
 - **Bearbeiten:** Zeile anklicken oder das Stift-Symbol verwenden.
 - **Löschen:** Mülleimer-Symbol in der Zeile; es folgt eine Sicherheitsabfrage.
 
-### 3.4 Adressen aus Wiffzack (WZ) synchronisieren
+#### Adressen aus Wiffzack (WZ) synchronisieren
 
 Über **WZ synchronisieren** können Adressen aus dem Wiffzack-Kassensystem übernommen werden. Im Dialog werden die Verbindungsdaten (Host, Datenbank, Benutzer, Passwort) eingegeben und mit **Synchronisieren** bestätigt. Übernommene Adressen sind in der Liste mit dem Kennzeichen **WZ** markiert.
 
@@ -293,15 +327,45 @@ Das **Rechnungsdatum** wird dabei automatisch auf das heutige Datum gesetzt. Im 
 
 ![Dialog „Rechnung ausstellen" mit Datumsoptionen](img/fakturierung/18-rechnung-ausstellen.png)
 
-### 6.4 Als bezahlt markieren
+Hat der Kunde ein **Guthaben**, wird es beim Ausstellen automatisch verrechnet – höchstens bis zur
+Höhe des Rechnungsbetrags. Der Dialog zeigt vorher, wie viel verrechnet wird und was zu zahlen
+bleibt. Die Verrechnung erscheint unter [Zahlungen](#64-zahlungen-erfassen-auch-teilzahlungen) als
+Eintrag mit der Zahlungsart **Guthaben** und kann dort wieder gelöscht werden.
 
-Bei ausgestellten/versendeten Rechnungen das grüne **Häkchen-im-Kreis**-Symbol anklicken, **Zahlungsdatum** eingeben und bestätigen. Status wechselt auf **Bezahlt**.
+### 6.4 Zahlungen erfassen (auch Teilzahlungen)
 
-![Dialog „Als bezahlt markieren"](img/fakturierung/16-als-bezahlt.png)
+Zu jeder Rechnung können **mehrere Zahlungen** erfasst werden. Die Rechnung gilt als **bezahlt**,
+sobald die Summe der Zahlungen den offenen Betrag erreicht oder übersteigt.
+
+Über das Symbol **Zahlungen** (Geldscheine) öffnet sich ein Dialog mit:
+
+- **Rechnungsbetrag**, etwaigen **Mahngebühren**, **bereits bezahlt** und dem **offenen Betrag**,
+- einer Liste aller bisher erfassten Zahlungen (Datum, Betrag, Zahlungsart, Notiz) – einzelne
+  Zahlungen können hier auch wieder gelöscht werden,
+- einem Formular zum Erfassen einer neuen Zahlung. Der Betrag ist mit dem offenen Betrag vorbelegt;
+  über **Restbetrag übernehmen** lässt er sich jederzeit wieder darauf setzen.
+
+Der Status der Rechnung ergibt sich automatisch:
+
+| Summe der Zahlungen | Status |
+|---------------------|--------|
+| keine | **Ausgestellt** bzw. **Versendet** |
+| größer 0, aber unter der Forderung | **Teilweise bezahlt** |
+| gleich oder größer der Forderung | **Bezahlt** |
+
+Wird eine Zahlung gelöscht, wird die Rechnung entsprechend wieder geöffnet. Zahlt ein Kunde **mehr**
+als die Forderung, bleibt die Rechnung bezahlt und der Überhang wird zum **Guthaben** des Kunden.
+
+**Guthaben nachträglich verrechnen:** Entsteht ein Guthaben erst *nach* dem Ausstellen einer Rechnung
+(z. B. durch eine spätere Anzahlung oder eine Überzahlung an anderer Stelle), erscheint im
+Zahlungsdialog ein Hinweis mit der Schaltfläche **… verrechnen**. Damit wird das Guthaben – wie beim
+Ausstellen – gegen den offenen Betrag gebucht.
+
+Die Spalte **Offen** in der Rechnungsliste zeigt den noch offenen Betrag inklusive Mahngebühren.
 
 ### 6.5 Überfällige Rechnungen
 
-Ist eine ausgestellte/versendete Rechnung nach dem Fälligkeitsdatum noch nicht bezahlt, wird die Zeile **rot hervorgehoben** und mit einem Warnsymbol gekennzeichnet. Für solche Rechnungen erscheint die Aktion **Mahnung erstellen** (siehe [Abschnitt 7](#7-mahnungen-erstellen)).
+Ist eine ausgestellte, versendete oder teilweise bezahlte Rechnung nach dem Fälligkeitsdatum noch nicht vollständig bezahlt, wird die Zeile **rot hervorgehoben** und mit einem Warnsymbol gekennzeichnet. Für solche Rechnungen erscheint die Aktion **Mahnung erstellen** (siehe [Abschnitt 7](#7-mahnungen-erstellen)).
 
 ![Rechnungsliste mit überfälligen (rot markierten) Rechnungen](img/fakturierung/08-rechnungen-liste.png)
 
@@ -375,6 +439,11 @@ Mahnungen sind Zahlungserinnerungen zu überfälligen Rechnungen und werden in *
 ### 7.3 Mahnung ausstellen
 
 Über das **Ausstellen**-Symbol wird die Mahnungsnummer vergeben und der Status auf **Ausgestellt** gesetzt.
+Die Mahngebühr wird damit dem Kundenkonto belastet und ist danach nicht mehr änderbar.
+
+> Mahnungen lassen sich nur für **offene** Rechnungen anlegen und ausstellen. Wurde eine Rechnung
+> zwischenzeitlich bezahlt oder storniert, weist die Anwendung das Ausstellen ab – der Entwurf
+> kann dann gelöscht werden.
 
 ### 7.4 Mahnungsliste
 
@@ -449,7 +518,8 @@ Das **Uhr-Symbol** (Verlauf) zeigt zu jedem Dokument und jeder Adresse die Ände
 | **Entwurf** | Bearbeitbar, noch keine Nummer |
 | **Ausgestellt** | Nummer vergeben, festgeschrieben |
 | **Versendet** | An Kunden geschickt |
-| **Bezahlt** | Zahlung erfasst |
+| **Teilweise bezahlt** | Zahlungen erfasst, aber noch ein Restbetrag offen |
+| **Bezahlt** | Vollständig bezahlt (inkl. Mahngebühren) |
 | **Storniert** | Durch Stornorechnung aufgehoben |
 
 ### Mahnungen
@@ -468,6 +538,9 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 | Datum | Änderung |
 |-------|----------|
+| September 2026 | Neu: **Kunden** (Menü Stammdaten) mit mehreren Adressen, Kundennummer und **Saldo**; das Kundenkonto zeigt alle Bewegungen und nimmt Anzahlungen entgegen. |
+| September 2026 | Neu: **Teilzahlungen** – mehrere Zahlungen je Rechnung, neuer Status **Teilweise bezahlt**, neue Spalte **Offen**. Ein **Guthaben** wird beim Ausstellen automatisch verrechnet. |
+| September 2026 | Rechnungen und Mahnungen weisen die einzelnen Zahlungen und den **offenen Betrag** aus. Mahngebühren sind nach dem Ausstellen fix, Mahnungen nur für offene Rechnungen möglich. |
 | Juli 2026 | Neues Feld **Leistungsdatum** bei Rechnungen; **Rechnungsdatum** und **Fälligkeitsdatum** werden nicht mehr im Entwurf erfasst, sondern automatisch beim Ausstellen gesetzt. |
 | Juli 2026 | Geldbeträge auf Angeboten, Rechnungen und Mahnungen werden jetzt mit Tausenderpunkt dargestellt (z. B. `1.234,56 €`). |
 | Juli 2026 | Anmerkungen erscheinen auf dem Dokument jetzt oberhalb der Positionen, ohne eigene Überschrift „Anmerkungen". |
@@ -480,4 +553,4 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 ---
 
-*Stand: Juli 2026*
+*Stand: September 2026*

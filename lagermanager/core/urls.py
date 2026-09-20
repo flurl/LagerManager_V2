@@ -5,6 +5,7 @@ from .views import (
     AddressViewSet,
     ConfigLogoView,
     ConfigView,
+    CustomerViewSet,
     DepartmentViewSet,
     LocationViewSet,
     MeView,
@@ -19,6 +20,7 @@ router.register(r'periods', PeriodViewSet)
 router.register(r'locations', LocationViewSet)
 router.register(r'departments', DepartmentViewSet)
 router.register(r'addresses', AddressViewSet, basename='address')
+router.register(r'customers', CustomerViewSet, basename='customer')
 
 urlpatterns = [
     # Explicit path must come before the router include so it isn't swallowed
