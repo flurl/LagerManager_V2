@@ -531,3 +531,59 @@ class IsReversalTests(TestCase):
             f'/api/customers/{self.customer.pk}/ledger/').json()['entries']
 
         self.assertEqual([e['is_reversal'] for e in entries], [False, True])
+
+
+class LedgerEntryLinkFieldsTests(TestCase):
+    """The dialog links by document number, so the endpoint must expose both."""
+
+    def setUp(self) -> None:
+        from django.contrib.auth.models import User
+        from rest_framework.test import APIClient
+
+        self.tax = _make_tax()
+        self.customer = _make_customer()
+        self.client = APIClient()
+        self.client.force_authenticate(
+            user=User.objects.create_superuser('t', 't@example.com', 'p'))
+
+    def _entries(self) -> list[dict]:
+        return self.client.get(
+            f'/api/customers/{self.customer.pk}/ledger/').json()['entries']
+
+    def test_an_invoice_charge_carries_its_invoice_number(self) -> None:
+        invoice = _make_invoice(self.customer, self.tax)
+        ledger.record_invoice_issued(invoice)
+
+        entry = self._entries()[0]
+        self.assertEqual(entry['invoice_number'], 'RE260601-00001')
+        self.assertIsNone(entry['reminder'])
+        self.assertIsNone(entry['reminder_number'])
+
+    def test_a_reminder_fee_carries_its_reminder_number(self) -> None:
+        invoice = _make_invoice(self.customer, self.tax)
+        reminder = Reminder.objects.create(
+            invoice=invoice, level=1, number='MA260701',
+            status=Reminder.Status.ISSUED,
+            reminder_date=datetime.date(2026, 7, 1),
+            due_date=datetime.date(2026, 7, 15),
+            fee=Decimal('12.00'),
+        )
+        ledger.record_reminder_issued(reminder)
+
+        entry = next(e for e in self._entries() if e['entry_type'] == 'reminder_fee')
+        # Links to the Mahnung that charged the fee …
+        self.assertEqual(entry['reminder_number'], 'MA260701')
+        # … while still knowing which invoice it belongs to.
+        self.assertEqual(entry['invoice_number'], 'RE260601-00001')
+
+    def test_a_standalone_payment_has_nothing_to_link_to(self) -> None:
+        payment = Payment.objects.create(
+            customer=self.customer,
+            payment_date=datetime.date(2026, 6, 1),
+            amount=Decimal('50.00'),
+        )
+        ledger.record_payment(payment)
+
+        entry = self._entries()[0]
+        self.assertIsNone(entry['invoice_number'])
+        self.assertIsNone(entry['reminder_number'])

@@ -102,6 +102,8 @@ class CustomerLedgerEntryReadSerializer(serializers.Serializer[Any]):
     running_balance = serializers.DecimalField(max_digits=18, decimal_places=2)
     invoice = serializers.IntegerField(allow_null=True)
     invoice_number = serializers.CharField(allow_null=True)
+    reminder = serializers.IntegerField(allow_null=True)
+    reminder_number = serializers.CharField(allow_null=True)
     is_reversal = serializers.BooleanField()
     actor = serializers.CharField(allow_null=True)
 

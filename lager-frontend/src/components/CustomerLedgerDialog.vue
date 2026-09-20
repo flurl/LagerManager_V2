@@ -95,11 +95,9 @@
                   </v-chip>
                 </td>
                 <td class="text-caption">
-                  <a
-                    v-if="e.invoice"
-                    href="#"
-                    @click.prevent="openInvoice(e.invoice)"
-                  >{{ e.description }}</a>
+                  <a v-if="linkTarget(e)" href="#" @click.prevent="openList(e)">
+                    {{ e.description }}
+                  </a>
                   <template v-else>{{ e.description }}</template>
                 </td>
                 <td class="text-right" :class="balanceClass(e.amount)">{{ fmtEuro(e.amount) }}</td>
@@ -219,9 +217,26 @@ watch(() => props.modelValue, async (open) => {
   await loadLedger()
 }, { immediate: true })
 
-function openInvoice(id) {
+// Filters the matching list rather than opening the document: from an account
+// overview you usually want to see the document in context — with its status,
+// open amount and neighbouring documents — not jump straight into an editor.
+// A reminder fee points at the Mahnung that charged it; everything else at the
+// invoice.  Entries with no number (a standalone payment) are not links.
+function linkTarget(e) {
+  if (e.entry_type === 'reminder_fee' && e.reminder_number) {
+    return { path: '/reminders', number: e.reminder_number }
+  }
+  if (e.invoice_number) {
+    return { path: '/invoices', number: e.invoice_number }
+  }
+  return null
+}
+
+function openList(e) {
+  const target = linkTarget(e)
+  if (!target) return
   model.value = false
-  router.push({ path: '/invoices', query: { openId: id } })
+  router.push({ path: target.path, query: { q: target.number } })
 }
 
 const TYPE_COLORS = {

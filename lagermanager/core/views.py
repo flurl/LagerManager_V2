@@ -393,7 +393,7 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
         entries = (
             CustomerLedgerEntry.objects
             .filter(customer=customer)
-            .select_related('invoice')
+            .select_related('invoice', 'reminder')
             .annotate(type_rank=Case(
                 When(entry_type=CustomerLedgerEntry.EntryType.INVOICE, then=Value(0)),
                 When(entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE, then=Value(1)),
@@ -424,6 +424,10 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
                 'running_balance': str(running),
                 'invoice': e.invoice_id,
                 'invoice_number': e.invoice.number if e.invoice_id and e.invoice else None,
+                # A reminder-fee movement links to the Mahnung that charged it,
+                # not only to the invoice it was charged against.
+                'reminder': e.reminder_id,
+                'reminder_number': e.reminder.number if e.reminder_id and e.reminder else None,
                 'is_reversal': e.is_reversal,
                 'actor': actors.get(str(e.pk)),
             })

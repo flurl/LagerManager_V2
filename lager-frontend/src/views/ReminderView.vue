@@ -418,11 +418,19 @@ function formatCurrency(val) {
 
 onMounted(async () => {
   await fetchItems()
-  const openId = route.query.openId
+  applyQueryParams()
+})
+
+// ?q= prefills the search box (e.g. arriving from the Kundenkonto, which links
+// by document number); ?openId= opens one document straight away.
+function applyQueryParams() {
+  const { q, openId } = route.query
+  if (!q && !openId) return
+  if (q) filterText.value = String(q)
   if (openId) {
     const reminder = items.value.find(i => String(i.id) === String(openId))
     if (reminder) openEdit(reminder)
-    router.replace({ path: '/reminders' })
   }
-})
+  router.replace({ path: '/reminders' })
+}
 </script>
