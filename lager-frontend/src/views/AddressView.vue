@@ -11,10 +11,20 @@
     <v-text-field v-model="search" label="Suche" prepend-inner-icon="mdi-magnify" clearable
       density="compact" class="mb-3" style="max-width: 360px" @update:model-value="onSearch" />
 
-    <v-data-table :headers="headers" :items="items" :loading="loading" density="compact"
+    <v-data-table v-model:sort-by="sortBy" :headers="headers" :items="items" :loading="loading"
+      density="compact"
       :row-props="() => ({ style: 'cursor: pointer' })" @click:row="(_, { item }) => openEdit(item)">
       <template #item.display_name="{ item }">
-        <span class="font-weight-medium">{{ item.display_name }}</span>
+        <span v-if="item.has_name" class="font-weight-medium">{{ item.display_name }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.strasse="{ item }">
+        <span v-if="item.strasse">{{ item.strasse }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.customer_display="{ item }">
+        <span v-if="item.customer_display" class="text-caption">{{ item.customer_display }}</span>
+        <span v-else class="text-caption text-medium-emphasis">—</span>
       </template>
       <template #item.wz_source_id="{ item }">
         <v-chip v-if="item.wz_source_id != null" size="x-small" color="info" variant="tonal">WZ</v-chip>
@@ -78,8 +88,15 @@ const editingAddress = ref(null)
 const historyDialog = ref(false)
 const historyItem = ref(null)
 
+// Sorted by customer by default so a customer's addresses sit together.
+// v-model rather than a plain prop, so clicking a header still re-sorts.
+const sortBy = ref([{ key: 'customer_display', order: 'asc' }])
+
 const headers = [
+  { title: 'Kunde', key: 'customer_display' },
   { title: 'Name / Firma', key: 'display_name' },
+  // Without this an address with no name had nothing identifying it in the list.
+  { title: 'Straße', key: 'strasse' },
   { title: 'Ort', key: 'ort' },
   { title: 'E-Mail', key: 'email' },
   { title: 'Telefon', key: 'telefon' },
@@ -124,7 +141,7 @@ function onAddressSaved() {
 }
 
 async function deleteItem(item) {
-  if (!confirm(`Adresse "${item.display_name}" wirklich löschen?`)) return
+  if (!confirm(`Adresse "${item.postal_label || item.display_name}" wirklich löschen?`)) return
   await api.delete(`/addresses/${item.id}/`)
   await fetchItems(search.value || undefined)
 }

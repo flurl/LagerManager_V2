@@ -199,6 +199,7 @@ const overlayStyle = computed(() => {
 
 const headers = [
   { title: 'Nr.', key: 'number' },
+  { title: 'Kunde', key: 'customer_display' },
   { title: 'Adresse', key: 'address_display' },
   { title: 'Datum', key: 'document_date' },
   { title: 'Gültig bis', key: 'valid_until' },

@@ -6,6 +6,7 @@ from .views import (
     InvoiceTemplateViewSet,
     InvoiceViewSet,
     OfferViewSet,
+    PaymentViewSet,
     ReminderViewSet,
 )
 
@@ -15,6 +16,7 @@ router.register('offers', OfferViewSet, basename='offer')
 router.register('invoices', InvoiceViewSet, basename='invoice')
 router.register('invoice-templates', InvoiceTemplateViewSet, basename='invoice-template')
 router.register('reminders', ReminderViewSet, basename='reminder')
+router.register('payments', PaymentViewSet, basename='payment')
 
 urlpatterns: list[URLPattern | URLResolver] = [
     path('', include(router.urls)),

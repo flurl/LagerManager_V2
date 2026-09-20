@@ -18,6 +18,7 @@ import mimetypes
 from pathlib import Path
 
 from constance import config
+from core.models import Address, Customer
 from django.conf import settings
 from django.template.loader import render_to_string
 
@@ -86,39 +87,55 @@ def render_document_html(doc: DocType) -> str:
     return render_to_string(_template_name(doc), ctx)
 
 
+def resolve_recipient_email(address: Address, customer: Customer | None) -> str:
+    """Where a document should be sent.
+
+    The address the document is addressed to wins: it is the one the user picked
+    for this document, and a customer may well have a separate delivery address
+    with its own contact.  Only when that address carries no e-mail does the
+    customer's billing e-mail fill the gap (their own, else their default
+    address's).  Address.email is a legacy nullable column, so None and '' both
+    count as missing.  Returns '' when nothing is on file — the send dialog then
+    asks for an address instead of sending somewhere wrong.
+    """
+    return (address.email or '') or (customer.billing_email if customer else '')
+
+
 def build_email_defaults(doc: DocType) -> dict[str, str]:
     """Return prefilled {recipient, subject, body} for the send-email dialog.
 
     Subject and body come from Constance config templates and have placeholders
     ({number}, {company}, {recipient_name}) replaced with the actual document values.
-    recipient is the email address from the document's associated Address (may be empty).
+    recipient is resolved by resolve_recipient_email() and may be empty.
     """
     company: str = getattr(config, 'COMPANY_NAME', '')
 
     if isinstance(doc, Offer):
         subject_tpl: str = getattr(config, 'EMAIL_SUBJECT_OFFER', 'Ihr Angebot {number}')
         body_tpl: str = getattr(config, 'EMAIL_BODY_OFFER', '')
-        number: str = doc.number or ''
-        recipient_email: str = doc.address.email or ''
-        recipient_name: str = doc.address.display_name or ''
+        address: Address = doc.address
+        customer: Customer | None = doc.customer
     elif isinstance(doc, Invoice):
         subject_tpl = getattr(config, 'EMAIL_SUBJECT_INVOICE', 'Ihre Rechnung {number}')
         body_tpl = getattr(config, 'EMAIL_BODY_INVOICE', '')
-        number = doc.number or ''
-        recipient_email = doc.address.email or ''
-        recipient_name = doc.address.display_name or ''
+        address = doc.address
+        customer = doc.customer
     elif isinstance(doc, Reminder):
         subject_tpl = getattr(config, 'EMAIL_SUBJECT_REMINDER', 'Zahlungserinnerung {number}')
         body_tpl = getattr(config, 'EMAIL_BODY_REMINDER', '')
-        number = doc.number or ''
-        recipient_email = doc.invoice.address.email or ''
-        recipient_name = doc.invoice.address.display_name or ''
+        # A reminder has no address of its own — it duns the invoice's.
+        address = doc.invoice.address
+        customer = doc.invoice.customer
     else:
         raise TypeError(f'Unknown document type: {type(doc)}')
 
-    fmt = _SafeFormatMap(number=number, company=company, recipient_name=recipient_name)
+    fmt = _SafeFormatMap(
+        number=doc.number or '',
+        company=company,
+        recipient_name=address.display_name,
+    )
     return {
-        'recipient': recipient_email,
+        'recipient': resolve_recipient_email(address, customer),
         'subject': subject_tpl.format_map(fmt),
         'body': body_tpl.format_map(fmt),
     }

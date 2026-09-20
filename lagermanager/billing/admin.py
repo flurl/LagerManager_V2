@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     BillingArticle,
     ContinuousNumberSequence,
+    CustomerLedgerEntry,
     Invoice,
     InvoiceLine,
     InvoiceTemplate,
@@ -10,6 +11,7 @@ from .models import (
     NumberSequence,
     Offer,
     OfferLine,
+    Payment,
     Reminder,
 )
 
@@ -23,3 +25,5 @@ admin.site.register(InvoiceLine)
 admin.site.register(InvoiceTemplate)
 admin.site.register(InvoiceTemplateLine)
 admin.site.register(Reminder)
+admin.site.register(Payment)
+admin.site.register(CustomerLedgerEntry)

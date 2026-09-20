@@ -19,7 +19,7 @@
                 <th style="white-space:nowrap">Zeitpunkt</th>
                 <th>Benutzer</th>
                 <th>Aktion</th>
-                <th v-if="hasLineEntries">Objekt</th>
+                <th v-if="hasChildEntries">Objekt</th>
                 <th>Änderungen</th>
               </tr>
             </thead>
@@ -30,11 +30,12 @@
                 <td>
                   <v-chip size="x-small" :color="actionColor(e.action)">{{ actionLabel(e.action) }}</v-chip>
                 </td>
-                <td v-if="hasLineEntries" class="py-1">
-                  <v-chip v-if="e.source === 'line'" size="x-small" variant="outlined" color="secondary">
-                    Position
+                <td v-if="hasChildEntries" class="py-1">
+                  <v-chip v-if="sourceLabel(e.source)" size="x-small" variant="outlined"
+                    :color="sourceColor(e.source)">
+                    {{ sourceLabel(e.source) }}
                   </v-chip>
-                  <span v-if="e.source === 'line' && e.object_repr"
+                  <span v-if="sourceLabel(e.source) && e.object_repr"
                     class="text-caption text-medium-emphasis d-block" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                     :title="e.object_repr">
                     {{ e.object_repr }}
@@ -89,7 +90,29 @@ const model = computed({
 const entries = ref([])
 const loading = ref(false)
 
-const hasLineEntries = computed(() => entries.value.some(e => e.source === 'line'))
+// Entries merged in from related objects (line items, payments, ledger rows)
+// get their own "Objekt" column so they can be told apart from the document's.
+const SOURCE_LABELS = {
+  line: 'Position',
+  payment: 'Zahlung',
+  ledger: 'Kontobewegung',
+}
+const SOURCE_COLORS = {
+  line: 'secondary',
+  payment: 'success',
+  ledger: 'info',
+}
+
+const hasChildEntries = computed(
+  () => entries.value.some(e => e.source in SOURCE_LABELS))
+
+function sourceLabel(source) {
+  return SOURCE_LABELS[source] || ''
+}
+
+function sourceColor(source) {
+  return SOURCE_COLORS[source] || 'secondary'
+}
 
 watch(() => props.modelValue, async (open) => {
   if (!open || !props.apiPath) return

@@ -125,6 +125,11 @@ const routes = [
   },
   // Billing
   {
+    path: '/customers',
+    component: () => import('./views/CustomerView.vue'),
+    meta: { title: 'Kunden', permission: 'core.view_customer' },
+  },
+  {
     path: '/addresses',
     component: () => import('./views/AddressView.vue'),
     meta: { title: 'Adressen', permission: 'core.view_address' },

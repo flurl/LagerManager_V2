@@ -14,7 +14,7 @@
 
     <v-row dense class="mb-2" align="center">
       <v-col cols="12" sm="5">
-        <v-text-field v-model="filterText" label="Suche (Nr., Adresse)" prepend-inner-icon="mdi-magnify"
+        <v-text-field v-model="filterText" label="Suche (Nr., Kunde, Adresse)" prepend-inner-icon="mdi-magnify"
           clearable density="compact" hide-details />
       </v-col>
       <v-col cols="12" sm="3">
@@ -54,6 +54,12 @@
             </template>
             <template v-else-if="col.key === 'document_date'">{{ datumDisplay(item) }}</template>
             <template v-else-if="col.key === 'gross_total'">{{ Number(item.gross_total).toFixed(2) }} €</template>
+            <template v-else-if="col.key === 'open_amount'">
+              <span v-if="item.status === 'cancelled'" class="text-medium-emphasis">—</span>
+              <span v-else :class="Number(item.open_amount) > 0 ? 'text-error' : 'text-success'">
+                {{ Number(item.open_amount ?? 0).toFixed(2) }} €
+              </span>
+            </template>
             <template v-else-if="col.key === 'actions'">
               <v-tooltip text="Vorschau"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" @click.stop="openPreview(item)">mdi-eye-outline</v-icon>
@@ -61,16 +67,18 @@
               <v-tooltip v-if="item.status === 'draft'" text="Ausstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="issueInvoice(item)">mdi-file-check</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Per E-Mail versenden"><template #activator="{ props }">
+              <v-tooltip v-if="OPEN_STATUSES.includes(item.status) && !item.reverses" text="Per E-Mail versenden"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Als bezahlt markieren"><template #activator="{ props }">
-                <v-icon v-bind="props" size="small" class="ml-1" color="success" @click.stop="markPaid(item)">mdi-check-circle</v-icon>
+              <v-tooltip v-if="canHavePayments(item)" text="Zahlungen"><template #activator="{ props }">
+                <v-icon v-bind="props" size="small" class="ml-1"
+                  :color="item.status === 'paid' ? 'success' : 'primary'"
+                  @click.stop="openPayments(item)">mdi-cash-multiple</v-icon>
               </template></v-tooltip>
               <v-tooltip v-if="isOverdue(item) && !item.reverses" text="Mahnung erstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="warning" @click.stop="createReminder(item)">mdi-bell-alert</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status) && !item.reverses" text="Stornieren"><template #activator="{ props }">
+              <v-tooltip v-if="OPEN_STATUSES.includes(item.status) && !item.reverses" text="Stornieren"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" color="error" @click.stop="cancelInvoice(item)">mdi-cancel</v-icon>
               </template></v-tooltip>
               <v-tooltip v-if="!item.reverses" text="Duplizieren"><template #activator="{ props }">
@@ -156,20 +164,12 @@
       @sent="onSent"
     />
 
-    <!-- Mark paid dialog -->
-    <v-dialog v-model="paidDialog" max-width="340">
-      <v-card>
-        <v-card-title>Als bezahlt markieren</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="paidDate" label="Zahlungsdatum" type="date" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="paidDialog = false">Abbrechen</v-btn>
-          <v-btn color="success" @click="confirmMarkPaid">Bestätigen</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <PaymentDialog
+      v-if="paymentsItem"
+      v-model="paymentsDialog"
+      :invoice-id="paymentsItem.id"
+      @changed="fetchItems"
+    />
 
     <!-- Issue date dialog -->
     <v-dialog v-model="issueDialog" max-width="420" persistent>
@@ -189,11 +189,21 @@
             :min="today"
             :rules="[v => !!v || 'Pflichtfeld', v => v >= today || 'Darf nicht vor dem Rechnungsdatum liegen']"
           />
+
+          <!-- Credit is always offset; the user is informed, not asked. -->
+          <v-alert v-if="issueCredit > 0" type="info" variant="tonal" density="compact" class="mt-3">
+            Der Kunde hat ein Guthaben von {{ fmtEuro(issueCredit) }}. Davon werden
+            <strong>{{ fmtEuro(creditToApply) }}</strong> automatisch mit dieser Rechnung
+            verrechnet – es bleiben {{ fmtEuro(issueGrossTotal - creditToApply) }} zu zahlen.
+            <div class="text-caption mt-1">
+              Die Verrechnung kann danach unter „Zahlungen“ wieder entfernt werden.
+            </div>
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn @click="issueDialog = false">Abbrechen</v-btn>
-          <v-btn color="primary" :disabled="!issueDueDate || issueDueDate < today" @click="confirmIssue">Ausstellen</v-btn>
+          <v-btn color="primary" :loading="issuing" :disabled="!canIssue" @click="confirmIssue">Ausstellen</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -310,6 +320,7 @@ import InvoiceDialog from '../components/InvoiceDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
+import PaymentDialog from '../components/PaymentDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -320,7 +331,7 @@ const overdueColor = computed(() => hexToRgba(theme.current.value.colors.error, 
 
 const today = new Date().toISOString().slice(0, 10)
 function isOverdue(item) {
-  return ['issued', 'sent'].includes(item.status) && item.due_date && item.due_date < today
+  return OPEN_STATUSES.includes(item.status) && item.due_date && item.due_date < today
 }
 
 const items = ref([])
@@ -333,7 +344,9 @@ const filteredItems = computed(() => {
   return items.value.filter(item => {
     if (filterText.value) {
       const q = filterText.value.toLowerCase()
-      if (!(item.number || '').toLowerCase().includes(q) && !(item.address_display || '').toLowerCase().includes(q)) return false
+      const haystack = [item.number, item.customer_display, item.address_display]
+        .filter(Boolean).join(' ').toLowerCase()
+      if (!haystack.includes(q)) return false
     }
     if (filterFrom.value && item.document_date < filterFrom.value) return false
     if (filterTo.value && item.document_date > filterTo.value) return false
@@ -361,9 +374,8 @@ const historyDialog = ref(false)
 const historyItem = ref(null)
 const sendDialog = ref(false)
 const sendItem = ref(null)
-const paidDialog = ref(false)
-const paidDate = ref('')
-const paidInvoiceId = ref(null)
+const paymentsDialog = ref(false)
+const paymentsItem = ref(null)
 
 const cancelDialog = ref(false)
 const cancelInvoiceItem = ref(null)
@@ -373,6 +385,9 @@ const cancelCreateDraft = ref(false)
 const issueDialog = ref(false)
 const issueInvoiceItem = ref(null)
 const issueDueDate = ref('')
+const issuing = ref(false)
+const issueCredit = ref(0)
+const issueGrossTotal = ref(0)
 const paymentTermsDays = ref(14)
 
 const linesCache = ref({})
@@ -396,16 +411,20 @@ const overlayStyle = computed(() => {
 
 const headers = [
   { title: 'Nr.', key: 'number' },
+  { title: 'Kunde', key: 'customer_display' },
   { title: 'Adresse', key: 'address_display' },
   { title: 'Leistungsdt. (Rechnungsdt.)', key: 'document_date' },
   { title: 'Fällig', key: 'due_date' },
   { title: 'Status', key: 'status' },
   { title: 'Brutto', key: 'gross_total', align: 'end' },
+  { title: 'Offen', key: 'open_amount', align: 'end' },
   { title: '', key: 'actions', sortable: false, align: 'end' },
 ]
 
-const STATUS_LABELS = { draft: 'Entwurf', issued: 'Ausgestellt', sent: 'Versendet', paid: 'Bezahlt', cancelled: 'Storniert' }
-const STATUS_COLORS = { draft: 'grey', issued: 'info', sent: 'primary', paid: 'success', cancelled: 'error' }
+const STATUS_LABELS = { draft: 'Entwurf', issued: 'Ausgestellt', sent: 'Versendet', partially_paid: 'Teilweise bezahlt', paid: 'Bezahlt', cancelled: 'Storniert' }
+const STATUS_COLORS = { draft: 'grey', issued: 'info', sent: 'primary', partially_paid: 'warning', paid: 'success', cancelled: 'error' }
+// Issued but not yet settled — these accept payments, reminders, sending and storno.
+const OPEN_STATUSES = ['issued', 'sent', 'partially_paid']
 function statusLabel(s) { return STATUS_LABELS[s] || s }
 function statusColor(s) { return STATUS_COLORS[s] || 'grey' }
 
@@ -471,6 +490,11 @@ function openSaveTemplateForInvoice(item) {
   saveTemplateDialog.value = true
 }
 
+function showError(err, fallback) {
+  errorMessage.value = extractErrorMessage(err, fallback)
+  errorSnackbar.value = true
+}
+
 async function confirmSaveTemplateForInvoice() {
   const name = saveTemplateName.value?.trim()
   if (!name || !saveTemplateItem.value) return
@@ -478,8 +502,7 @@ async function confirmSaveTemplateForInvoice() {
     await api.post(`/invoices/${saveTemplateItem.value.id}/save-as-template/`, { name })
     saveTemplateDialog.value = false
   } catch (err) {
-    errorMessage.value = extractErrorMessage(err, 'Vorlage konnte nicht gespeichert werden.')
-    errorSnackbar.value = true
+    showError(err, 'Vorlage konnte nicht gespeichert werden.')
   }
 }
 
@@ -496,32 +519,60 @@ function datumDisplay(item) {
   return `${fmtDate(item.service_date)} (${fmtDate(item.document_date)})`
 }
 
-function issueInvoice(item) {
+async function issueInvoice(item) {
   issueInvoiceItem.value = item
   const d = new Date(today)
   d.setDate(d.getDate() + paymentTermsDays.value)
   issueDueDate.value = d.toISOString().slice(0, 10)
+  issueCredit.value = 0
+  issueGrossTotal.value = Number(item.gross_total ?? 0)
   issueDialog.value = true
+
+  // Offer the customer's unused credit, if they have any.
+  if (!item.customer) return
+  try {
+    const res = await api.get(`/customers/${item.customer}/balance/`)
+    issueCredit.value = Number(res.data.available_credit ?? 0)
+  } catch {
+    // Not being able to read the balance must not block issuing.
+    issueCredit.value = 0
+  }
 }
+
+// What the backend will offset — shown up front so the figure is never a surprise.
+const creditToApply = computed(
+  () => Math.min(issueCredit.value, issueGrossTotal.value))
+
+const canIssue = computed(
+  () => !!issueDueDate.value && issueDueDate.value >= today)
 
 async function confirmIssue() {
   const item = issueInvoiceItem.value
-  if (!item || !issueDueDate.value) return
-  await api.post(`/invoices/${item.id}/issue/`, { due_date: issueDueDate.value })
-  issueDialog.value = false
-  await fetchItems()
+  if (!item || !canIssue.value) return
+  issuing.value = true
+  try {
+    await api.post(`/invoices/${item.id}/issue/`, { due_date: issueDueDate.value })
+    issueDialog.value = false
+    await fetchItems()
+  } catch (err) {
+    showError(err, 'Rechnung konnte nicht ausgestellt werden.')
+  } finally {
+    issuing.value = false
+  }
 }
 
-function markPaid(item) {
-  paidInvoiceId.value = item.id
-  paidDate.value = new Date().toISOString().slice(0, 10)
-  paidDialog.value = true
+// Payments stay viewable (and correctable) after the invoice is settled.
+function canHavePayments(item) {
+  return !item.reverses && [...OPEN_STATUSES, 'paid'].includes(item.status)
 }
 
-async function confirmMarkPaid() {
-  await api.post(`/invoices/${paidInvoiceId.value}/mark-paid/`, { paid_at: paidDate.value })
-  paidDialog.value = false
-  await fetchItems()
+function openPayments(item) {
+  paymentsItem.value = item
+  paymentsDialog.value = true
+}
+
+function fmtEuro(v) {
+  return `${Number(v ?? 0).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 }
 
 function cancelInvoice(item) {

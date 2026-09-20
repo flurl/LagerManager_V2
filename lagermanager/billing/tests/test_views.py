@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from auditlog.models import LogEntry
 from core.models import Address
+from core.services.customers import ensure_customer_for_address
 from deliveries.models import TaxRate
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
@@ -17,6 +18,7 @@ from billing.models import (
     InvoiceTemplateLine,
     Offer,
     OfferLine,
+    Payment,
     Reminder,
 )
 
@@ -32,19 +34,42 @@ def _make_tax() -> TaxRate:
 def _make_address(**kwargs: object) -> Address:
     defaults: dict[str, object] = {'vorname': 'Max', 'nachname': 'Mustermann', 'ort': 'Wien'}
     defaults.update(kwargs)
-    return Address.objects.create(**defaults)
+    address = Address.objects.create(**defaults)
+    # Mirrors the API and the WZ sync: every address has a customer.
+    ensure_customer_for_address(address)
+    return address
 
 
 def _make_offer(address: Address, status: str = 'draft') -> Offer:
     return Offer.objects.create(
+        customer=address.customer,
         address=address,
         document_date=datetime.date(2026, 6, 15),
         status=status,
     )
 
 
+def _future_due_date() -> str:
+    """issue() stamps document_date with today, so due dates must not be in the past."""
+    return (datetime.date.today() + datetime.timedelta(days=14)).isoformat()
+
+
+def _add_line(
+    invoice: Invoice, tax: TaxRate, *, quantity: str = '1', unit_price: str = '100.00',
+) -> InvoiceLine:
+    return InvoiceLine.objects.create(
+        invoice=invoice,
+        position=1,
+        description='Position',
+        quantity=Decimal(quantity),
+        unit_price=Decimal(unit_price),
+        tax_rate=tax,
+    )
+
+
 def _make_invoice(address: Address, status: str = 'draft') -> Invoice:
     return Invoice.objects.create(
+        customer=address.customer,
         address=address,
         document_date=datetime.date(2026, 6, 15),
         due_date=datetime.date(2026, 6, 29),
@@ -119,6 +144,7 @@ class OfferViewSetTests(APITestCase):
 
     def test_create_offer(self) -> None:
         resp = self.client.post('/api/offers/', {
+            'customer': self.address.customer_id,
             'address': self.address.pk,
             'document_date': '2026-06-15',
         })
@@ -128,6 +154,7 @@ class OfferViewSetTests(APITestCase):
 
     def test_valid_until_before_document_date_rejected(self) -> None:
         resp = self.client.post('/api/offers/', {
+            'customer': self.address.customer_id,
             'address': self.address.pk,
             'document_date': '2026-06-15',
             'valid_until': '2026-06-10',
@@ -137,6 +164,7 @@ class OfferViewSetTests(APITestCase):
 
     def test_valid_until_same_as_document_date_ok(self) -> None:
         resp = self.client.post('/api/offers/', {
+            'customer': self.address.customer_id,
             'address': self.address.pk,
             'document_date': '2026-06-15',
             'valid_until': '2026-06-15',
@@ -221,6 +249,7 @@ class InvoiceViewSetTests(APITestCase):
 
     def test_create_invoice(self) -> None:
         resp = self.client.post('/api/invoices/', {
+            'customer': self.address.customer_id,
             'address': self.address.pk,
             'service_date': '2026-06-15',
         })
@@ -232,6 +261,7 @@ class InvoiceViewSetTests(APITestCase):
         """document_date/due_date are read-only; explicit input is ignored in favour
         of the model default (today) — they are only set for real at issue time."""
         resp = self.client.post('/api/invoices/', {
+            'customer': self.address.customer_id,
             'address': self.address.pk,
             'document_date': '2026-06-15',
             'due_date': '2026-06-10',
@@ -277,10 +307,246 @@ class InvoiceViewSetTests(APITestCase):
         invoice = _make_invoice(self.address, status='issued')
         invoice.number = 'RE260601'
         invoice.save()
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
         resp = self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-01'})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()['status'], 'paid')
         self.assertEqual(resp.json()['paid_at'], '2026-07-01')
+        # The shortcut books a real payment for the whole open amount.
+        payment = Payment.objects.get(invoice=invoice)
+        self.assertEqual(payment.amount, Decimal('120.00'))
+        self.assertEqual(payment.payment_date, datetime.date(2026, 7, 1))
+
+    def test_mark_paid_without_open_amount_rejected(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-01'})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('offenen Betrag', resp.json()['detail'])
+
+    def test_mark_paid_twice_rejected(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-01'})
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-02'})
+        self.assertEqual(resp.status_code, 400)
+
+    # ---- Issue offsets customer credit ---------------------------------
+
+    def _give_credit(self, amount: str) -> None:
+        """Book a prepayment, the way a standalone payment would."""
+        from billing.services import ledger
+        payment = Payment.objects.create(
+            customer=self.address.customer,
+            payment_date=datetime.date(2026, 6, 1),
+            amount=Decimal(amount),
+        )
+        ledger.record_payment(payment)
+
+    @patch('billing.views.allocate_number', return_value='RE260601')
+    def test_issue_offsets_available_credit_automatically(self, mock_alloc: object) -> None:
+        from billing.services import ledger
+        self._give_credit('50.00')
+        invoice = _make_invoice(self.address)
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/issue/', {'due_date': _future_due_date()})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['status'], 'partially_paid')
+        self.assertEqual(resp.json()['paid_amount'], '50.00')
+        self.assertEqual(resp.json()['open_amount'], '70.00')
+        self.assertEqual(resp.json()['applied_credit'], '50.00')
+        # The credit was already on the ledger — offsetting must not re-book it.
+        self.assertEqual(
+            ledger.customer_balance(self.address.customer), Decimal('-70.00'))
+
+    @patch('billing.views.allocate_number', return_value='RE260601')
+    def test_issue_offsets_at_most_the_invoice_total(self, mock_alloc: object) -> None:
+        from billing.services import ledger
+        self._give_credit('500.00')
+        invoice = _make_invoice(self.address)
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/issue/', {'due_date': _future_due_date()})
+        self.assertEqual(resp.json()['status'], 'paid')
+        self.assertEqual(resp.json()['applied_credit'], '120.00')
+        self.assertEqual(resp.json()['open_amount'], '0.00')
+        # 500 − 120 stays as credit for the next invoice.
+        self.assertEqual(
+            ledger.available_credit(self.address.customer), Decimal('380.00'))
+
+    @patch('billing.views.allocate_number', return_value='RE260601')
+    def test_issue_without_credit_is_unchanged(self, mock_alloc: object) -> None:
+        invoice = _make_invoice(self.address)
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/issue/', {'due_date': _future_due_date()})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['status'], 'issued')
+        self.assertEqual(resp.json()['open_amount'], '120.00')
+        self.assertEqual(resp.json()['applied_credit'], '0.00')
+
+    @patch('billing.views.allocate_number', return_value='RE260601')
+    def test_issue_charges_the_customer_account(self, mock_alloc: object) -> None:
+        from billing.services import ledger
+        invoice = _make_invoice(self.address)
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        self.client.post(f'/api/invoices/{invoice.pk}/issue/', {'due_date': _future_due_date()})
+        self.assertEqual(
+            ledger.customer_balance(self.address.customer), Decimal('-120.00'))
+
+    # ---- Applying credit to an already-issued invoice -------------------
+
+    def test_apply_credit_action(self) -> None:
+        from billing.services import ledger
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
+        # Credit arrives only after the invoice was issued.
+        self._give_credit('50.00')
+
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/apply-credit/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['applied_credit'], '50.00')
+        self.assertEqual(resp.json()['status'], 'partially_paid')
+        self.assertEqual(resp.json()['open_amount'], '70.00')
+        self.assertEqual(
+            ledger.customer_balance(self.address.customer), Decimal('-70.00'))
+
+    def test_apply_credit_accepts_a_partial_amount(self) -> None:
+        from billing.services import ledger
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
+        self._give_credit('50.00')
+
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/apply-credit/', {'amount': '20.00'})
+        self.assertEqual(resp.json()['applied_credit'], '20.00')
+        self.assertEqual(
+            ledger.available_credit(self.address.customer), Decimal('30.00'))
+
+    def test_apply_credit_above_the_available_amount_rejected(self) -> None:
+        from billing.services import ledger
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
+        self._give_credit('50.00')
+
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/apply-credit/', {'amount': '80.00'})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Guthaben', resp.json()['detail'])
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.paid_amount, Decimal('0.00'))
+
+    def test_apply_credit_without_any_credit_rejected(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/apply-credit/')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_apply_credit_on_a_draft_rejected(self) -> None:
+        invoice = _make_invoice(self.address)
+        self._give_credit('50.00')
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/apply-credit/')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_credit_payments_cannot_be_posted_directly(self) -> None:
+        """Booking one by hand would settle an invoice with money that is not there."""
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        resp = self.client.post('/api/payments/', {
+            'customer': self.address.customer_id,
+            'invoice': invoice.pk,
+            'payment_date': '2026-07-01',
+            'amount': '120.00',
+            'method': 'credit',
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('method', resp.json())
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, 'issued')
+
+    # ---- Status ripple --------------------------------------------------
+
+    def test_cancel_allowed_on_a_partially_paid_invoice(self) -> None:
+        invoice = _make_invoice(self.address, status='partially_paid')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/', {'reason': 'Test'}, format='json')
+        self.assertEqual(resp.status_code, 201)
+
+    def test_create_reminder_allowed_on_a_partially_paid_invoice(self) -> None:
+        invoice = _make_invoice(self.address, status='partially_paid')
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/create-reminder/')
+        self.assertEqual(resp.status_code, 201)
+
+    def test_cancel_carries_the_customer_to_the_storno(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/',
+            {'reason': 'Test', 'create_draft': True}, format='json')
+        self.assertEqual(resp.json()['reverse']['customer'], self.address.customer_id)
+        self.assertEqual(resp.json()['draft']['customer'], self.address.customer_id)
+
+    def test_duplicate_carries_the_customer(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        resp = self.client.post(f'/api/invoices/{invoice.pk}/duplicate/')
+        self.assertEqual(resp.json()['customer'], self.address.customer_id)
+
+    def test_address_from_another_customer_rejected(self) -> None:
+        other = _make_address(vorname='Erika', nachname='Musterfrau')
+        resp = self.client.post('/api/invoices/', {
+            'customer': self.address.customer_id,
+            'address': other.pk,
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('address', resp.json())
+
+    def test_invoice_without_a_customer_rejected(self) -> None:
+        resp = self.client.post('/api/invoices/', {'address': self.address.pk})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('customer', resp.json())
+
+    # ---- Preview --------------------------------------------------------
+
+    def test_preview_shows_the_open_amount_after_a_partial_payment(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        invoice.number = 'RE260601'
+        invoice.save()
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        Payment.objects.create(
+            customer=self.address.customer,
+            invoice=invoice,
+            payment_date=datetime.date(2026, 7, 1),
+            amount=Decimal('50.00'),
+        )
+        html = self.client.get(f'/api/invoices/{invoice.pk}/preview/').content.decode()
+        self.assertIn('Bereits bezahlt', html)
+        self.assertIn('Offener Betrag', html)
+        self.assertIn('01.07.2026', html)
+        self.assertIn('70,00', html)
+
+    def test_preview_has_no_payment_block_without_payments(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        html = self.client.get(f'/api/invoices/{invoice.pk}/preview/').content.decode()
+        self.assertNotIn('Bereits bezahlt', html)
+
+    def test_history_includes_payments(self) -> None:
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        self.client.post('/api/payments/', {
+            'customer': self.address.customer_id,
+            'invoice': invoice.pk,
+            'payment_date': '2026-07-01',
+            'amount': '50.00',
+        })
+        entries = self.client.get(f'/api/invoices/{invoice.pk}/history/').json()
+        self.assertIn('payment', [e['source'] for e in entries])
 
     def test_update_draft_allowed(self) -> None:
         invoice = _make_invoice(self.address)
@@ -458,6 +724,7 @@ class InvoiceViewSetTests(APITestCase):
 
     def test_mark_paid_from_sent(self) -> None:
         invoice = _make_invoice(self.address, status='sent')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
         resp = self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-01'})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()['status'], 'paid')
