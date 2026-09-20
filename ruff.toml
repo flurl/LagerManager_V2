@@ -16,6 +16,7 @@ ignore = [
 
 [lint.per-file-ignores]
 "*/migrations/*.py" = ["E501", "F401"]
+"scripts/legacy_lagerstand_at_date.py" = ["UP"]  # must stay Python 2.7/3.5 compatible
 
 [format]
 quote-style = "double"
