@@ -124,9 +124,11 @@
     </v-dialog>
 
     <!-- Preview dialog -->
-    <DocumentPreviewDialog
+    <!-- The document as it always goes out: with its mandatory attachments
+         (Berichtigungsnoten) merged in.  Download saves this same PDF. -->
+    <PdfPreviewDialog
       v-model="previewDialog"
-      :doc-path="previewPath"
+      :api-path="previewPath ? documentPreviewPath(previewPath) : null"
       :title="previewTitle"
     />
 
@@ -158,7 +160,8 @@ import { useTheme } from 'vuetify'
 import { hexToRgba } from '../utils/color'
 import api from '../api'
 import OfferDialog from '../components/OfferDialog.vue'
-import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
+import PdfPreviewDialog from '../components/PdfPreviewDialog.vue'
+import { documentPreviewPath } from '../utils/attachmentPreview'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
 import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'

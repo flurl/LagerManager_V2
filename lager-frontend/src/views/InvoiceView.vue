@@ -159,7 +159,13 @@
       <InvoiceDialog :invoice="selectedInvoice" :prefill="templatePrefill" @saved="onSaved" @close="dialog = false" />
     </v-dialog>
 
-    <DocumentPreviewDialog v-model="previewDialog" :doc-path="previewPath" :title="previewTitle" />
+    <!-- The document as it always goes out: with its mandatory attachments
+         (Berichtigungsnoten) merged in.  Download saves this same PDF. -->
+    <PdfPreviewDialog
+      v-model="previewDialog"
+      :api-path="previewPath ? documentPreviewPath(previewPath) : null"
+      :title="previewTitle"
+    />
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/invoices/${historyItem.id}`" />
 
@@ -333,7 +339,8 @@ import { hexToRgba } from '../utils/color'
 import { extractErrorMessage } from '../utils/errorMessage'
 import api from '../api'
 import InvoiceDialog from '../components/InvoiceDialog.vue'
-import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
+import PdfPreviewDialog from '../components/PdfPreviewDialog.vue'
+import { documentPreviewPath } from '../utils/attachmentPreview'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
 import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'

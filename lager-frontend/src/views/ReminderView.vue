@@ -162,7 +162,13 @@
       </v-card>
     </v-dialog>
 
-    <DocumentPreviewDialog v-model="previewDialog" :doc-path="previewPath" :title="previewTitle" />
+    <!-- The document as it always goes out: with its mandatory attachments
+         (Berichtigungsnoten) merged in.  Download saves this same PDF. -->
+    <PdfPreviewDialog
+      v-model="previewDialog"
+      :api-path="previewPath ? documentPreviewPath(previewPath) : null"
+      :title="previewTitle"
+    />
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/reminders/${historyItem.id}`" />
 
@@ -199,7 +205,8 @@ import { useTheme } from 'vuetify'
 import { hexToRgba } from '../utils/color'
 import api from '../api'
 import NumberInput from '../components/NumberInput.vue'
-import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
+import PdfPreviewDialog from '../components/PdfPreviewDialog.vue'
+import { documentPreviewPath } from '../utils/attachmentPreview'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
 import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'

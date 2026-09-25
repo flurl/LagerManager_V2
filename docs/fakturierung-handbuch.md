@@ -448,9 +448,9 @@ Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E
 
 ### Vorschau / PDF
 
-Über das **Augen-Symbol** (oder Klick auf eine ausgestellte Zeile) öffnet sich die **Dokumentvorschau** als fertig gesetztes Dokument. Oben rechts steht **PDF herunterladen** zur Verfügung, um das Dokument als PDF zu speichern und anschließend zu drucken oder zu versenden.
+Über das **Augen-Symbol** (oder Klick auf eine ausgestellte Zeile) öffnet sich die **Dokumentvorschau**: das Dokument als PDF, so wie es verschickt wird. [Berichtigungsnoten](#berichtigungsnoten) sind darin **immer als zusätzliche Seiten enthalten**, da sie untrennbar zum Dokument gehören. Ergänzungen und Dateien sind dagegen nicht enthalten – sie werden erst beim [E-Mail-Versand](#e-mail-versand) ausgewählt. Oben rechts steht **Herunterladen** zur Verfügung, um genau dieses PDF zu speichern und anschließend zu drucken oder zu versenden. Auch ein ausgedrucktes oder anderweitig verschicktes Dokument enthält so stets seine Berichtigungen.
 
-![Dokumentvorschau mit „PDF herunterladen"](img/fakturierung/14-dokument-vorschau.png)
+![Dokumentvorschau](img/fakturierung/14-dokument-vorschau.png)
 
 > Vorhandene **Anmerkungen** werden auf dem Dokument oberhalb der Positionstabelle angezeigt (ohne eigene Überschrift). Geldbeträge werden mit Tausenderpunkt dargestellt, z. B. `1.234,56 €`.
 

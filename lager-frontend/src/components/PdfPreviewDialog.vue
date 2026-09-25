@@ -44,6 +44,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import api from '../api'
+import { filenameFromContentDisposition } from '../utils/contentDisposition'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -64,6 +65,8 @@ const model = computed({
 const loading = ref(false)
 const error = ref('')
 const objectUrl = ref('')
+// The name the server suggested for this content, preferred over downloadName.
+const serverFilename = ref('')
 
 // Always a blob: URL.  Pointing the iframe at the file itself fails when the
 // server sends X-Frame-Options: DENY (Django does, including for /media/ in
@@ -94,6 +97,7 @@ watch(() => [props.modelValue, props.apiPath, props.url], async ([open]) => {
     return
   }
   error.value = ''
+  serverFilename.value = ''
   releaseObjectUrl()
   if (!props.apiPath && !props.url) return
 
@@ -116,7 +120,9 @@ watch(() => [props.modelValue, props.apiPath, props.url], async ([open]) => {
  */
 async function fetchBlob() {
   if (props.apiPath) {
-    return (await api.get(props.apiPath, { responseType: 'blob' })).data
+    const res = await api.get(props.apiPath, { responseType: 'blob' })
+    serverFilename.value = filenameFromContentDisposition(res.headers['content-disposition'])
+    return res.data
   }
   const res = await fetch(props.url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -130,7 +136,7 @@ function download() {
   if (!href) return
   const a = document.createElement('a')
   a.href = href
-  a.download = props.downloadName
+  a.download = serverFilename.value || props.downloadName
   a.click()
 }
 </script>
