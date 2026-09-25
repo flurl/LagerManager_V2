@@ -4,6 +4,7 @@ from .models import (
     BillingArticle,
     ContinuousNumberSequence,
     CustomerLedgerEntry,
+    DocumentAttachment,
     Invoice,
     InvoiceLine,
     InvoiceTemplate,
@@ -27,3 +28,4 @@ admin.site.register(InvoiceTemplateLine)
 admin.site.register(Reminder)
 admin.site.register(Payment)
 admin.site.register(CustomerLedgerEntry)
+admin.site.register(DocumentAttachment)

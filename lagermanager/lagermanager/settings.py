@@ -194,6 +194,7 @@ CONSTANCE_CONFIG_FIELDSETS: dict[str, tuple[str, ...]] = {
         'EMAIL_SUBJECT_INVOICE', 'EMAIL_BODY_INVOICE',
         'EMAIL_SUBJECT_REMINDER', 'EMAIL_BODY_REMINDER',
     ),
+    'Dokument-Anhänge': ('EMAIL_DEFAULT_ATTACHMENT_KINDS',),
 }
 CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'DEFAULT_TAX_RATE_ID': (0, 'Standard-Steuersatz (TaxRate-ID, 0 = keiner)', int),
@@ -259,6 +260,16 @@ CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
         'Bitte überweisen Sie den offenen Betrag bis zum angegebenen Fälligkeitsdatum.\n\n'
         'Mit freundlichen Grüßen\n{company}',
         'E-Mail-Text beim Versand einer Mahnung',
+        str,
+    ),
+    # Comma-separated list of attachment kinds (billing/attachments/ registry).
+    # A plain str on purpose: ConfigView reads the third element as a real type
+    # and calls it to coerce the value.  Unknown entries are ignored when read,
+    # since /api/config/ does not validate per key.
+    'EMAIL_DEFAULT_ATTACHMENT_KINDS': (
+        'supplement,file',
+        'Anhangstypen, die im Versand-Dialog vorausgewählt sind '
+        '(kommagetrennt; leer = keine Vorauswahl)',
         str,
     ),
 }

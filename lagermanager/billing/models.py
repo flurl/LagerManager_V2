@@ -8,10 +8,14 @@ Documents (Offer, Invoice, Reminder) are global — a continuous numbered ledger
 independent of the accounting-period selector.
 """
 import datetime
+import os
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from auditlog.registry import auditlog
+from django.contrib.auth.models import User
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
 if TYPE_CHECKING:
@@ -160,6 +164,9 @@ class Offer(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Ergänzungen / Dateien hanging off this document (see DocumentAttachment).
+    attachments = GenericRelation('billing.DocumentAttachment')
 
     if TYPE_CHECKING:
         lines: RelatedManager["OfferLine"]
@@ -321,6 +328,9 @@ class Invoice(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Ergänzungen / Dateien hanging off this document (see DocumentAttachment).
+    attachments = GenericRelation('billing.DocumentAttachment')
 
     if TYPE_CHECKING:
         lines: RelatedManager["InvoiceLine"]
@@ -501,6 +511,9 @@ class Reminder(models.Model):
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Ergänzungen / Dateien hanging off this document (see DocumentAttachment).
+    attachments = GenericRelation('billing.DocumentAttachment')
 
     class Meta:
         ordering = ['-reminder_date', '-pk']
@@ -687,6 +700,94 @@ class CustomerLedgerEntry(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# DocumentAttachment
+# ---------------------------------------------------------------------------
+
+# Upload limit per file.  Enforced by the FileHandler, not by the model, so a
+# future kind may set its own.
+MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
+
+def document_attachment_upload_path(instance: "DocumentAttachment", filename: str) -> str:
+    """Store under billing_attachments/<document-model>/<document-pk>/<filename>."""
+    model: str = instance.content_type.model if instance.content_type_id else 'orphaned'
+    return os.path.join('billing_attachments', model, str(instance.object_id or 0), filename)
+
+
+class DocumentAttachment(models.Model):
+    """An attachment hanging off an Offer, Invoice or Reminder.
+
+    The three document models share no base class, so the link to the document
+    is generic — the same approach emails.EmailLog takes.  Two differences to
+    EmailLog are deliberate:
+
+    * ``object_id`` is an integer column, not a CharField.  Attachments are
+      reached through a GenericRelation (for cascade delete and for the
+      attachment_count annotation), and PostgreSQL cannot join bigint to
+      varchar.  EmailLog only ever filters its object_id as a string.
+    * The documents own their attachments: deleting a document deletes them,
+      whereas an EmailLog deliberately outlives the document it refers to.
+
+    ``kind`` is a free-form key into the handler registry (billing/attachments/)
+    and deliberately carries no ``choices``, so registering a new attachment
+    type needs no model change and no migration.  The serializer rejects kinds
+    that are not registered.
+    """
+
+    class Delivery(models.TextChoices):
+        MERGE = 'merge', 'An Dokument-PDF anhängen'
+        SEPARATE = 'separate', 'Eigener Anhang'
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveBigIntegerField()
+    document = GenericForeignKey('content_type', 'object_id')
+
+    kind = models.CharField(max_length=32, db_index=True)
+    position = models.PositiveIntegerField(default=0)
+
+    # Shared payload: a short label plus long text.  Used by every kind that
+    # needs them (Ergänzung: title + note text; Datei: the description).
+    title = models.CharField(max_length=255, blank=True)
+    body = models.TextField(blank=True)
+    # Escape hatch for kinds whose payload is neither of the above (e.g. the
+    # parameters of a future report generated from data).
+    data = models.JSONField(default=dict, blank=True)
+
+    # Only file-backed kinds use these.  null=True (rather than just blank) is
+    # required here: "no file at all" has to be distinguishable for the
+    # post_delete cleanup, unlike the legacy nullable text columns the
+    # project-wide rule is about.
+    file = models.FileField(
+        upload_to=document_attachment_upload_path, null=True, blank=True)
+    original_filename = models.CharField(max_length=255, blank=True)
+    mime_type = models.CharField(max_length=100, blank=True)
+    size_bytes = models.PositiveIntegerField(default=0)
+
+    # How this attachment leaves the building when the document is emailed.
+    # Only honoured for kinds whose handler supports merging.
+    delivery = models.CharField(
+        max_length=20, choices=Delivery.choices, default=Delivery.MERGE)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['position', 'pk']
+        indexes = [
+            models.Index(fields=['content_type', 'object_id'],
+                         name='doc_attachment_owner_idx'),
+        ]
+        verbose_name = 'Dokument-Anhang'
+        verbose_name_plural = 'Dokument-Anhänge'
+
+    def __str__(self) -> str:
+        label: str = self.title or self.original_filename or str(self.pk)
+        return f'{self.kind}: {label}'
+
+
+# ---------------------------------------------------------------------------
 # Audit log registration
 # ---------------------------------------------------------------------------
 
@@ -698,3 +799,4 @@ auditlog.register(InvoiceLine)
 auditlog.register(Reminder)
 auditlog.register(Payment)
 auditlog.register(CustomerLedgerEntry)
+auditlog.register(DocumentAttachment)

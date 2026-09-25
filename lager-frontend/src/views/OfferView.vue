@@ -42,6 +42,13 @@
               <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Per E-Mail versenden"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
+              <v-tooltip :text="item.attachment_count ? `Anhänge (${item.attachment_count})` : 'Anhänge'">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" size="small" class="ml-1"
+                    :color="item.attachment_count ? 'primary' : undefined"
+                    @click.stop="openAttachments(item)">mdi-paperclip</v-icon>
+                </template>
+              </v-tooltip>
               <v-tooltip v-if="['issued','sent','accepted'].includes(item.status)" text="In Rechnung umwandeln">
                 <template #activator="{ props }">
                   <v-icon v-bind="props" size="small" class="ml-1" color="success" @click.stop="convertToInvoice(item)">mdi-file-send</v-icon>
@@ -125,6 +132,14 @@
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/offers/${historyItem.id}`" />
 
+    <DocumentAttachmentsDialog
+      v-if="attachmentsItem"
+      v-model="attachmentsDialog"
+      :api-path="`/offers/${attachmentsItem.id}`"
+      :doc-label="`Angebot ${attachmentsItem.number || '#' + attachmentsItem.id}`"
+      @changed="fetchItems"
+    />
+
     <SendEmailDialog
       v-if="sendItem"
       v-model="sendDialog"
@@ -145,6 +160,7 @@ import OfferDialog from '../components/OfferDialog.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
+import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'
 
 const router = useRouter()
 const theme = useTheme()
@@ -177,6 +193,8 @@ const historyDialog = ref(false)
 const historyItem = ref(null)
 const sendDialog = ref(false)
 const sendItem = ref(null)
+const attachmentsDialog = ref(false)
+const attachmentsItem = ref(null)
 
 const linesCache = ref({})
 const linesLoading = ref({})
@@ -260,6 +278,11 @@ function openPreview(item) {
 function openHistory(item) {
   historyItem.value = item
   historyDialog.value = true
+}
+
+function openAttachments(item) {
+  attachmentsItem.value = item
+  attachmentsDialog.value = true
 }
 
 function openSend(item) {

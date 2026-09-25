@@ -1,29 +1,41 @@
 import datetime
 import logging
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 from auditlog.models import LogEntry
 from constance import config
+from core.models import Customer
 from core.permissions import DjangoModelPermissionsWithView
 from core.views import AuditLogHistoryMixin, _serialize_log_entry
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Max, Q, QuerySet
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from emails.models import EmailLog
 from emails.serializers import EmailLogSerializer
 from emails.services.email import AttachmentSpec, send_document_email
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 
+from .attachments import UnknownAttachmentKind, get_handler, kind_infos
+from .attachments.send import (
+    attachments_for,
+    build_send_attachments,
+    default_selection_ids,
+    mandatory_selection_ids,
+)
 from .models import (
     BillingArticle,
+    DocumentAttachment,
     Invoice,
     InvoiceLine,
     InvoiceTemplate,
@@ -34,8 +46,10 @@ from .models import (
     Payment,
     Reminder,
 )
+from .permissions import DocumentAttachmentPermission
 from .serializers import (
     BillingArticleSerializer,
+    DocumentAttachmentSerializer,
     InvoiceLineSerializer,
     InvoiceListSerializer,
     InvoiceSerializer,
@@ -55,6 +69,19 @@ from .services.render import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _payload(request: Request) -> dict[str, Any]:
+    """The request body as a mapping.
+
+    DRF types ``Request.data`` as ``dict | list``, because a JSON array is a
+    valid request body.  The endpoints below all document an object body, so
+    this narrows the type in one place instead of at every call site.  It is a
+    type-level narrowing only — a non-object body behaves exactly as before.
+    Endpoints that really do take an array (the bulk ``lines`` actions) check
+    with ``isinstance`` instead.
+    """
+    return cast('dict[str, Any]', request.data)
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +141,10 @@ def _line_log_entries(
 class DocumentEmailMixin:
     """Adds GET /{pk}/email-info/ and POST /{pk}/send-email/ to a document ViewSet.
 
+    send-email accepts attachment_ids: the DocumentAttachments to send along.
+    Those set to ``delivery = merge`` (and whose kind allows it) are appended to
+    the document PDF, the rest travel as their own files.
+
     Concrete ViewSets must implement:
         _email_pdf_filename(doc) -> str
         _allowed_send_statuses()  -> tuple[str, ...]  (statuses that may be sent)
@@ -149,11 +180,55 @@ class DocumentEmailMixin:
         return Response({
             'defaults': defaults,
             'log': EmailLogSerializer(log_qs, many=True).data,
+            'attachments': DocumentAttachmentSerializer(
+                attachments_for(doc), many=True).data,
+            # Which ones start out ticked is a backend decision (Constance), so
+            # the dialog needs no knowledge of attachment kinds.
+            'default_attachment_ids': default_selection_ids(doc),
+            'mandatory_attachment_ids': mandatory_selection_ids(doc),
         })
+
+    @action(detail=True, methods=['get'], url_path='send-pdf')
+    def send_pdf(self, request: Request, pk: str | None = None) -> HttpResponse:
+        """The document PDF exactly as send-email would attach it.
+
+        ``attachment_ids`` (repeatable query parameter) is the same selection
+        the send dialog posts; attachments that merge become extra pages here,
+        so the preview shows what the recipient will actually open.  Built
+        through build_send_attachments so preview and send cannot drift apart.
+        """
+        doc = self.get_object()  # type: ignore[attr-defined]
+
+        try:
+            attachment_ids: list[int] = [
+                int(value) for value in request.query_params.getlist('attachment_ids')
+            ]
+        except ValueError:
+            return Response({'detail': 'Ungültige Anhang-Auswahl.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            base_pdf: bytes = render_document_pdf(doc)
+            specs = build_send_attachments(
+                doc, attachment_ids,
+                base_pdf=base_pdf,
+                base_filename=self._email_pdf_filename(doc),
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        filename, pdf_bytes, _mime = specs[0]
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        # inline so a browser preview renders it instead of downloading it.
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
 
     @action(detail=True, methods=['post'], url_path='send-email')
     def send_email(self, request: Request, pk: str | None = None) -> Response:
-        """Send the document as a PDF attachment by email and record the attempt."""
+        """Email the document plus the selected attachments, and record the attempt."""
         doc = self.get_object()  # type: ignore[attr-defined]
 
         if doc.status not in self._allowed_send_statuses():
@@ -162,10 +237,10 @@ class DocumentEmailMixin:
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        recipient: str = (request.data.get('recipient') or '').strip()
-        subject: str = (request.data.get('subject') or '').strip()
-        body: str = request.data.get('body') or ''
-        cc: str = (request.data.get('cc') or '').strip()
+        recipient: str = (_payload(request).get('recipient') or '').strip()
+        subject: str = (_payload(request).get('subject') or '').strip()
+        body: str = _payload(request).get('body') or ''
+        cc: str = (_payload(request).get('cc') or '').strip()
 
         if not recipient:
             return Response(
@@ -179,7 +254,22 @@ class DocumentEmailMixin:
             return Response({'detail': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         filename = self._email_pdf_filename(doc)
-        attachment: AttachmentSpec = (filename, pdf_bytes, 'application/pdf')
+
+        raw_ids: Any = _payload(request).get('attachment_ids') or []
+        try:
+            attachment_ids: list[int] = [int(value) for value in raw_ids]
+        except (TypeError, ValueError):
+            return Response({'detail': 'Ungültige Anhang-Auswahl.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            attachments: list[AttachmentSpec] = build_send_attachments(
+                doc, attachment_ids, base_pdf=pdf_bytes, base_filename=filename)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
             send_document_email(
@@ -189,7 +279,7 @@ class DocumentEmailMixin:
                 cc=cc,
                 sent_by=request.user,  # type: ignore[arg-type]
                 related_object=doc,
-                attachments=[attachment],
+                attachments=attachments,
             )
         except Exception as exc:
             # EmailLog row with status=FAILED was already written by the service.
@@ -206,6 +296,137 @@ class DocumentEmailMixin:
         # Return fresh serializer data so the frontend list updates immediately.
         serializer_class = self.get_serializer_class()
         return Response(serializer_class(doc).data)
+
+
+class DocumentAttachmentMixin:
+    """Adds attachment CRUD to a document ViewSet.
+
+    Routes (``pk`` is the document, ``attachment_pk`` the attachment)::
+
+        GET  POST            /{pk}/attachments/
+        GET  PATCH  DELETE   /{pk}/attachments/{attachment_pk}/
+        GET                  /{pk}/attachments/{attachment_pk}/preview/
+        GET                  /{pk}/attachments/{attachment_pk}/pdf/
+
+    Attachments are reachable in every document status: they are metadata
+    around the document, not part of the frozen document itself.  Permissions
+    derive from the parent document — see DocumentAttachmentPermission.
+    """
+
+    def _get_attachment(self, doc: Any, attachment_pk: str) -> DocumentAttachment:
+        # Scoped to the document, so a foreign pk is a 404 rather than a leak.
+        return get_object_or_404(attachments_for(doc), pk=attachment_pk)
+
+    def _handler_for(self, attachment: DocumentAttachment) -> Any:
+        try:
+            return get_handler(attachment.kind)
+        except UnknownAttachmentKind:
+            return None
+
+    @action(detail=True, methods=['get', 'post'], url_path='attachments',
+            parser_classes=[MultiPartParser, FormParser, JSONParser],
+            permission_classes=[IsAuthenticated, DocumentAttachmentPermission])
+    def attachments(self, request: Request, pk: str | None = None) -> Response:
+        doc = self.get_object()  # type: ignore[attr-defined]
+
+        if request.method == 'GET':
+            serializer = DocumentAttachmentSerializer(attachments_for(doc), many=True)
+            return Response(serializer.data)
+
+        serializer = DocumentAttachmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        content_type = ContentType.objects.get_for_model(doc)
+        next_position: int = (
+            attachments_for(doc).aggregate(Max('position'))['position__max'] or 0) + 1
+        serializer.save(
+            content_type=content_type,
+            object_id=doc.pk,
+            position=next_position,
+            created_by=request.user,
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get', 'patch', 'delete'],
+            url_path=r'attachments/(?P<attachment_pk>[0-9]+)',
+            permission_classes=[IsAuthenticated, DocumentAttachmentPermission])
+    def attachment_detail(
+        self, request: Request, pk: str | None = None, attachment_pk: str = '',
+    ) -> Response:
+        doc = self.get_object()  # type: ignore[attr-defined]
+        attachment = self._get_attachment(doc, attachment_pk)
+
+        if request.method == 'GET':
+            return Response(DocumentAttachmentSerializer(attachment).data)
+
+        if request.method == 'DELETE':
+            attachment.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        if not isinstance(request.data, dict):
+            return Response({'detail': 'Ungültige Daten.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        # Replacing the file means delete + re-upload, which spares us an
+        # orphaned-file cleanup path.
+        data = {key: value for key, value in request.data.items() if key != 'file'}
+        serializer = DocumentAttachmentSerializer(attachment, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'],
+            url_path=r'attachments/(?P<attachment_pk>[0-9]+)/preview',
+            permission_classes=[IsAuthenticated, DocumentAttachmentPermission])
+    def attachment_preview(
+        self, request: Request, pk: str | None = None, attachment_pk: str = '',
+    ) -> HttpResponse:
+        doc = self.get_object()  # type: ignore[attr-defined]
+        attachment = self._get_attachment(doc, attachment_pk)
+        handler = self._handler_for(attachment)
+        if handler is None or not handler.renderable:
+            return Response(
+                {'detail': 'Für diesen Anhangstyp gibt es keine Vorschau.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return HttpResponse(handler.render_html(attachment),
+                            content_type='text/html; charset=utf-8')
+
+    @action(detail=True, methods=['get'],
+            url_path=r'attachments/(?P<attachment_pk>[0-9]+)/pdf',
+            permission_classes=[IsAuthenticated, DocumentAttachmentPermission])
+    def attachment_pdf(
+        self, request: Request, pk: str | None = None, attachment_pk: str = '',
+    ) -> HttpResponse:
+        doc = self.get_object()  # type: ignore[attr-defined]
+        attachment = self._get_attachment(doc, attachment_pk)
+        handler = self._handler_for(attachment)
+        if handler is None or not handler.renderable:
+            return Response(
+                {'detail': 'Für diesen Anhangstyp gibt es kein PDF.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            pdf_bytes = handler.render_pdf(attachment)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = (
+            f'attachment; filename="{handler.email_filename(attachment)}"')
+        return response
+
+
+class DocumentAttachmentKindsView(APIView):
+    """The attachment types this installation knows, straight from the registry.
+
+    Drives both the attachment dialog and the settings widget, so neither has
+    to hard-code a list that a new handler would invalidate.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        return Response([info.as_dict() for info in kind_infos()])
+
 
 
 # ---------------------------------------------------------------------------
@@ -242,11 +463,22 @@ def _snapshot_recipient(doc: Offer | Invoice) -> None:
     doc.recipient_text = doc.address.format_address_block()
 
 
-class OfferViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelViewSet[Offer]):
+class OfferViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistoryMixin,
+                   viewsets.ModelViewSet[Offer]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
-        return Offer.objects.select_related('address', 'customer').prefetch_related('lines__tax_rate')
+        return (
+            Offer.objects
+            .select_related('address', 'customer')
+            .prefetch_related('lines__tax_rate')
+            # Count over the GenericRelation — one join, so the paperclip
+            # badge in the list view costs no extra query per row.  The explicit
+            # order_by restates Meta.ordering, which annotate()'s GROUP BY would
+            # otherwise hide from the paginator.
+            .annotate(attachment_count=Count('attachments'))
+            .order_by('-document_date', '-pk')
+        )
 
     def get_serializer_class(self) -> type[BaseSerializer[Offer]]:
         if self.action == 'list':
@@ -534,7 +766,8 @@ def _apply_available_credit(
     return to_apply
 
 
-class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelViewSet[Invoice]):
+class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistoryMixin,
+                     viewsets.ModelViewSet[Invoice]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
@@ -544,6 +777,12 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
             # payments/reminders back the open_amount & status properties — without
             # them the list endpoint would issue two extra queries per invoice.
             .prefetch_related('lines__tax_rate', 'reversed_by', 'payments', 'reminders')
+            # Count over the GenericRelation — one join, so the paperclip
+            # badge in the list view costs no extra query per row.  The explicit
+            # order_by restates Meta.ordering, which annotate()'s GROUP BY would
+            # otherwise hide from the paginator.
+            .annotate(attachment_count=Count('attachments'))
+            .order_by('-document_date', '-pk')
         )
 
     def get_serializer_class(self) -> type[BaseSerializer[Invoice]]:
@@ -690,7 +929,7 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
                 status=status.HTTP_400_BAD_REQUEST,
             )
         document_date = timezone.localdate()
-        due_date_str: str | None = request.data.get('due_date')
+        due_date_str: str | None = _payload(request).get('due_date')
         due_date: datetime.date
         if due_date_str:
             try:
@@ -742,7 +981,7 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
                 {'detail': 'Guthaben kann nur bei offenen Rechnungen verrechnet werden.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        amount_raw: Any = request.data.get('amount')
+        amount_raw: Any = _payload(request).get('amount')
         amount: Decimal | None = None
         if amount_raw not in (None, ''):
             try:
@@ -771,13 +1010,13 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
                 {'detail': 'Nur offene Rechnungen können storniert werden.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        reason: str = (request.data.get('reason') or '').strip()
+        reason: str = (_payload(request).get('reason') or '').strip()
         if not reason:
             return Response(
                 {'detail': 'Ein Stornierungsgrund ist erforderlich.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        create_draft: bool = bool(request.data.get('create_draft', False))
+        create_draft: bool = bool(_payload(request).get('create_draft', False))
         with transaction.atomic():
             today = timezone.localdate()
             notes = f'Stornorechnung für Rechnung {invoice.number}\nGrund: {reason}'
@@ -865,7 +1104,7 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
                 {'detail': 'Die Rechnung hat keinen Kunden.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        paid_date_str: str | None = request.data.get('paid_at')
+        paid_date_str: str | None = _payload(request).get('paid_at')
         paid_at: datetime.date
         if paid_date_str:
             try:
@@ -885,7 +1124,10 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
 
         with transaction.atomic():
             payment = Payment.objects.create(
-                customer=invoice.customer,
+                # customer_id is checked above, so this is never None here.
+                # Invoice.customer is nullable at DB level only, for the
+                # backfill command.
+                customer=cast('Customer', invoice.customer),
                 invoice=invoice,
                 payment_date=paid_at,
                 amount=open_amount,
@@ -919,7 +1161,7 @@ class InvoiceViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVie
     @action(detail=True, methods=['post'], url_path='save-as-template')
     def save_as_template(self, request: Request, pk: str | None = None) -> Response:
         invoice: Invoice = self.get_object()
-        name: str = (request.data.get('name') or '').strip()
+        name: str = (_payload(request).get('name') or '').strip()
         if not name:
             return Response(
                 {'detail': 'Ein Name für die Vorlage ist erforderlich.'},
@@ -991,11 +1233,17 @@ class InvoiceTemplateViewSet(viewsets.ModelViewSet[InvoiceTemplate]):
 # Reminder
 # ---------------------------------------------------------------------------
 
-class ReminderViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelViewSet[Reminder]):
+class ReminderViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistoryMixin,
+                      viewsets.ModelViewSet[Reminder]):
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
 
     def get_queryset(self) -> Any:
-        qs = Reminder.objects.select_related('invoice__address', 'invoice__customer')
+        qs = (
+            Reminder.objects
+            .select_related('invoice__address', 'invoice__customer')
+            .annotate(attachment_count=Count('attachments'))
+            .order_by('-reminder_date', '-pk')
+        )
         invoice_id_str: str | None = self.request.query_params.get(
             'invoice_id')
         if invoice_id_str:
@@ -1026,7 +1274,7 @@ class ReminderViewSet(DocumentEmailMixin, AuditLogHistoryMixin, viewsets.ModelVi
         reminder: Reminder = self.get_object()
         if reminder.status != Reminder.Status.DRAFT and 'fee' in request.data:
             try:
-                new_fee = Decimal(str(request.data['fee']))
+                new_fee = Decimal(str(_payload(request)['fee']))
             except (InvalidOperation, TypeError):
                 return Response({'detail': 'Ungültige Mahngebühr.'},
                                 status=status.HTTP_400_BAD_REQUEST)

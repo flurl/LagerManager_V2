@@ -53,6 +53,13 @@
               <v-tooltip v-if="item.status === 'issued'" text="Per E-Mail versenden"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
+              <v-tooltip :text="item.attachment_count ? `Anhänge (${item.attachment_count})` : 'Anhänge'">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" size="small" class="ml-1"
+                    :color="item.attachment_count ? 'primary' : undefined"
+                    @click.stop="openAttachments(item)">mdi-paperclip</v-icon>
+                </template>
+              </v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
               <v-tooltip text="Verlauf"><template #activator="{ props }">
@@ -159,6 +166,14 @@
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/reminders/${historyItem.id}`" />
 
+    <DocumentAttachmentsDialog
+      v-if="attachmentsItem"
+      v-model="attachmentsDialog"
+      :api-path="`/reminders/${attachmentsItem.id}`"
+      :doc-label="`Mahnung ${attachmentsItem.number || '#' + attachmentsItem.id}`"
+      @changed="fetchItems"
+    />
+
     <SendEmailDialog
       v-if="sendItem"
       v-model="sendDialog"
@@ -186,6 +201,7 @@ import NumberInput from '../components/NumberInput.vue'
 import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
+import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'
 import { extractErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
@@ -236,6 +252,8 @@ const historyDialog = ref(false)
 const historyItem = ref(null)
 const sendDialog = ref(false)
 const sendItem = ref(null)
+const attachmentsDialog = ref(false)
+const attachmentsItem = ref(null)
 const errorSnackbar = ref(false)
 const errorMessage = ref('')
 
@@ -341,6 +359,11 @@ async function issueReminder(item) {
 function openHistory(item) {
   historyItem.value = item
   historyDialog.value = true
+}
+
+function openAttachments(item) {
+  attachmentsItem.value = item
+  attachmentsDialog.value = true
 }
 
 function openSend(item) {
