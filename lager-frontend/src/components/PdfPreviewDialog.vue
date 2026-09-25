@@ -65,7 +65,10 @@ const loading = ref(false)
 const error = ref('')
 const objectUrl = ref('')
 
-const displaySrc = computed(() => objectUrl.value || (props.apiPath ? '' : props.url))
+// Always a blob: URL.  Pointing the iframe at the file itself fails when the
+// server sends X-Frame-Options: DENY (Django does, including for /media/ in
+// dev), and the browser then shows "localhost refused to connect".
+const displaySrc = computed(() => objectUrl.value)
 
 function releaseObjectUrl() {
   if (objectUrl.value) {
@@ -92,12 +95,11 @@ watch(() => [props.modelValue, props.apiPath, props.url], async ([open]) => {
   }
   error.value = ''
   releaseObjectUrl()
-  if (!props.apiPath) return
+  if (!props.apiPath && !props.url) return
 
   loading.value = true
   try {
-    const res = await api.get(props.apiPath, { responseType: 'blob' })
-    objectUrl.value = URL.createObjectURL(res.data)
+    objectUrl.value = URL.createObjectURL(await fetchBlob())
   } catch (err) {
     error.value = (await detailFromBlobError(err))
       || 'Vorschau konnte nicht geladen werden.'
@@ -105,6 +107,21 @@ watch(() => [props.modelValue, props.apiPath, props.url], async ([open]) => {
     loading.value = false
   }
 }, { immediate: true })
+
+/**
+ * The content to show, as a Blob.  API paths go through the axios instance so
+ * the JWT is sent; a plain URL (an uploaded file under /media/, which needs no
+ * token and is not under /api/) is fetched directly.  Either way the Blob keeps
+ * the response's content type, so the browser renders PDFs and images alike.
+ */
+async function fetchBlob() {
+  if (props.apiPath) {
+    return (await api.get(props.apiPath, { responseType: 'blob' })).data
+  }
+  const res = await fetch(props.url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.blob()
+}
 
 onBeforeUnmount(releaseObjectUrl)
 
