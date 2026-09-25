@@ -38,6 +38,7 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
     - [7.4 Mahnungsliste](#74-mahnungsliste)
 8. [Vorschau, PDF, Versand & Verlauf](#8-vorschau-pdf-versand--verlauf)
     - [Vorschau / PDF](#vorschau--pdf)
+    - [Anhänge](#anhänge)
     - [E-Mail-Versand](#e-mail-versand)
     - [Verlauf](#verlauf)
 9. [Statusübersicht](#9-statusübersicht)
@@ -84,6 +85,7 @@ Damit die erzeugten Dokumente korrekt aussehen, sollten unter **Verwaltung → E
 - **Standard-Mahngebühr** in Euro
 - **Maximale Mahnstufe** (Vorgabe: 3) – ist die höchste Mahnstufe erreicht, erscheint auf der Mahnung „Letzte Mahnung" statt der Stufennummer
 - **Nummernpräfixe** für Angebote (Vorgabe `AN`), Rechnungen (`RE`) und Mahnungen (`MA`)
+- **Anhangstypen, die im Versand-Dialog vorausgewählt sind** – kommagetrennte Liste (Vorgabe: `supplement,file`, also Ergänzungen und Dateien). Leer lassen, wenn nichts vorausgewählt sein soll; siehe [Anhänge](#anhänge).
 - **E-Mail-Betreff** und **E-Mail-Text** je Dokumentart (Angebot, Rechnung, Mahnung) für den [E-Mail-Versand](#8-vorschau-pdf-versand--verlauf). In den Vorlagen werden die Platzhalter `{number}` (Dokumentnummer), `{company}` (Firmenname) und `{recipient_name}` (Empfänger) beim Versand automatisch ersetzt.
 
 > Die Dokumentnummern werden automatisch im Format `PRÄFIXJJMM##` vergeben (z. B. `RE260601` für die erste Rechnung im Juni 2026). Die Nummer wird erst beim **Ausstellen** vergeben.
@@ -286,6 +288,7 @@ Aus einem ausgestellten, versendeten oder angenommenen Angebot lässt sich direk
 
 - **Vorschau** (Augen-Symbol) – Dokumentvorschau, siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf).
 - **Senden** (Papierflieger-Symbol) – Angebot per E-Mail versenden, siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf).
+- **Anhänge** (Büroklammer-Symbol) – Ergänzungen und Dateien zum Angebot verwalten, siehe [Abschnitt 8](#anhänge).
 - **Kopieren** (bei nicht-Entwürfen) – legt ein Duplikat als neuen Entwurf an.
 - **Bearbeiten** / **Löschen** – nur für Entwürfe verfügbar.
 - **Verlauf** (Uhr-Symbol) – Änderungshistorie.
@@ -385,6 +388,7 @@ Es entsteht eine **Stornorechnung**, die mit dem Bezug zur Originalrechnung (↩
 ### 6.7 Weitere Aktionen
 
 - **Senden** (Papierflieger-Symbol) – ausgestellte/versendete Rechnung per E-Mail versenden, siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf). Bei Stornorechnungen nicht verfügbar.
+- **Anhänge** (Büroklammer-Symbol) – Ergänzungen und Dateien zur Rechnung verwalten, siehe [Abschnitt 8](#anhänge).
 - **Duplizieren** – erstellt eine Kopie als neuen Entwurf.
 - **Bearbeiten** / **Löschen** – nur für Entwürfe.
 - **Vorschau** / **Verlauf** – wie bei Angeboten.
@@ -455,7 +459,7 @@ Die Liste zeigt u. a. Mahnungsnummer, verknüpfte **Rechnung** (anklickbar zur V
 
 > Ist bei einer Mahnung die **höchste konfigurierte Mahnstufe** erreicht, wird auf dem Mahnungsdokument statt der Stufennummer der Text **„Letzte Mahnung"** angezeigt.
 
-Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E-Mail an den Empfänger verschickt werden – siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf).
+Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E-Mail an den Empfänger verschickt werden – siehe [Abschnitt 8](#8-vorschau-pdf-versand--verlauf). Über das **Büroklammer-Symbol** lassen sich [Anhänge](#anhänge) verwalten.
 
 ---
 
@@ -471,6 +475,32 @@ Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E
 
 > Vorhandene **Anmerkungen** werden auf dem Dokument oberhalb der Positionstabelle angezeigt (ohne eigene Überschrift). Geldbeträge werden mit Tausenderpunkt dargestellt, z. B. `1.234,56 €`.
 
+### Anhänge
+
+Zu jedem Angebot, jeder Rechnung und jeder Mahnung können **Anhänge** hinterlegt werden. Das **Büroklammer-Symbol** in der jeweiligen Liste öffnet den Dialog **Anhänge**. Es gibt zwei Arten:
+
+- **Ergänzung** – ein frei erfassbarer Text (Titel und Inhalt), der im Layout des Dokuments gesetzt wird, also mit Logo, Absender, Empfänger und Dokumentnummer. Je Dokument sind beliebig viele Ergänzungen möglich.
+- **Datei** – eine hochgeladene Datei mit einer kurzen Beschreibung (z. B. ein eingescannter Lieferschein).
+
+**Ergänzung anlegen:** Titel und Text erfassen und auf **Hinzufügen** klicken. Der Schalter **„Als zusätzliche Seiten an das Dokument-PDF anhängen"** steuert, wie die Ergänzung beim Versand mitgeschickt wird:
+
+- **eingeschaltet** (Vorgabe): Die Ergänzung wird als zusätzliche Seite(n) an das Dokument-PDF angehängt – der Empfänger erhält **eine** Datei.
+- **ausgeschaltet**: Die Ergänzung wird als **eigenes PDF** neben dem Dokument verschickt.
+
+Die Versandart lässt sich in der Liste jederzeit über das Auswahlfeld in der Spalte **Versand** ändern.
+
+**Vorschau:** Das **Vorschau-Symbol** zeigt den Anhang so, wie ihn der Empfänger erhält:
+
+- Ist die Ergänzung **in das Dokument-PDF eingebettet**, zeigt die Vorschau das **gesamte Dokument** samt der zusätzlichen Seiten – denn genau eine Datei bekommt der Empfänger.
+- Wird sie als **eigene Datei** verschickt, zeigt die Vorschau nur diese Datei.
+- Hochgeladene **PDFs und Bilder** werden ebenfalls direkt angezeigt. Dateien, die der Browser nicht darstellen kann (z. B. Tabellen- oder Word-Dateien), erscheinen stattdessen mit einem **Download-Symbol**.
+
+Aus der Vorschau heraus kann die angezeigte Datei jederzeit über **Herunterladen** gespeichert werden.
+
+**Dateien hochladen:** Über **Dateien auswählen** eine oder mehrere Dateien auswählen, je Datei eine Beschreibung erfassen und auf **Hochladen** klicken. Dateien werden **immer als eigener Anhang** mitgeschickt und nie in das Dokument-PDF eingefügt.
+
+> Anhänge können in **jedem Status** hinzugefügt, geändert und gelöscht werden – auch bei bereits ausgestellten, versendeten oder bezahlten Dokumenten. Sie sind Zusatzinformation rund um das Dokument, das Dokument selbst bleibt unverändert. Was tatsächlich verschickt wurde, bleibt im [Versand-Verlauf](#e-mail-versand) nachvollziehbar.
+
 ### E-Mail-Versand
 
 Ausgestellte (und bereits versendete) Angebote, Rechnungen und Mahnungen können direkt aus der Anwendung per E-Mail an den Empfänger geschickt werden. Das Dokument wird dabei automatisch als **PDF-Anhang** beigefügt – es muss nichts manuell hochgeladen werden.
@@ -479,14 +509,16 @@ Ausgestellte (und bereits versendete) Angebote, Rechnungen und Mahnungen können
 2. Der Dialog **Dokument versenden** öffnet sich. Vorbelegt sind:
    - **An** – die E-Mail-Adresse aus der hinterlegten Adresse (kann überschrieben oder ergänzt werden; Pflichtfeld).
    - **Betreff** und **Nachricht** – aus den in den [Einstellungen](#1-überblick--voraussetzungen) hinterlegten Vorlagen, wobei Platzhalter wie `{number}` und `{company}` automatisch durch die tatsächlichen Werte ersetzt sind.
-3. Text bei Bedarf anpassen und auf **Senden** klicken.
+   - **Anhänge mitsenden** – sind zum Dokument [Anhänge](#anhänge) hinterlegt, werden sie hier zum Ankreuzen aufgelistet. Welche Arten vorausgewählt sind, bestimmt die Einstellung **Anhangstypen, die im Versand-Dialog vorausgewählt sind**. Bei jedem Anhang steht, ob er an das Dokument-PDF angehängt oder als eigene Datei verschickt wird.
+3. **Vorher ansehen:** Das **Vorschau-Symbol** neben „Das Dokument wird als PDF-Anhang beigefügt" zeigt das Dokument **genau so, wie es verschickt wird** – also inklusive aller angekreuzten Ergänzungen, die als zusätzliche Seiten mitgehen. Jeder einzelne Anhang hat ebenfalls ein Vorschau-Symbol (bzw. ein Download-Symbol, wenn der Browser die Datei nicht anzeigen kann).
+4. Text bei Bedarf anpassen, Anhänge auswählen und auf **Senden** klicken.
 
 ![Dialog „Dokument versenden" mit Versand-Verlauf](img/fakturierung/19-dokument-versenden.png)
 
 **Hinweise:**
 
 - Bei **Angeboten** und **Rechnungen** wechselt der Status nach erfolgreichem Versand automatisch auf **Versendet**. **Mahnungen** besitzen keinen eigenen Versendet-Status und bleiben **Ausgestellt** (sie können bei Bedarf erneut versendet werden).
-- Jeder Sendeversuch wird protokolliert: Der **Versand-Verlauf** im unteren Teil des Dialogs listet Zeitpunkt, Benutzer, Empfänger, Status (**Versendet** / **Fehler**) sowie die mitgesendeten PDF-Anhänge (anklickbar) auf.
+- Jeder Sendeversuch wird protokolliert: Der **Versand-Verlauf** im unteren Teil des Dialogs listet Zeitpunkt, Benutzer, Empfänger, Status (**Versendet** / **Fehler**) sowie **alle** mitgesendeten Anhänge (anklickbar) auf – also auch Ergänzungen und Dateien, genau so, wie sie beim Empfänger angekommen sind.
 - Schlägt der Versand fehl (z. B. ungültige Empfängeradresse oder ein SMTP-Problem), erscheint eine Fehlermeldung; auch der Fehlversuch wird im Verlauf festgehalten.
 - **Stornorechnungen** können nicht versendet werden – für sie wird kein Senden-Symbol angezeigt.
 
@@ -538,6 +570,7 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 | Datum | Änderung |
 |-------|----------|
+| September 2026 | Neu: **Anhänge** zu Angeboten, Rechnungen und Mahnungen – frei erfassbare **Ergänzungen** (wahlweise als zusätzliche Seiten im Dokument-PDF oder als eigenes PDF) und hochgeladene **Dateien**. Beim E-Mail-Versand ist auswählbar, welche Anhänge mitgehen; eine **Vorschau** zeigt das Dokument genau so, wie es beim Empfänger ankommt. |
 | September 2026 | Neu: **Kunden** (Menü Stammdaten) mit mehreren Adressen, Kundennummer und **Saldo**; das Kundenkonto zeigt alle Bewegungen und nimmt Anzahlungen entgegen. |
 | September 2026 | Neu: **Teilzahlungen** – mehrere Zahlungen je Rechnung, neuer Status **Teilweise bezahlt**, neue Spalte **Offen**. Ein **Guthaben** wird beim Ausstellen automatisch verrechnet. |
 | September 2026 | Rechnungen und Mahnungen weisen die einzelnen Zahlungen und den **offenen Betrag** aus. Mahngebühren sind nach dem Ausstellen fix, Mahnungen nur für offene Rechnungen möglich. |
