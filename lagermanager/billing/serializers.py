@@ -546,6 +546,12 @@ class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachmen
             raise serializers.ValidationError(
                 {'kind': f'Unbekannter Anhangstyp „{kind}".'}) from None
 
+        # The kind decides how a new attachment travels unless the client says
+        # otherwise.  Without this the model field's own default would apply to
+        # every kind alike.  Updates keep whatever the attachment already has.
+        if self.instance is None and 'delivery' not in data:
+            data['delivery'] = handler.default_delivery
+
         return handler.validate(data, self.instance)
 
 

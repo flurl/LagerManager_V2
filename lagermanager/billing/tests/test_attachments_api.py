@@ -11,6 +11,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from rest_framework.test import APITestCase
 
+from billing.attachments import AttachmentHandler, register
+from billing.attachments import registry as attachment_registry
 from billing.models import DocumentAttachment, Invoice
 from billing.tests.test_email_actions import (
     _create_user,
@@ -308,3 +310,71 @@ class DocumentAttachmentApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['created_by_name'], 'editor')
+
+
+class _SeparateByDefaultHandler(AttachmentHandler):
+    """A kind that may be merged but normally travels as its own file.
+
+    Neither shipping kind has this combination, which is exactly why it is the
+    case that shows whether the handler's default is honoured or the model's.
+    """
+
+    kind = 'test-separate-by-default'
+    label = 'Testart'
+    supports_merge = True
+    default_delivery = DocumentAttachment.Delivery.SEPARATE
+
+
+class HandlerDefaultDeliveryTests(APITestCase):
+    """The handler, not the model field, decides a new attachment's delivery."""
+
+    def setUp(self) -> None:
+        # Registered per test and removed again, so the global registry that
+        # every other test sees stays untouched.
+        register(_SeparateByDefaultHandler)
+        self.addCleanup(
+            attachment_registry._HANDLERS.pop, _SeparateByDefaultHandler.kind, None)
+
+        self.client.force_authenticate(user=_create_user())
+        self.invoice = _make_invoice(_make_address())
+        self.url = f'/api/invoices/{self.invoice.pk}/attachments/'
+
+    def test_omitted_delivery_falls_back_to_the_handlers_default(self) -> None:
+        response = self.client.post(
+            self.url, {'kind': _SeparateByDefaultHandler.kind, 'title': 'Bericht'},
+            format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        # The model field defaults to MERGE; the handler says SEPARATE.
+        self.assertEqual(response.data['delivery'], DocumentAttachment.Delivery.SEPARATE)
+
+    def test_an_explicit_delivery_still_wins(self) -> None:
+        response = self.client.post(
+            self.url,
+            {'kind': _SeparateByDefaultHandler.kind, 'title': 'Bericht',
+             'delivery': DocumentAttachment.Delivery.MERGE},
+            format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['delivery'], DocumentAttachment.Delivery.MERGE)
+
+    def test_supplement_still_defaults_to_merge(self) -> None:
+        response = self.client.post(
+            self.url, {'kind': 'supplement', 'title': 'Hinweis', 'body': 'Text'},
+            format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['delivery'], DocumentAttachment.Delivery.MERGE)
+
+    def test_an_update_does_not_reset_the_delivery_to_the_default(self) -> None:
+        created = self.client.post(
+            self.url,
+            {'kind': 'supplement', 'title': 'Hinweis', 'body': 'Text',
+             'delivery': DocumentAttachment.Delivery.SEPARATE},
+            format='json')
+
+        response = self.client.patch(
+            f'{self.url}{created.data["id"]}/', {'title': 'Neu'}, format='json')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['delivery'], DocumentAttachment.Delivery.SEPARATE)

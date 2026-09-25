@@ -764,7 +764,9 @@ class DocumentAttachment(models.Model):
     size_bytes = models.PositiveIntegerField(default=0)
 
     # How this attachment leaves the building when the document is emailed.
-    # Only honoured for kinds whose handler supports merging.
+    # Only honoured for kinds whose handler supports merging.  New attachments
+    # get their handler's default_delivery from the serializer; the field
+    # default below is only a fallback for rows created some other way.
     delivery = models.CharField(
         max_length=20, choices=Delivery.choices, default=Delivery.MERGE)
 
