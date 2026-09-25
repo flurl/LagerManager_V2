@@ -16,7 +16,7 @@ from emails.services.email import AttachmentSpec
 
 from billing.models import DocumentAttachment
 
-from .registry import UnknownAttachmentKind, get_handler, known_kinds
+from .registry import UnknownAttachmentKind, all_handlers, get_handler, known_kinds
 
 DEFAULT_KINDS_SETTING = 'EMAIL_DEFAULT_ATTACHMENT_KINDS'
 
@@ -49,12 +49,18 @@ def default_selection_ids(doc: Any) -> list[int]:
 
 
 def mandatory_selection_ids(doc: Any) -> list[int]:
-    """Attachments that must always be sent.
+    """Attachments that must always be sent: every one whose kind is mandatory.
 
-    No kind is mandatory yet; the concept has a home here so that introducing
-    it later changes neither the API shape nor the frontend.
+    A property of the kind rather than a setting — a Berichtigungsnote has to
+    accompany its document by rule, so it must not be switchable off.
+    build_send_attachments() adds these ids to any selection, so a client that
+    leaves one out still sends it.
     """
-    return []
+    kinds = [handler.kind for handler in all_handlers() if handler.mandatory]
+    if not kinds:
+        return []
+    return list(
+        attachments_for(doc).filter(kind__in=kinds).values_list('pk', flat=True))
 
 
 def _unique_filename(filename: str, used: set[str]) -> str:

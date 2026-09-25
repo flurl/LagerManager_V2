@@ -10,15 +10,24 @@ from billing.attachments import (
     known_kinds,
     register,
 )
-from billing.attachments.handlers import FileHandler, SupplementHandler
+from billing.attachments.handlers import (
+    CorrectionNoteHandler,
+    FileHandler,
+    SupplementHandler,
+)
 from billing.attachments.send import _unique_filename, parse_kind_setting
 from billing.models import DocumentAttachment
 
 
 class RegistryTests(TestCase):
-    def test_ships_both_kinds(self) -> None:
-        self.assertEqual(set(known_kinds()), {'supplement', 'file'})
+    def test_ships_its_kinds(self) -> None:
+        """All three kinds are registered, each with its own handler class.
+
+        Pinned so that adding or removing a kind is a deliberate edit here.
+        """
+        self.assertEqual(set(known_kinds()), {'supplement', 'correction', 'file'})
         self.assertIsInstance(get_handler('supplement'), SupplementHandler)
+        self.assertIsInstance(get_handler('correction'), CorrectionNoteHandler)
         self.assertIsInstance(get_handler('file'), FileHandler)
 
     def test_unknown_kind_raises(self) -> None:
@@ -54,6 +63,19 @@ class RegistryTests(TestCase):
                 kind = 'supplement'
                 label = 'Nochmal'
 
+    def test_a_default_outside_the_kinds_own_modes_is_rejected(self) -> None:
+        """register() refuses a kind whose default_delivery is not one of its own
+        delivery_modes (ImproperlyConfigured) — it would store a mode it cannot
+        honour.
+        """
+        with self.assertRaises(ImproperlyConfigured):
+            @register
+            class Contradictory(AttachmentHandler):
+                kind = 'contradictory'
+                label = 'Widersprüchlich'
+                delivery_modes = (DocumentAttachment.Delivery.SEPARATE,)
+                default_delivery = DocumentAttachment.Delivery.MERGE
+
     def test_registration_requires_a_kind(self) -> None:
         with self.assertRaises(ImproperlyConfigured):
             @register
@@ -70,6 +92,26 @@ class ResolveDeliveryTests(TestCase):
                      DocumentAttachment.Delivery.SEPARATE):
             attachment = DocumentAttachment(kind='supplement', delivery=mode)
             self.assertEqual(handler.resolve_delivery(attachment), mode)
+
+    def test_correction_is_always_merged_even_if_the_row_says_separate(self) -> None:
+        """resolve_delivery turns a stored 'separate' on a note into 'merge', its
+        only mode — so a row written around the API still never travels alone.
+        """
+        attachment = DocumentAttachment(
+            kind='correction', delivery=DocumentAttachment.Delivery.SEPARATE)
+        self.assertEqual(
+            get_handler('correction').resolve_delivery(attachment),
+            DocumentAttachment.Delivery.MERGE,
+        )
+
+    def test_only_a_kind_with_several_modes_offers_a_choice(self) -> None:
+        """has_delivery_choice is True only for the Ergänzung (merge or separate).
+
+        Note and Datei have one fixed mode each, so the UI shows them no switch.
+        """
+        self.assertTrue(get_handler('supplement').has_delivery_choice)
+        self.assertFalse(get_handler('correction').has_delivery_choice)
+        self.assertFalse(get_handler('file').has_delivery_choice)
 
     def test_file_is_always_separate_even_if_the_row_says_merge(self) -> None:
         attachment = DocumentAttachment(

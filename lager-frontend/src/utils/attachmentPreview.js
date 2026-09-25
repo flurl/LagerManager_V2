@@ -33,6 +33,19 @@ export function documentPreviewPath(apiPath, ids = []) {
 }
 
 /**
+ * Ids of the attachments that end up inside the document PDF.
+ *
+ * Used where there is no send selection (the attachments dialog): a "whole
+ * document" preview then shows the document with all its merged attachments,
+ * so it is the same PDF whichever attachment's icon was clicked.
+ */
+export function mergedAttachmentIds(attachments) {
+  return (attachments || [])
+    .filter((a) => a.effective_delivery === 'merge')
+    .map((a) => a.id)
+}
+
+/**
  * Decide how to preview one attachment.
  *
  * Returns one of:

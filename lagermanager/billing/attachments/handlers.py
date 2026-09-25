@@ -1,15 +1,19 @@
 """The attachment kinds that ship today.
 
-Ergänzung — a note (title + text) rendered into the corporate document layout.
-             Appended to the document PDF by default, or sent as its own PDF.
-Datei      — an uploaded file with a short description.  Always its own file:
-             merging arbitrary uploads into the document is out of scope.
+Ergänzung         — a note (title + text) rendered into the corporate document
+                    layout.  Appended to the document PDF by default, or sent as
+                    its own PDF.
+Berichtigungsnote — like an Ergänzung, but a binding correction of an issued
+                    document: always sent, never deleted, never edited.
+Datei             — an uploaded file with a short description.  Always its own
+                    file: merging arbitrary uploads into the document is out of
+                    scope.
 """
 from __future__ import annotations
 
 import mimetypes
 import os
-from typing import Any
+from typing import Any, ClassVar
 
 from django.core.files.uploadedfile import UploadedFile
 from emails.services.email import AttachmentSpec
@@ -22,6 +26,7 @@ from .base import AttachmentHandler
 from .registry import register
 
 SUPPLEMENT_TEMPLATE = 'billing/supplement.html'
+CORRECTION_TEMPLATE = 'billing/correction_note.html'
 
 
 def _document_slug(attachment: DocumentAttachment) -> str:
@@ -39,7 +44,10 @@ class SupplementHandler(AttachmentHandler):
 
     kind = 'supplement'
     label = 'Ergänzung'
-    supports_merge = True
+    # Annotated because CorrectionNoteHandler subclasses this: unannotated, mypy
+    # would pin the exact two-element shape and reject its one-element tuple.
+    delivery_modes: ClassVar[tuple[str, ...]] = (
+        DocumentAttachment.Delivery.MERGE, DocumentAttachment.Delivery.SEPARATE)
     default_delivery = DocumentAttachment.Delivery.MERGE
     requires_file = False
     renderable = True
@@ -48,15 +56,18 @@ class SupplementHandler(AttachmentHandler):
     def validate(
         self, attrs: dict[str, Any], instance: DocumentAttachment | None
     ) -> dict[str, Any]:
+        # Worded with self.label because CorrectionNoteHandler reuses this.
         if attrs.get('file'):
             raise serializers.ValidationError(
-                {'file': 'Für eine Ergänzung kann keine Datei hochgeladen werden.'})
+                {'file': f'Für Anhänge vom Typ „{self.label}" kann keine Datei '
+                         f'hochgeladen werden.'})
 
         title: str = attrs.get('title', instance.title if instance else '') or ''
         body: str = attrs.get('body', instance.body if instance else '') or ''
         if not title.strip() and not body.strip():
             raise serializers.ValidationError(
-                {'body': 'Eine Ergänzung braucht einen Titel oder einen Text.'})
+                {'body': f'Anhänge vom Typ „{self.label}" brauchen einen Titel '
+                         f'oder einen Text.'})
         return attrs
 
     def email_filename(self, attachment: DocumentAttachment) -> str:
@@ -76,13 +87,66 @@ class SupplementHandler(AttachmentHandler):
         )]
 
 
+def _correction_number(attachment: DocumentAttachment) -> int:
+    """This note's running number among its document's Berichtigungsnoten.
+
+    Counted by creation order.  That is only stable because these notes can
+    never be deleted — a gap would renumber every later note.
+    """
+    return DocumentAttachment.objects.filter(
+        content_type_id=attachment.content_type_id,
+        object_id=attachment.object_id,
+        kind=attachment.kind,
+        pk__lte=attachment.pk,
+    ).count()
+
+
+@register
+class CorrectionNoteHandler(SupplementHandler):
+    """Berichtigungsnote — a binding correction of an issued document.
+
+    Written like an Ergänzung, and it inherits its validation and rendering.
+    What differs is only declared, not coded: it goes out with every email of
+    its document, always merged into the document PDF, can never be deleted,
+    and its text never changes.  A further correction is a further
+    Berichtigungsnote, numbered per document.
+    """
+
+    kind = 'correction'
+    label = 'Berichtigungsnote'
+    # Always extra pages of the corrected document itself — never a file the
+    # recipient could open, forward or file separately from it.
+    delivery_modes = (DocumentAttachment.Delivery.MERGE,)
+    default_delivery = DocumentAttachment.Delivery.MERGE
+    requires_file = False
+    renderable = True
+    mandatory = True
+    deletable = False
+    editable = False
+    requires_issued_document = True
+    # Shown in the dialog before creating one, since the step is irreversible.
+    help_text = ('Korrektur eines ausgestellten Dokuments. Wird bei jedem Versand '
+                 'als zusätzliche Seite an das Dokument-PDF angehängt und kann '
+                 'nach dem Anlegen weder geändert noch gelöscht werden – eine '
+                 'weitere Korrektur ist eine weitere Berichtigungsnote.')
+
+    def email_filename(self, attachment: DocumentAttachment) -> str:
+        return (f'berichtigungsnote_{_document_slug(attachment)}_'
+                f'{_correction_number(attachment)}.pdf')
+
+    def render_html(self, attachment: DocumentAttachment) -> str:
+        return render_attachment_html(
+            attachment, CORRECTION_TEMPLATE,
+            {'correction_number': _correction_number(attachment)})
+
+
 @register
 class FileHandler(AttachmentHandler):
     """Datei — whatever the user uploads, sent unchanged."""
 
     kind = 'file'
     label = 'Datei'
-    supports_merge = False
+    delivery_modes = (DocumentAttachment.Delivery.SEPARATE,)
     default_delivery = DocumentAttachment.Delivery.SEPARATE
     requires_file = True
     renderable = False
@@ -110,8 +174,8 @@ class FileHandler(AttachmentHandler):
             )[:100]
             attrs['size_bytes'] = uploaded.size or 0
 
-        # An uploaded file is never merged into the document PDF.
-        attrs['delivery'] = DocumentAttachment.Delivery.SEPARATE
+        # Never merged into the document PDF: delivery_modes says so, and the
+        # serializer enforces it for every kind alike.
         return attrs
 
     def email_filename(self, attachment: DocumentAttachment) -> str:

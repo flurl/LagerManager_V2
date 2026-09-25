@@ -36,22 +36,25 @@
             <tbody>
               <tr v-for="item in attachments" :key="item.id">
                 <td>
-                  <v-chip size="x-small" :color="item.kind === 'supplement' ? 'primary' : undefined">
+                  <v-chip
+                    size="x-small"
+                    :color="item.mandatory ? 'deep-orange' : (item.renderable ? 'primary' : undefined)"
+                  >
                     {{ item.kind_label }}
                   </v-chip>
                 </td>
                 <td>
                   <div>{{ item.display_title }}</div>
-                  <div v-if="item.kind === 'file' && item.original_filename"
+                  <div v-if="item.original_filename"
                        class="text-caption text-medium-emphasis">
                     {{ item.original_filename }}
                   </div>
                 </td>
                 <td style="min-width: 210px">
                   <v-select
-                    v-if="item.supports_merge"
+                    v-if="hasDeliveryChoice(item)"
                     :model-value="item.delivery"
-                    :items="deliveryChoices"
+                    :items="deliveryChoices(item)"
                     item-title="title"
                     item-value="value"
                     density="compact"
@@ -60,7 +63,9 @@
                     :disabled="savingId === item.id"
                     @update:model-value="v => changeDelivery(item, v)"
                   />
-                  <span v-else class="text-caption text-medium-emphasis">Eigene Datei</span>
+                  <span v-else class="text-caption text-medium-emphasis">
+                    {{ deliveryLabel(item.effective_delivery) }}
+                  </span>
                 </td>
                 <td class="text-right text-caption">
                   {{ item.size_bytes ? formatBytes(item.size_bytes) : '—' }}
@@ -86,14 +91,19 @@
                       </v-icon>
                     </template>
                   </v-tooltip>
-                  <v-tooltip v-if="item.kind === 'supplement'" text="Bearbeiten"><template #activator="{ props: p }">
+                  <v-tooltip v-if="canEditInTextForm(item, kinds)" text="Bearbeiten"><template #activator="{ props: p }">
                     <v-icon v-bind="p" size="small" class="ml-1" @click="startEdit(item)">mdi-pencil</v-icon>
                   </template></v-tooltip>
-                  <v-tooltip text="Löschen"><template #activator="{ props: p }">
+                  <v-tooltip v-if="item.deletable" text="Löschen"><template #activator="{ props: p }">
                     <v-icon v-bind="p" size="small" class="ml-1" color="error"
                             :disabled="deletingId === item.id"
                             @click="removeAttachment(item)">mdi-delete</v-icon>
                   </template></v-tooltip>
+                  <v-tooltip v-else :text="`${item.kind_label}: kann nicht gelöscht werden`">
+                    <template #activator="{ props: p }">
+                      <v-icon v-bind="p" size="small" class="ml-1">mdi-lock-outline</v-icon>
+                    </template>
+                  </v-tooltip>
                 </td>
               </tr>
             </tbody>
@@ -101,26 +111,64 @@
 
           <v-divider class="mb-4" />
 
-          <!-- Ergänzung -->
+          <!-- Text attachments: one form for every kind that is not an upload -->
           <div class="text-subtitle-2 mb-2">
-            {{ editingId ? 'Ergänzung bearbeiten' : 'Ergänzung hinzufügen' }}
+            {{ editingId ? `${selectedKind?.label ?? 'Anhang'} bearbeiten` : 'Text-Anhang hinzufügen' }}
           </div>
+          <v-btn-toggle
+            v-if="!editingId && textKindList.length > 1"
+            :model-value="textForm.kind"
+            mandatory
+            density="compact"
+            color="primary"
+            class="mb-2"
+            @update:model-value="selectKind"
+          >
+            <v-btn
+              v-for="k in textKindList"
+              :key="k.kind"
+              :value="k.kind"
+              :disabled="!canCreateKind(k, docStatus)"
+              size="small"
+            >
+              {{ k.label }}
+            </v-btn>
+          </v-btn-toggle>
+          <div v-if="!editingId && blockedOnDraft.length" class="text-caption text-medium-emphasis mb-2">
+            {{ blockedOnDraft.join(', ') }}: erst nach dem Ausstellen des Dokuments möglich.
+          </div>
+          <v-alert
+            v-if="!editingId && isIrreversible(selectedKind)"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+          >
+            {{ selectedKind.help_text }}
+          </v-alert>
           <v-text-field
-            v-model="supplementForm.title"
+            v-model="textForm.title"
             label="Titel"
             density="compact"
             class="mb-2"
           />
           <v-textarea
-            v-model="supplementForm.body"
+            v-model="textForm.body"
             label="Text"
             rows="4"
             auto-grow
             density="compact"
             class="mb-1"
           />
+          <div
+            v-if="selectedKind && !hasDeliveryChoice(selectedKind)"
+            class="text-caption text-medium-emphasis mb-2"
+          >
+            Versand: {{ deliveryLabel(selectedKind.default_delivery) }} (fest vorgegeben)
+          </div>
           <v-switch
-            v-model="supplementForm.merge"
+            v-if="hasDeliveryChoice(selectedKind)"
+            v-model="textForm.merge"
             label="Als zusätzliche Seiten an das Dokument-PDF anhängen"
             color="primary"
             density="compact"
@@ -131,9 +179,9 @@
             <v-btn
               color="primary"
               size="small"
-              :loading="savingSupplement"
-              :disabled="!canSaveSupplement"
-              @click="saveSupplement"
+              :loading="savingText"
+              :disabled="!canSaveText"
+              @click="saveText"
             >
               {{ editingId ? 'Speichern' : 'Hinzufügen' }}
             </v-btn>
@@ -200,8 +248,20 @@ import api from '../api'
 import { formatBytes } from '../utils/fileSize'
 import { extractErrorMessage } from '../utils/errorMessage'
 import {
+  canCreateKind,
+  canEditInTextForm,
+  defaultMerge,
+  defaultTextKind,
+  deliveryChoices,
+  deliveryLabel,
+  hasDeliveryChoice,
+  isIrreversible,
+  textKinds,
+} from '../utils/attachmentKinds'
+import {
   attachmentPreviewTarget,
   documentPreviewPath,
+  mergedAttachmentIds,
 } from '../utils/attachmentPreview'
 import PdfPreviewDialog from './PdfPreviewDialog.vue'
 
@@ -210,6 +270,8 @@ const props = defineProps({
   // The document this dialog manages attachments for, e.g. '/invoices/12'.
   apiPath: { type: String, default: null },
   docLabel: { type: String, default: '' },
+  // Some kinds (Berichtigungsnote) may only be attached to issued documents.
+  docStatus: { type: String, default: '' },
 })
 const emit = defineEmits(['update:modelValue', 'changed'])
 
@@ -218,18 +280,15 @@ const model = computed({
   set: (v) => emit('update:modelValue', v),
 })
 
-const deliveryChoices = [
-  { value: 'merge', title: 'Im Dokument-PDF' },
-  { value: 'separate', title: 'Eigene Datei' },
-]
-
 const loading = ref(false)
 const error = ref('')
 const attachments = ref([])
+// Kind metadata from the backend registry; every rule below is derived from it.
+const kinds = ref([])
 
-const supplementForm = ref({ title: '', body: '', merge: true })
+const textForm = ref({ kind: null, title: '', body: '', merge: true })
 const editingId = ref(null)
-const savingSupplement = ref(false)
+const savingText = ref(false)
 const savingId = ref(null)
 const deletingId = ref(null)
 
@@ -243,17 +302,24 @@ const previewUrl = ref(null)
 const previewTitle = ref('')
 const previewDownloadName = ref('dokument.pdf')
 
-const canSaveSupplement = computed(
-  () => !!(supplementForm.value.title.trim() || supplementForm.value.body.trim()),
-)
+const textKindList = computed(() => textKinds(kinds.value))
+const selectedKind = computed(
+  () => kinds.value.find((k) => k.kind === textForm.value.kind) ?? null)
+// Kinds the document does not allow yet, so the disabled buttons are explained.
+const blockedOnDraft = computed(() => textKindList.value
+  .filter((k) => !canCreateKind(k, props.docStatus))
+  .map((k) => k.label))
+
+const canSaveText = computed(() => !!selectedKind.value
+  && !!(textForm.value.title.trim() || textForm.value.body.trim()))
 
 watch(() => props.modelValue, async (open) => {
   if (!open || !props.apiPath) return
   error.value = ''
-  cancelEdit()
   filesToUpload.value = []
   fileDescriptions.value = []
-  await load()
+  await Promise.all([load(), loadKinds()])
+  cancelEdit()  // after loadKinds, so the form starts on a valid kind
 }, { immediate: true })
 
 // Keep one description slot per selected file.
@@ -273,13 +339,33 @@ async function load() {
   }
 }
 
+async function loadKinds() {
+  if (kinds.value.length) return
+  try {
+    const res = await api.get('/document-attachment-kinds/')
+    kinds.value = res.data
+  } catch (err) {
+    error.value = extractErrorMessage(err, 'Anhangstypen konnten nicht geladen werden.')
+  }
+}
+
+// There is no send selection here, so a merged attachment's preview shows the
+// document with *all* its merged attachments — otherwise it would look
+// different depending on which attachment's icon was clicked.
+function previewTarget(item) {
+  return attachmentPreviewTarget(item, {
+    apiPath: props.apiPath,
+    selectedIds: mergedAttachmentIds(attachments.value),
+  })
+}
+
 function previewMode(item) {
-  return attachmentPreviewTarget(item, { apiPath: props.apiPath })?.mode ?? null
+  return previewTarget(item)?.mode ?? null
 }
 
 /** Preview the attachment, or hand over the file when it cannot be displayed. */
 function openAttachment(item) {
-  const target = attachmentPreviewTarget(item, { apiPath: props.apiPath })
+  const target = previewTarget(item)
   if (!target) return
 
   if (target.mode === 'download') {
@@ -291,7 +377,7 @@ function openAttachment(item) {
     // is what the preview has to show.
     previewApiPath.value = documentPreviewPath(props.apiPath, target.ids)
     previewUrl.value = null
-    previewTitle.value = `${props.docLabel || 'Dokument'} — inkl. ${item.display_title}`
+    previewTitle.value = `${props.docLabel || 'Dokument'} — mit eingebetteten Anhängen`
     previewDownloadName.value = 'dokument.pdf'
   } else {
     previewApiPath.value = target.mode === 'api' ? target.path : null
@@ -304,27 +390,41 @@ function openAttachment(item) {
 
 function startEdit(item) {
   editingId.value = item.id
-  supplementForm.value = {
+  textForm.value = {
+    kind: item.kind,
     title: item.title ?? '',
     body: item.body ?? '',
     merge: item.delivery === 'merge',
   }
 }
 
-function cancelEdit() {
-  editingId.value = null
-  supplementForm.value = { title: '', body: '', merge: true }
+/** Switch the form to another kind, resetting the switch to that kind's default. */
+function selectKind(kind) {
+  textForm.value.kind = kind
+  textForm.value.merge = defaultMerge(selectedKind.value)
 }
 
-async function saveSupplement() {
-  savingSupplement.value = true
+function cancelEdit() {
+  editingId.value = null
+  const kind = defaultTextKind(kinds.value, props.docStatus)
+  textForm.value = { kind: kind?.kind ?? null, title: '', body: '', merge: defaultMerge(kind) }
+}
+
+async function saveText() {
+  const kind = selectedKind.value
+  if (!editingId.value && isIrreversible(kind)
+      && !window.confirm(`${kind.label} anlegen?\n\n${kind.help_text}`)) return
+
+  savingText.value = true
   error.value = ''
   const payload = {
-    kind: 'supplement',
-    title: supplementForm.value.title,
-    body: supplementForm.value.body,
-    delivery: supplementForm.value.merge ? 'merge' : 'separate',
+    kind: textForm.value.kind,
+    title: textForm.value.title,
+    body: textForm.value.body,
   }
+  // Only send a delivery when the kind offers a choice; otherwise the backend
+  // applies the kind's one mode.
+  if (hasDeliveryChoice(kind)) payload.delivery = textForm.value.merge ? 'merge' : 'separate'
   try {
     if (editingId.value) {
       await api.patch(`${props.apiPath}/attachments/${editingId.value}/`, payload)
@@ -335,9 +435,10 @@ async function saveSupplement() {
     await load()
     emit('changed')
   } catch (err) {
-    error.value = extractErrorMessage(err, 'Ergänzung konnte nicht gespeichert werden.')
+    error.value = extractErrorMessage(
+      err, `${kind?.label ?? 'Anhang'} konnte nicht gespeichert werden.`)
   } finally {
-    savingSupplement.value = false
+    savingText.value = false
   }
 }
 

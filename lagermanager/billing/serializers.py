@@ -460,6 +460,16 @@ class ReminderSerializer(serializers.ModelSerializer[Reminder]):
 # Document attachments
 # ---------------------------------------------------------------------------
 
+# What an attachment says, as opposed to how it travels (delivery), which may
+# always change.  Kinds that are not editable freeze these after creation.
+_CONTENT_FIELDS: tuple[str, ...] = ('title', 'body', 'data')
+
+
+def _is_draft(document: object) -> bool:
+    """Offer, Invoice and Reminder all share Status.DRAFT == 'draft'."""
+    return getattr(document, 'status', None) == 'draft'
+
+
 class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachment]):
     """Read/write one attachment of an offer, invoice or reminder.
 
@@ -473,7 +483,11 @@ class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachmen
     file_url = serializers.SerializerMethodField()
     kind_label = serializers.SerializerMethodField()
     supports_merge = serializers.SerializerMethodField()
+    delivery_modes = serializers.SerializerMethodField()
     renderable = serializers.SerializerMethodField()
+    mandatory = serializers.SerializerMethodField()
+    deletable = serializers.SerializerMethodField()
+    editable = serializers.SerializerMethodField()
     effective_delivery = serializers.SerializerMethodField()
     display_title = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(
@@ -483,14 +497,15 @@ class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachmen
         model = DocumentAttachment
         fields = [
             'id', 'kind', 'kind_label', 'title', 'body', 'data',
-            'delivery', 'effective_delivery', 'supports_merge', 'renderable',
-            'display_title',
+            'delivery', 'effective_delivery', 'supports_merge', 'delivery_modes',
+            'renderable', 'mandatory', 'deletable', 'editable', 'display_title',
             'position', 'file', 'file_url',
             'original_filename', 'mime_type', 'size_bytes',
             'created_at', 'updated_at', 'created_by_name',
         ]
         read_only_fields = [
-            'id', 'kind_label', 'effective_delivery', 'supports_merge', 'renderable',
+            'id', 'kind_label', 'effective_delivery', 'supports_merge', 'delivery_modes',
+            'renderable', 'mandatory', 'deletable', 'editable',
             'display_title', 'file_url', 'original_filename', 'mime_type',
             'size_bytes', 'created_at', 'updated_at', 'created_by_name',
         ]
@@ -517,10 +532,32 @@ class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachmen
         handler = self._handler(obj)
         return bool(handler and handler.supports_merge)
 
+    def get_delivery_modes(self, obj: DocumentAttachment) -> list[str]:
+        """The modes on offer; more than one means the user chooses."""
+        handler = self._handler(obj)
+        if handler is None:
+            return [DocumentAttachment.Delivery.SEPARATE]
+        return list(handler.delivery_modes)
+
     def get_renderable(self, obj: DocumentAttachment) -> bool:
         """Whether this attachment has a PDF/HTML rendering of its own."""
         handler = self._handler(obj)
         return bool(handler and handler.renderable)
+
+    def get_mandatory(self, obj: DocumentAttachment) -> bool:
+        handler = self._handler(obj)
+        return bool(handler and handler.mandatory)
+
+    def get_deletable(self, obj: DocumentAttachment) -> bool:
+        # Fail closed: a kind that is no longer registered may be a protected
+        # one whose handler went missing by mistake — never offer to delete it.
+        handler = self._handler(obj)
+        return bool(handler and handler.deletable)
+
+    def get_editable(self, obj: DocumentAttachment) -> bool:
+        # Same for editing: validate() needs the handler to accept anything.
+        handler = self._handler(obj)
+        return bool(handler and handler.editable)
 
     def get_effective_delivery(self, obj: DocumentAttachment) -> str:
         handler = self._handler(obj)
@@ -551,6 +588,29 @@ class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachmen
         # every kind alike.  Updates keep whatever the attachment already has.
         if self.instance is None and 'delivery' not in data:
             data['delivery'] = handler.default_delivery
+        # A kind may fix how it travels (a Datei never merges, a
+        # Berichtigungsnote always does).  A mode it does not offer is replaced
+        # by its default on every write, not refused: there is no choice for
+        # the user to get wrong, so there is nothing to report either.
+        if 'delivery' in data and data['delivery'] not in handler.delivery_modes:
+            data['delivery'] = handler.default_delivery
+
+        if self.instance is None:
+            document = self.context.get('document')
+            if handler.requires_issued_document and _is_draft(document):
+                raise serializers.ValidationError(
+                    f'Anhänge vom Typ „{handler.label}" können erst nach dem '
+                    f'Ausstellen des Dokuments angelegt werden.')
+        elif not handler.editable:
+            # Only a real change counts, so a client that resends the whole
+            # object alongside a new delivery mode is not refused.
+            changed = [field for field in _CONTENT_FIELDS
+                       if field in data and data[field] != getattr(self.instance, field)]
+            if changed:
+                raise serializers.ValidationError(dict.fromkeys(
+                    changed,
+                    f'Anhänge vom Typ „{handler.label}" können nach dem '
+                    f'Anlegen nicht mehr geändert werden.'))
 
         return handler.validate(data, self.instance)
 

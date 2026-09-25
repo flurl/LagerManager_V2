@@ -26,9 +26,15 @@ class KindInfo:
     kind: str
     label: str
     supports_merge: bool
+    delivery_modes: tuple[str, ...]
+    has_delivery_choice: bool
     default_delivery: str
     requires_file: bool
     renderable: bool
+    mandatory: bool
+    deletable: bool
+    editable: bool
+    requires_issued_document: bool
     help_text: str = ''
 
     def as_dict(self) -> dict[str, Any]:
@@ -40,23 +46,49 @@ class AttachmentHandler:
 
     kind: ClassVar[str] = ''
     label: ClassVar[str] = ''
-    #: May be appended to the document PDF instead of travelling as its own file.
-    supports_merge: ClassVar[bool] = False
+    #: How this kind may travel.  Several modes give the user a choice; a
+    #: single mode is fixed (a Datei never merges, a Berichtigungsnote always
+    #: does).  default_delivery must be one of them — register() checks.
+    delivery_modes: ClassVar[tuple[str, ...]] = (DocumentAttachment.Delivery.SEPARATE,)
     default_delivery: ClassVar[str] = DocumentAttachment.Delivery.SEPARATE
     #: The user uploads a file for this kind.
     requires_file: ClassVar[bool] = False
     #: Has an HTML/PDF preview of its own.
     renderable: ClassVar[bool] = False
+    #: Goes out with every email of its document, whether selected or not.
+    mandatory: ClassVar[bool] = False
+    #: May be deleted.  False is enforced by the API and at the model layer.
+    deletable: ClassVar[bool] = True
+    #: Title, body and data may change after creation (delivery always may).
+    editable: ClassVar[bool] = True
+    #: May only be attached once the document is no longer a draft.
+    requires_issued_document: ClassVar[bool] = False
     help_text: ClassVar[str] = ''
+
+    @property
+    def supports_merge(self) -> bool:
+        """May be appended to the document PDF (possibly as its only option)."""
+        return DocumentAttachment.Delivery.MERGE in self.delivery_modes
+
+    @property
+    def has_delivery_choice(self) -> bool:
+        """The user picks the delivery mode — only with more than one mode."""
+        return len(self.delivery_modes) > 1
 
     def info(self) -> KindInfo:
         return KindInfo(
             kind=self.kind,
             label=self.label,
             supports_merge=self.supports_merge,
+            delivery_modes=self.delivery_modes,
+            has_delivery_choice=self.has_delivery_choice,
             default_delivery=self.default_delivery,
             requires_file=self.requires_file,
             renderable=self.renderable,
+            mandatory=self.mandatory,
+            deletable=self.deletable,
+            editable=self.editable,
+            requires_issued_document=self.requires_issued_document,
             help_text=self.help_text,
         )
 
@@ -75,14 +107,16 @@ class AttachmentHandler:
     # -- read / delivery path ----------------------------------------------
 
     def resolve_delivery(self, attachment: DocumentAttachment) -> str:
-        """The delivery mode actually used — merge only where it is supported.
+        """The delivery mode actually used — only ever one the kind allows.
 
-        Defence in depth: a stored 'merge' on a kind that cannot be merged is
-        treated as 'separate' rather than trusted.
+        Defence in depth: a stored mode the kind does not allow (a Datei set to
+        merge, a Berichtigungsnote set to separate) is replaced by the kind's
+        default rather than trusted.  The serializer already prevents such rows;
+        this covers any that were written some other way.
         """
-        if not self.supports_merge:
-            return DocumentAttachment.Delivery.SEPARATE
-        return attachment.delivery
+        if attachment.delivery in self.delivery_modes:
+            return attachment.delivery
+        return self.default_delivery
 
     def display_title(self, attachment: DocumentAttachment) -> str:
         return attachment.title or attachment.original_filename or self.label

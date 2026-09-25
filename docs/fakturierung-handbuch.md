@@ -39,6 +39,7 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
 8. [Vorschau, PDF, Versand & Verlauf](#8-vorschau-pdf-versand--verlauf)
     - [Vorschau / PDF](#vorschau--pdf)
     - [Anhänge](#anhänge)
+        - [Berichtigungsnoten](#berichtigungsnoten)
     - [E-Mail-Versand](#e-mail-versand)
     - [Verlauf](#verlauf)
 9. [Statusübersicht](#9-statusübersicht)
@@ -144,10 +145,6 @@ Der Saldo ergibt sich automatisch:
 
 **Anzahlung erfassen:** im Kundenkonto auf **Zahlung erfassen** klicken. Der Betrag erhöht den Saldo
 und steht als **Guthaben** bereit, ohne einer Rechnung zugeordnet zu sein.
-
-> **Saldo ≠ verfügbares Guthaben.** Der Saldo ist der Kontostand insgesamt. Verrechnet werden kann
-> nur das **verfügbare Guthaben** – eingegangenes Geld, das noch keiner Rechnung zugeordnet ist
-> (Anzahlungen, Überzahlungen, Zahlungen auf eine später stornierte Rechnung).
 
 > Beim Anlegen einer Adresse ohne Kunden wird automatisch ein passender Kunde erzeugt. Beim
 > WZ-Abgleich erhält jede importierte Adresse ebenfalls einen eigenen Kunden.
@@ -330,8 +327,7 @@ Das **Rechnungsdatum** wird dabei automatisch auf das heutige Datum gesetzt. Im 
 
 ![Dialog „Rechnung ausstellen" mit Datumsoptionen](img/fakturierung/18-rechnung-ausstellen.png)
 
-Hat der Kunde ein **Guthaben**, wird es beim Ausstellen automatisch verrechnet – höchstens bis zur
-Höhe des Rechnungsbetrags. Der Dialog zeigt vorher, wie viel verrechnet wird und was zu zahlen
+Hat der Kunde ein **Guthaben**, wird es beim Ausstellen automatisch verrechnet. Der Dialog zeigt vorher, wie viel verrechnet wird und was zu zahlen
 bleibt. Die Verrechnung erscheint unter [Zahlungen](#64-zahlungen-erfassen-auch-teilzahlungen) als
 Eintrag mit der Zahlungsart **Guthaben** und kann dort wieder gelöscht werden.
 
@@ -348,21 +344,8 @@ sobald die Summe der Zahlungen den offenen Betrag erreicht oder übersteigt.
 - einem Formular zum Erfassen einer neuen Zahlung. Der Betrag ist mit dem offenen Betrag vorbelegt;
   über **Restbetrag übernehmen** lässt er sich jederzeit wieder darauf setzen.
 
-Der Status der Rechnung ergibt sich automatisch:
-
-| Summe der Zahlungen | Status |
-|---------------------|--------|
-| keine | **Ausgestellt** bzw. **Versendet** |
-| größer 0, aber unter der Forderung | **Teilweise bezahlt** |
-| gleich oder größer der Forderung | **Bezahlt** |
-
 Wird eine Zahlung gelöscht, wird die Rechnung entsprechend wieder geöffnet. Zahlt ein Kunde **mehr**
 als die Forderung, bleibt die Rechnung bezahlt und der Überhang wird zum **Guthaben** des Kunden.
-
-**Guthaben nachträglich verrechnen:** Entsteht ein Guthaben erst *nach* dem Ausstellen einer Rechnung
-(z. B. durch eine spätere Anzahlung oder eine Überzahlung an anderer Stelle), erscheint im
-Zahlungsdialog ein Hinweis mit der Schaltfläche **… verrechnen**. Damit wird das Guthaben – wie beim
-Ausstellen – gegen den offenen Betrag gebucht.
 
 Die Spalte **Offen** in der Rechnungsliste zeigt den noch offenen Betrag inklusive Mahngebühren.
 
@@ -445,10 +428,6 @@ Mahnungen sind Zahlungserinnerungen zu überfälligen Rechnungen und werden in *
 Über das **Ausstellen**-Symbol wird die Mahnungsnummer vergeben und der Status auf **Ausgestellt** gesetzt.
 Die Mahngebühr wird damit dem Kundenkonto belastet und ist danach nicht mehr änderbar.
 
-> Mahnungen lassen sich nur für **offene** Rechnungen anlegen und ausstellen. Wurde eine Rechnung
-> zwischenzeitlich bezahlt oder storniert, weist die Anwendung das Ausstellen ab – der Entwurf
-> kann dann gelöscht werden.
-
 ### 7.4 Mahnungsliste
 
 Die Liste zeigt u. a. Mahnungsnummer, verknüpfte **Rechnung** (anklickbar zur Vorschau), Adresse, **Stufe** (farblich: höchste konfigurierte Stufe rot, vorletzte Stufe orange), Datum, Fälligkeit, Status und den **offenen Betrag**.
@@ -477,12 +456,13 @@ Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E
 
 ### Anhänge
 
-Zu jedem Angebot, jeder Rechnung und jeder Mahnung können **Anhänge** hinterlegt werden. Das **Büroklammer-Symbol** in der jeweiligen Liste öffnet den Dialog **Anhänge**. Es gibt zwei Arten:
+Zu jedem Angebot, jeder Rechnung und jeder Mahnung können **Anhänge** hinterlegt werden. Das **Büroklammer-Symbol** in der jeweiligen Liste öffnet den Dialog **Anhänge**. Es gibt drei Arten:
 
 - **Ergänzung** – ein frei erfassbarer Text (Titel und Inhalt), der im Layout des Dokuments gesetzt wird, also mit Logo, Absender, Empfänger und Dokumentnummer. Je Dokument sind beliebig viele Ergänzungen möglich.
+- **Berichtigungsnote** – eine verbindliche Korrektur eines ausgestellten Dokuments, siehe [unten](#berichtigungsnoten).
 - **Datei** – eine hochgeladene Datei mit einer kurzen Beschreibung (z. B. ein eingescannter Lieferschein).
 
-**Ergänzung anlegen:** Titel und Text erfassen und auf **Hinzufügen** klicken. Der Schalter **„Als zusätzliche Seiten an das Dokument-PDF anhängen"** steuert, wie die Ergänzung beim Versand mitgeschickt wird:
+**Ergänzung anlegen:** Unter **Text-Anhang hinzufügen** die Art **Ergänzung** wählen, Titel und Text erfassen und auf **Hinzufügen** klicken. Der Schalter **„Als zusätzliche Seiten an das Dokument-PDF anhängen"** steuert, wie die Ergänzung beim Versand mitgeschickt wird:
 
 - **eingeschaltet** (Vorgabe): Die Ergänzung wird als zusätzliche Seite(n) an das Dokument-PDF angehängt – der Empfänger erhält **eine** Datei.
 - **ausgeschaltet**: Die Ergänzung wird als **eigenes PDF** neben dem Dokument verschickt.
@@ -499,7 +479,21 @@ Aus der Vorschau heraus kann die angezeigte Datei jederzeit über **Herunterlade
 
 **Dateien hochladen:** Über **Dateien auswählen** eine oder mehrere Dateien auswählen, je Datei eine Beschreibung erfassen und auf **Hochladen** klicken. Dateien werden **immer als eigener Anhang** mitgeschickt und nie in das Dokument-PDF eingefügt.
 
-> Anhänge können in **jedem Status** hinzugefügt, geändert und gelöscht werden – auch bei bereits ausgestellten, versendeten oder bezahlten Dokumenten. Sie sind Zusatzinformation rund um das Dokument, das Dokument selbst bleibt unverändert. Was tatsächlich verschickt wurde, bleibt im [Versand-Verlauf](#e-mail-versand) nachvollziehbar.
+> Ergänzungen und Dateien können in **jedem Status** hinzugefügt, geändert und gelöscht werden – auch bei bereits ausgestellten, versendeten oder bezahlten Dokumenten. Sie sind Zusatzinformation rund um das Dokument, das Dokument selbst bleibt unverändert. Was tatsächlich verschickt wurde, bleibt im [Versand-Verlauf](#e-mail-versand) nachvollziehbar. Für Berichtigungsnoten gelten strengere Regeln (siehe unten).
+
+#### Berichtigungsnoten
+
+Eine **Berichtigungsnote** korrigiert ein bereits ausgestelltes Dokument, ohne das Dokument selbst zu verändern – etwa einen falsch angegebenen Leistungszeitraum. Sie wird wie eine Ergänzung erfasst (Titel und Text) und im Layout des Dokuments gesetzt. Auf der Seite stehen außerdem die **laufende Nummer** der Berichtigung sowie **Nummer und Datum des berichtigten Dokuments**.
+
+Für Berichtigungsnoten gelten feste Regeln:
+
+- Sie können erst angelegt werden, wenn das Dokument **ausgestellt** ist – ein Entwurf wird einfach direkt bearbeitet.
+- Sie werden bei **jedem E-Mail-Versand des Dokuments automatisch mitgeschickt** und können im Versand-Dialog nicht abgewählt werden (Kennzeichnung **Pflicht**).
+- Sie werden **immer als zusätzliche Seite(n) an das Dokument-PDF angehängt** – nie als eigene Datei. Der Empfänger erhält die Berichtigung also stets zusammen mit dem berichtigten Dokument in einer Datei. Eine Auswahl der Versandart gibt es bei Berichtigungsnoten nicht.
+- Sie können nach dem Anlegen **weder geändert noch gelöscht** werden. In der Liste erscheint statt des Papierkorbs ein Schloss-Symbol.
+- Ist eine Berichtigung selbst falsch, wird eine **weitere Berichtigungsnote** angelegt. Pro Dokument sind beliebig viele möglich; sie werden fortlaufend nummeriert.
+
+> Weil eine Berichtigungsnote nicht mehr zurückgenommen werden kann, fragt die Anwendung vor dem Anlegen noch einmal nach.
 
 ### E-Mail-Versand
 
@@ -509,7 +503,7 @@ Ausgestellte (und bereits versendete) Angebote, Rechnungen und Mahnungen können
 2. Der Dialog **Dokument versenden** öffnet sich. Vorbelegt sind:
    - **An** – die E-Mail-Adresse aus der hinterlegten Adresse (kann überschrieben oder ergänzt werden; Pflichtfeld).
    - **Betreff** und **Nachricht** – aus den in den [Einstellungen](#1-überblick--voraussetzungen) hinterlegten Vorlagen, wobei Platzhalter wie `{number}` und `{company}` automatisch durch die tatsächlichen Werte ersetzt sind.
-   - **Anhänge mitsenden** – sind zum Dokument [Anhänge](#anhänge) hinterlegt, werden sie hier zum Ankreuzen aufgelistet. Welche Arten vorausgewählt sind, bestimmt die Einstellung **Anhangstypen, die im Versand-Dialog vorausgewählt sind**. Bei jedem Anhang steht, ob er an das Dokument-PDF angehängt oder als eigene Datei verschickt wird.
+   - **Anhänge mitsenden** – sind zum Dokument [Anhänge](#anhänge) hinterlegt, werden sie hier zum Ankreuzen aufgelistet. Welche Arten vorausgewählt sind, bestimmt die Einstellung **Anhangstypen, die im Versand-Dialog vorausgewählt sind**. Bei jedem Anhang steht, ob er an das Dokument-PDF angehängt oder als eigene Datei verschickt wird. [Berichtigungsnoten](#berichtigungsnoten) sind mit **Pflicht** gekennzeichnet, immer angekreuzt und nicht abwählbar.
 3. **Vorher ansehen:** Das **Vorschau-Symbol** neben „Das Dokument wird als PDF-Anhang beigefügt" zeigt das Dokument **genau so, wie es verschickt wird** – also inklusive aller angekreuzten Ergänzungen, die als zusätzliche Seiten mitgehen. Jeder einzelne Anhang hat ebenfalls ein Vorschau-Symbol (bzw. ein Download-Symbol, wenn der Browser die Datei nicht anzeigen kann).
 4. Text bei Bedarf anpassen, Anhänge auswählen und auf **Senden** klicken.
 
@@ -570,6 +564,7 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 | Datum | Änderung |
 |-------|----------|
+| September 2026 | Neu: **Berichtigungsnoten** – verbindliche Korrekturen ausgestellter Angebote, Rechnungen und Mahnungen. Sie werden bei jedem Versand automatisch als zusätzliche Seite an das Dokument-PDF angehängt, sind fortlaufend nummeriert und können weder geändert noch gelöscht werden. |
 | September 2026 | Neu: **Anhänge** zu Angeboten, Rechnungen und Mahnungen – frei erfassbare **Ergänzungen** (wahlweise als zusätzliche Seiten im Dokument-PDF oder als eigenes PDF) und hochgeladene **Dateien**. Beim E-Mail-Versand ist auswählbar, welche Anhänge mitgehen; eine **Vorschau** zeigt das Dokument genau so, wie es beim Empfänger ankommt. |
 | September 2026 | Neu: **Kunden** (Menü Stammdaten) mit mehreren Adressen, Kundennummer und **Saldo**; das Kundenkonto zeigt alle Bewegungen und nimmt Anzahlungen entgegen. |
 | September 2026 | Neu: **Teilzahlungen** – mehrere Zahlungen je Rechnung, neuer Status **Teilweise bezahlt**, neue Spalte **Offen**. Ein **Guthaben** wird beim Ausstellen automatisch verrechnet. |

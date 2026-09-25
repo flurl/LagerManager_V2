@@ -5,6 +5,7 @@ import {
   attachmentPreviewTarget,
   documentPreviewPath,
   isPreviewableMime,
+  mergedAttachmentIds,
 } from '../src/utils/attachmentPreview.js'
 
 const merged = { id: 1, effective_delivery: 'merge', renderable: true }
@@ -96,5 +97,40 @@ describe('attachmentPreviewTarget', () => {
         { id: 9, effective_delivery: 'separate', renderable: false }, opts),
       null,
     )
+  })
+})
+
+describe('mergedAttachmentIds', () => {
+  // Only merged attachments are picked (10 and 12); the separately sent one (11)
+  // never changes the document PDF, so it is left out.
+  test('lists every attachment that ends up inside the document PDF', () => {
+    const rows = [
+      { id: 10, effective_delivery: 'merge' },   // Ergänzung
+      { id: 11, effective_delivery: 'separate' },
+      { id: 12, effective_delivery: 'merge' },   // Berichtigungsnote
+    ]
+    assert.deepEqual(mergedAttachmentIds(rows), [10, 12])
+  })
+
+  // No attachments, or none loaded yet: no ids, no crash.
+  test('copes with nothing', () => {
+    assert.deepEqual(mergedAttachmentIds([]), [])
+    assert.deepEqual(mergedAttachmentIds(undefined), [])
+  })
+
+  // Regression (invoice PG260907-00007): in the attachments dialog, previewing the
+  // Berichtigungsnote showed invoice + note (2 pages) while previewing the Ergänzung
+  // showed all 3. With every merged id selected, both icons request the same [10, 12].
+  test('makes every merged preview show the same whole document', () => {
+    const rows = [
+      { id: 10, effective_delivery: 'merge' },
+      { id: 12, effective_delivery: 'merge' },
+    ]
+    const selectedIds = mergedAttachmentIds(rows)
+    const ids = rows.map(
+      (row) => attachmentPreviewTarget(row, { selectedIds, apiPath: '/invoices/27' }).ids,
+    )
+    assert.deepEqual(ids[0].slice().sort(), [10, 12])
+    assert.deepEqual(ids[1].slice().sort(), [10, 12])
   })
 })

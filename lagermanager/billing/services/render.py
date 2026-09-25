@@ -17,6 +17,7 @@ the Docker image).  The /preview/ endpoint works without WeasyPrint; only /pdf/
 requires it.
 """
 import base64
+import datetime
 import mimetypes
 from pathlib import Path
 from typing import cast
@@ -89,6 +90,15 @@ def _doc_type_label(doc: DocType) -> str:
         return 'Stornorechnung' if doc.is_reversal else 'Rechnung'
     if isinstance(doc, Reminder):
         return 'Mahnung'
+    raise TypeError(f'Unknown document type: {type(doc)}')
+
+
+def _document_date(doc: DocType) -> datetime.date | None:
+    """The date printed on the document itself (None for an unissued draft)."""
+    if isinstance(doc, (Offer, Invoice)):
+        return doc.document_date
+    if isinstance(doc, Reminder):
+        return doc.reminder_date
     raise TypeError(f'Unknown document type: {type(doc)}')
 
 
@@ -178,11 +188,16 @@ def build_email_defaults(doc: DocType) -> dict[str, str]:
     }
 
 
-def render_attachment_html(attachment: DocumentAttachment, template: str) -> str:
+def render_attachment_html(
+    attachment: DocumentAttachment,
+    template: str,
+    extra: dict[str, object] | None = None,
+) -> str:
     """Render one attachment as a standalone page in the document's layout.
 
-    The parent document supplies logo, company block, recipient and number, so
-    a supplement page is recognisably part of the same document.
+    The parent document supplies logo, company block, recipient, number and
+    date, so the page is recognisably part of the same document.  ``extra`` is
+    for context only one kind needs (e.g. a Berichtigungsnote's own number).
     """
     # The GenericForeignKey is typed as Any|None; an attachment always has a
     # document, the FK is not nullable.
@@ -193,7 +208,9 @@ def render_attachment_html(attachment: DocumentAttachment, template: str) -> str
         'recipient_text': recipient_block(doc),
         'doc_label': _doc_type_label(doc),
         'doc_number': doc.number or '',
+        'doc_date': _document_date(doc),
     })
+    ctx.update(extra or {})
     return render_to_string(template, ctx)
 
 

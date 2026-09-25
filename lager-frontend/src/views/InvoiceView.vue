@@ -166,6 +166,7 @@
     <DocumentAttachmentsDialog
       v-if="attachmentsItem"
       v-model="attachmentsDialog"
+      :doc-status="attachmentsItem.status"
       :api-path="`/invoices/${attachmentsItem.id}`"
       :doc-label="`${attachmentsItem.reverses ? 'Stornorechnung' : 'Rechnung'} ${attachmentsItem.number || '#' + attachmentsItem.id}`"
       @changed="fetchItems"

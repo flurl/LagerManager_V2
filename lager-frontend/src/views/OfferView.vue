@@ -135,6 +135,7 @@
     <DocumentAttachmentsDialog
       v-if="attachmentsItem"
       v-model="attachmentsDialog"
+      :doc-status="attachmentsItem.status"
       :api-path="`/offers/${attachmentsItem.id}`"
       :doc-label="`Angebot ${attachmentsItem.number || '#' + attachmentsItem.id}`"
       @changed="fetchItems"

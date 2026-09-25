@@ -169,6 +169,7 @@
     <DocumentAttachmentsDialog
       v-if="attachmentsItem"
       v-model="attachmentsDialog"
+      :doc-status="attachmentsItem.status"
       :api-path="`/reminders/${attachmentsItem.id}`"
       :doc-label="`Mahnung ${attachmentsItem.number || '#' + attachmentsItem.id}`"
       @changed="fetchItems"

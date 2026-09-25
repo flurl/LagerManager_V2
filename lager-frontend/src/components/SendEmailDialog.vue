@@ -68,6 +68,14 @@
               <template #label>
                 <span class="mr-2">{{ item.display_title }}</span>
                 <v-chip size="x-small" class="mr-2">{{ item.kind_label }}</v-chip>
+                <v-tooltip
+                  v-if="mandatoryIds.includes(item.id)"
+                  :text="`${item.kind_label} wird immer mitgeschickt.`"
+                >
+                  <template #activator="{ props: p }">
+                    <v-chip v-bind="p" size="x-small" color="deep-orange" class="mr-2">Pflicht</v-chip>
+                  </template>
+                </v-tooltip>
                 <span class="text-caption text-medium-emphasis mr-2">
                   {{ item.effective_delivery === 'merge'
                      ? 'wird an das PDF angehängt'

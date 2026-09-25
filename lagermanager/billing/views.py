@@ -333,7 +333,8 @@ class DocumentAttachmentMixin:
             serializer = DocumentAttachmentSerializer(attachments_for(doc), many=True)
             return Response(serializer.data)
 
-        serializer = DocumentAttachmentSerializer(data=request.data)
+        serializer = DocumentAttachmentSerializer(
+            data=request.data, context={'document': doc})
         serializer.is_valid(raise_exception=True)
         content_type = ContentType.objects.get_for_model(doc)
         next_position: int = (
@@ -359,6 +360,24 @@ class DocumentAttachmentMixin:
             return Response(DocumentAttachmentSerializer(attachment).data)
 
         if request.method == 'DELETE':
+            handler = self._handler_for(attachment)
+            if handler is None:
+                # Fail closed: without a handler the kind's rules can't be
+                # checked, and it may be a protected kind whose handler went
+                # missing by mistake.  Such rows are resolved case by case.
+                return Response(
+                    {'detail': f'Anhänge des unbekannten Typs „{attachment.kind}" '
+                               f'können nicht gelöscht werden.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not handler.deletable:
+                # The model layer refuses this too (billing/signals.py); this
+                # just turns it into a clean 400 instead of a ProtectedError.
+                return Response(
+                    {'detail': f'Anhänge vom Typ „{handler.label}" können nicht '
+                               f'gelöscht werden.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             attachment.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1255,6 +1274,18 @@ class ReminderViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHisto
 
     def get_serializer_class(self) -> type[BaseSerializer[Reminder]]:
         return ReminderSerializer
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        # Same rule as offers and invoices.  Without it an issued reminder could
+        # be deleted while its fee stayed on the customer ledger (the ledger FK
+        # is SET_NULL), and a Berichtigungsnote on it would be cascaded away.
+        reminder: Reminder = self.get_object()
+        if reminder.status != Reminder.Status.DRAFT:
+            return Response(
+                {'detail': 'Nur Entwürfe können gelöscht werden.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def _email_pdf_filename(self, doc: Any) -> str:
         reminder: Reminder = doc

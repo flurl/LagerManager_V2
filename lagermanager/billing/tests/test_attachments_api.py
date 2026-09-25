@@ -203,7 +203,7 @@ class DocumentAttachmentApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         by_kind = {row['kind']: row for row in response.data}
-        self.assertEqual(set(by_kind), {'supplement', 'file'})
+        self.assertEqual(set(by_kind), {'supplement', 'correction', 'file'})
         self.assertTrue(by_kind['supplement']['supports_merge'])
         self.assertTrue(by_kind['file']['requires_file'])
 
@@ -321,7 +321,7 @@ class _SeparateByDefaultHandler(AttachmentHandler):
 
     kind = 'test-separate-by-default'
     label = 'Testart'
-    supports_merge = True
+    delivery_modes = (DocumentAttachment.Delivery.MERGE, DocumentAttachment.Delivery.SEPARATE)
     default_delivery = DocumentAttachment.Delivery.SEPARATE
 
 

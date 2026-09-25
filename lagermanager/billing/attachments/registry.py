@@ -27,6 +27,10 @@ def register(handler_class: type[AttachmentHandler]) -> type[AttachmentHandler]:
             f'{handler_class.__name__} must define a non-empty kind.')
     if kind in _HANDLERS:
         raise ImproperlyConfigured(f'Duplicate attachment kind: {kind!r}')
+    if handler_class.default_delivery not in handler_class.delivery_modes:
+        raise ImproperlyConfigured(
+            f'{handler_class.__name__}: default_delivery '
+            f'{handler_class.default_delivery!r} is not one of its delivery_modes.')
     _HANDLERS[kind] = handler_class()
     return handler_class
 
