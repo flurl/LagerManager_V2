@@ -42,9 +42,7 @@
           <div class="d-flex align-center mb-1">
             <v-icon size="x-small" class="mr-1">mdi-paperclip</v-icon>
             <span class="text-caption text-medium-emphasis">
-              Das Dokument wird als PDF-Anhang beigefügt<template v-if="mergedCount">
-                – inklusive {{ mergedCount }}
-                {{ mergedCount === 1 ? 'Ergänzung' : 'Ergänzungen' }}</template>.
+              {{ attachmentCaption(mergedCount, separateCount) }}
             </span>
             <v-tooltip text="Dokument-Vorschau"><template #activator="{ props: p }">
               <v-icon v-bind="p" size="small" class="ml-2" @click="previewDocument">
@@ -202,6 +200,7 @@
 import { ref, computed, watch } from 'vue'
 import api from '../api'
 import { formatBytes } from '../utils/fileSize'
+import { attachmentCaption } from '../utils/sendCaption'
 import {
   attachmentPreviewTarget,
   documentPreviewPath,
@@ -240,8 +239,12 @@ const selectedBytes = computed(() => attachments.value
   .filter(a => selectedIds.value.includes(a.id) && a.effective_delivery !== 'merge')
   .reduce((sum, a) => sum + (Number(a.size_bytes) || 0), 0))
 
+// Selected attachments by how they travel: embedded into the document PDF, or
+// as files of their own.  Mandatory ones are part of selectedIds already.
 const mergedCount = computed(() => attachments.value.filter(
   a => selectedIds.value.includes(a.id) && a.effective_delivery === 'merge').length)
+const separateCount = computed(() => attachments.value.filter(
+  a => selectedIds.value.includes(a.id) && a.effective_delivery !== 'merge').length)
 
 const previewDialog = ref(false)
 const previewApiPath = ref(null)
