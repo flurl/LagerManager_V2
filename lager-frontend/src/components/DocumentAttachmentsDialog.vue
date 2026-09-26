@@ -45,7 +45,7 @@
                 </td>
                 <td>
                   <div>{{ item.display_title }}</div>
-                  <div v-if="item.original_filename"
+                  <div v-if="item.original_filename && item.original_filename !== item.display_title"
                        class="text-caption text-medium-emphasis">
                     {{ item.original_filename }}
                   </div>

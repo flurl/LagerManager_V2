@@ -269,7 +269,7 @@ CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'EMAIL_DEFAULT_ATTACHMENT_KINDS': (
         'supplement,file',
         'Anhangstypen, die im Versand-Dialog vorausgewählt sind '
-        '(kommagetrennt; leer = keine Vorauswahl)',
+        '(ohne Auswahl ist nichts vorausgewählt)',
         str,
     ),
 }

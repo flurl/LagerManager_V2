@@ -58,7 +58,7 @@
               v-for="item in attachments"
               :key="item.id"
               :model-value="selectedIds.includes(item.id)"
-              :disabled="mandatoryIds.includes(item.id)"
+              :readonly="mandatoryIds.includes(item.id)"
               density="compact"
               hide-details
               @update:model-value="v => toggleAttachment(item.id, v)"
@@ -305,6 +305,10 @@ function openAttachment(item) {
 }
 
 function toggleAttachment(id, checked) {
+  // Mandatory rows are readonly rather than disabled — disabled greyed out the
+  // whole row, Pflicht badge included, as if it were unavailable.  Guard here
+  // too, so they can never be unticked; the backend adds them back regardless.
+  if (!checked && mandatoryIds.value.includes(id)) return
   if (checked) {
     if (!selectedIds.value.includes(id)) selectedIds.value = [...selectedIds.value, id]
   } else {
