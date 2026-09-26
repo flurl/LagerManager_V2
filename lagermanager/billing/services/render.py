@@ -64,6 +64,8 @@ def _build_context(doc: DocType) -> dict[str, object]:
         'company_phone': getattr(config, 'COMPANY_PHONE', ''),
         'invoice_footer_text': getattr(config, 'INVOICE_FOOTER_TEXT', ''),
         'reminder_max_level': getattr(config, 'REMINDER_MAX_LEVEL', 3),
+        # Set only in preview environments: stamps a VORSCHAU watermark on every page.
+        'preview_branch': settings.PREVIEW_BRANCH,
     }
 
 

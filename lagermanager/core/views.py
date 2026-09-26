@@ -175,20 +175,24 @@ class VersionView(APIView):
 
     def get(self, request: Request) -> Response:
         try:
-            commit_count = int(subprocess.check_output(
+            commit_count = int(settings.GIT_COMMIT_COUNT or subprocess.check_output(
                 ["git", "rev-list", "--count", "HEAD"],
                 stderr=subprocess.DEVNULL,
             ).decode().strip())
         except Exception:
             commit_count = 0
         try:
-            commit_hash = subprocess.check_output(
+            commit_hash = settings.GIT_COMMIT or subprocess.check_output(
                 ["git", "rev-parse", "--short", "HEAD"],
                 stderr=subprocess.DEVNULL,
             ).decode().strip()
         except Exception:
             commit_hash = "unknown"
-        return Response({"version": f"V2.{commit_count}", "hash": commit_hash})
+        return Response({
+            "version": f"V2.{commit_count}",
+            "hash": commit_hash,
+            "preview_branch": settings.PREVIEW_BRANCH,
+        })
 
 
 class MeView(APIView):

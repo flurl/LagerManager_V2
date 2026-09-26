@@ -35,6 +35,9 @@ DB_USER="lagermanager"
 DB_PREFIX="lm_"            # prefix marking a database as branch-owned
 MANAGED_SERVICES=(backend cron)
 
+# shellcheck source=lib/branch-slug.sh
+source "$SCRIPT_DIR/lib/branch-slug.sh"
+
 cd "$PROJECT_DIR"
 
 # ---------------------------------------------------------------------------
@@ -54,9 +57,7 @@ db_name_for_branch() {
         printf '%s' "$BASE_DB"
         return
     fi
-    slug=$(printf '%s' "$branch" | tr '[:upper:]' '[:lower:]' \
-           | sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//')
-    [[ -n "$slug" ]] || die "cannot derive a database name from branch '$branch'"
+    slug=$(branch_slug "$branch") || die "cannot derive a database name from branch '$branch'"
     printf '%s%s' "$DB_PREFIX" "${slug:0:$((63 - ${#DB_PREFIX}))}"
 }
 

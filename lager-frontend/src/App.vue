@@ -1,5 +1,6 @@
 <template>
   <v-app>
+    <PreviewBanner />
     <template v-if="auth.isAuthenticated || route.meta.public">
       <template v-if="route.meta.fullscreen">
         <v-main>
@@ -11,7 +12,9 @@
       </template>
     </template>
     <template v-else>
-      <LoginView />
+      <v-main>
+        <LoginView />
+      </v-main>
     </template>
   </v-app>
 </template>
@@ -24,6 +27,7 @@ import { useNotificationsStore } from './stores/notifications'
 import { useAppTheme } from './composables/useAppTheme'
 import AppShell from './components/AppShell.vue'
 import LoginView from './views/LoginView.vue'
+import PreviewBanner from './components/PreviewBanner.vue'
 
 const auth = useAuthStore()
 const notifications = useNotificationsStore()
