@@ -161,6 +161,33 @@ If that has already happened, discard the change once:
 git checkout -- lager-frontend/package-lock.json
 ```
 
+### One-time steps after a deploy
+
+Some features need a data step that a migration cannot do. Run it once, after
+the deploy that first brings the feature in, and wait until the backend has
+finished its migrations (`docker compose -f docker-compose.prod.yml logs -f backend`
+shows gunicorn booting). The commands are idempotent, so an accidental second
+run does no harm.
+
+| Feature | Command |
+|---------|---------|
+| Customers & partial payments | `backfill_customers_and_ledger` |
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+    python manage.py backfill_customers_and_ledger --dry-run   # report only
+docker compose -f docker-compose.prod.yml exec backend \
+    python manage.py backfill_customers_and_ledger
+```
+
+**`backfill_customers_and_ledger`** gives groups that already manage invoices
+the new customer, payment and ledger permissions (without it those views
+answer 403 for everyone but superusers), creates a customer for every address,
+links existing offers and invoices to it, books the ledger charges for issued
+invoices and reminder fees, and turns invoices marked *paid* into payment
+records. It is a command rather than a data migration because it needs
+`Invoice.gross_total`, a Python property that historical models lack.
+
 ### Preview environments (branches next to production)
 
 To let users try a feature branch before it is merged, run it as a preview
@@ -196,6 +223,15 @@ with the branch name. **All outgoing mail is
 redirected** to `DEFAULT_FROM_EMAIL` (override with `PREVIEW_EMAIL_REDIRECT_TO`),
 with the branch in the subject and the original recipients at the top of the
 body, so no customer ever receives mail from a preview.
+
+Production's data is copied as it is, so the preview's backend migrates it to
+the branch's schema on startup. The [one-time steps](#one-time-steps-after-a-deploy)
+of features production doesn't have yet must be run in the preview too, after
+`create` and after every `update --reset-db`:
+
+```bash
+docker compose -p lm-preview-<slug> exec backend python manage.py backfill_customers_and_ledger
+```
 
 The branch must contain preview support (merged master from this feature on);
 older branches are refused because they would bind port 443 and send real mail.
