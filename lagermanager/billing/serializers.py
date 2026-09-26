@@ -1,11 +1,14 @@
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
+from core.models import Customer
 from rest_framework import serializers
 
+from .attachments import AttachmentHandler, UnknownAttachmentKind, get_handler
 from .models import (
     BillingArticle,
     CustomerLedgerEntry,
+    DocumentAttachment,
     Invoice,
     InvoiceLine,
     InvoiceTemplate,
@@ -105,6 +108,8 @@ class OfferListSerializer(serializers.ModelSerializer[Offer]):
     address_email = serializers.CharField(source='address.email', read_only=True, default='')
     net_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     gross_total = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    # Annotated by the viewset queryset (Count over the GenericRelation).
+    attachment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Offer
@@ -113,12 +118,12 @@ class OfferListSerializer(serializers.ModelSerializer[Offer]):
             'customer', 'customer_display',
             'address', 'address_display', 'address_email',
             'document_date', 'valid_until',
-            'net_total', 'gross_total',
+            'net_total', 'gross_total', 'attachment_count',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'number', 'customer_display', 'address_display', 'address_email',
-            'net_total', 'gross_total', 'created_at', 'updated_at',
+            'net_total', 'gross_total', 'attachment_count', 'created_at', 'updated_at',
         ]
 
 
@@ -212,7 +217,12 @@ class PaymentSerializer(serializers.ModelSerializer[Payment]):
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         instance: Payment | None = getattr(self, 'instance', None)
-        customer = data.get('customer', instance.customer if instance else None)
+        # `customer` is a required, non-nullable field, so DRF has already
+        # rejected a request that omits it; on a partial update it falls back to
+        # the instance's own customer.  The cast states that for the type
+        # checker, which only sees that the .get() default may be None.
+        customer: Customer = cast(
+            'Customer', data.get('customer', instance.customer if instance else None))
         invoice = data.get('invoice', instance.invoice if instance else None)
         method = data.get('method', instance.method if instance else None)
 
@@ -274,6 +284,8 @@ class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
     open_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     reverses_number = serializers.CharField(source='reverses.number', read_only=True, default=None)
     reversed_by_id = serializers.SerializerMethodField()
+    # Annotated by the viewset queryset (Count over the GenericRelation).
+    attachment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Invoice
@@ -286,10 +298,12 @@ class InvoiceListSerializer(serializers.ModelSerializer[Invoice]):
             'document_date', 'service_date', 'due_date', 'paid_at', 'notes',
             'net_total', 'gross_total',
             'reminder_fee_total', 'total_due', 'paid_amount', 'open_amount',
+            'attachment_count',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'number', 'customer_display', 'address_display', 'address_email',
+            'attachment_count',
             'reverses', 'reverses_number', 'reversed_by_id',
             # document_date/due_date are no longer user-editable; both are set
             # by InvoiceViewSet.issue() when the invoice is issued.
@@ -406,6 +420,8 @@ class ReminderSerializer(serializers.ModelSerializer[Reminder]):
     invoice_number = serializers.CharField(source='invoice.number', read_only=True)
     invoice_address_display = serializers.CharField(source='invoice.address.display_name', read_only=True)
     invoice_address_email = serializers.CharField(source='invoice.address.email', read_only=True, default='')
+    # Annotated by the viewset queryset (Count over the GenericRelation).
+    attachment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Reminder
@@ -413,11 +429,11 @@ class ReminderSerializer(serializers.ModelSerializer[Reminder]):
             'id', 'invoice', 'invoice_number', 'invoice_address_display', 'invoice_address_email',
             'level', 'number', 'status',
             'reminder_date', 'due_date', 'fee', 'notes',
-            'open_amount', 'cumulative_fee',
+            'open_amount', 'cumulative_fee', 'attachment_count',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'number', 'open_amount', 'cumulative_fee',
+            'id', 'number', 'open_amount', 'cumulative_fee', 'attachment_count',
             'invoice_number', 'invoice_address_display', 'invoice_address_email',
             'created_at', 'updated_at',
         ]
@@ -438,6 +454,165 @@ class ReminderSerializer(serializers.ModelSerializer[Reminder]):
                 raise serializers.ValidationError(
                     {'invoice': 'Mahnungen können nur für offene Rechnungen erstellt werden.'})
         return data
+
+
+# ---------------------------------------------------------------------------
+# Document attachments
+# ---------------------------------------------------------------------------
+
+# What an attachment says, as opposed to how it travels (delivery), which may
+# always change.  Kinds that are not editable freeze these after creation.
+_CONTENT_FIELDS: tuple[str, ...] = ('title', 'body', 'data')
+
+
+def _is_draft(document: object) -> bool:
+    """Offer, Invoice and Reminder all share Status.DRAFT == 'draft'."""
+    return getattr(document, 'status', None) == 'draft'
+
+
+class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachment]):
+    """Read/write one attachment of an offer, invoice or reminder.
+
+    Everything type-specific is delegated to the kind's handler, so a new kind
+    needs no change here.  content_type, object_id, position and created_by are
+    deliberately not fields: the viewset supplies them, which makes it
+    impossible to attach to an arbitrary object via a crafted payload.
+    """
+
+    file = serializers.FileField(write_only=True, required=False, allow_null=True)
+    file_url = serializers.SerializerMethodField()
+    kind_label = serializers.SerializerMethodField()
+    supports_merge = serializers.SerializerMethodField()
+    delivery_modes = serializers.SerializerMethodField()
+    renderable = serializers.SerializerMethodField()
+    mandatory = serializers.SerializerMethodField()
+    deletable = serializers.SerializerMethodField()
+    editable = serializers.SerializerMethodField()
+    effective_delivery = serializers.SerializerMethodField()
+    display_title = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(
+        source='created_by.username', read_only=True, default='')
+
+    class Meta:
+        model = DocumentAttachment
+        fields = [
+            'id', 'kind', 'kind_label', 'title', 'body', 'data',
+            'delivery', 'effective_delivery', 'supports_merge', 'delivery_modes',
+            'renderable', 'mandatory', 'deletable', 'editable', 'display_title',
+            'position', 'file', 'file_url',
+            'original_filename', 'mime_type', 'size_bytes',
+            'created_at', 'updated_at', 'created_by_name',
+        ]
+        read_only_fields = [
+            'id', 'kind_label', 'effective_delivery', 'supports_merge', 'delivery_modes',
+            'renderable', 'mandatory', 'deletable', 'editable',
+            'display_title', 'file_url', 'original_filename', 'mime_type',
+            'size_bytes', 'created_at', 'updated_at', 'created_by_name',
+        ]
+
+    # -- derived fields ----------------------------------------------------
+
+    def _handler(self, obj: DocumentAttachment) -> AttachmentHandler | None:
+        """None for a kind that is no longer registered — such rows stay readable."""
+        try:
+            return get_handler(obj.kind)
+        except UnknownAttachmentKind:
+            return None
+
+    def get_file_url(self, obj: DocumentAttachment) -> str | None:
+        # Relative URL on purpose, like deliveries.AttachmentSerializer: the
+        # frontend is served from the same origin.
+        return obj.file.url if obj.file else None
+
+    def get_kind_label(self, obj: DocumentAttachment) -> str:
+        handler = self._handler(obj)
+        return handler.label if handler else obj.kind
+
+    def get_supports_merge(self, obj: DocumentAttachment) -> bool:
+        handler = self._handler(obj)
+        return bool(handler and handler.supports_merge)
+
+    def get_delivery_modes(self, obj: DocumentAttachment) -> list[str]:
+        """The modes on offer; more than one means the user chooses."""
+        handler = self._handler(obj)
+        if handler is None:
+            return [DocumentAttachment.Delivery.SEPARATE]
+        return list(handler.delivery_modes)
+
+    def get_renderable(self, obj: DocumentAttachment) -> bool:
+        """Whether this attachment has a PDF/HTML rendering of its own."""
+        handler = self._handler(obj)
+        return bool(handler and handler.renderable)
+
+    def get_mandatory(self, obj: DocumentAttachment) -> bool:
+        handler = self._handler(obj)
+        return bool(handler and handler.mandatory)
+
+    def get_deletable(self, obj: DocumentAttachment) -> bool:
+        # Fail closed: a kind that is no longer registered may be a protected
+        # one whose handler went missing by mistake — never offer to delete it.
+        handler = self._handler(obj)
+        return bool(handler and handler.deletable)
+
+    def get_editable(self, obj: DocumentAttachment) -> bool:
+        # Same for editing: validate() needs the handler to accept anything.
+        handler = self._handler(obj)
+        return bool(handler and handler.editable)
+
+    def get_effective_delivery(self, obj: DocumentAttachment) -> str:
+        handler = self._handler(obj)
+        if handler is None:
+            return DocumentAttachment.Delivery.SEPARATE
+        return handler.resolve_delivery(obj)
+
+    def get_display_title(self, obj: DocumentAttachment) -> str:
+        handler = self._handler(obj)
+        return handler.display_title(obj) if handler else (obj.title or obj.kind)
+
+    # -- validation --------------------------------------------------------
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        if self.instance is not None and 'kind' in data and data['kind'] != self.instance.kind:
+            raise serializers.ValidationError(
+                {'kind': 'Der Typ eines Anhangs kann nicht geändert werden.'})
+
+        kind: str = data.get('kind') or (self.instance.kind if self.instance else '')
+        try:
+            handler = get_handler(kind)
+        except UnknownAttachmentKind:
+            raise serializers.ValidationError(
+                {'kind': f'Unbekannter Anhangstyp „{kind}".'}) from None
+
+        # The kind decides how a new attachment travels unless the client says
+        # otherwise.  Without this the model field's own default would apply to
+        # every kind alike.  Updates keep whatever the attachment already has.
+        if self.instance is None and 'delivery' not in data:
+            data['delivery'] = handler.default_delivery
+        # A kind may fix how it travels (a Datei never merges, a
+        # Berichtigungsnote always does).  A mode it does not offer is replaced
+        # by its default on every write, not refused: there is no choice for
+        # the user to get wrong, so there is nothing to report either.
+        if 'delivery' in data and data['delivery'] not in handler.delivery_modes:
+            data['delivery'] = handler.default_delivery
+
+        if self.instance is None:
+            document = self.context.get('document')
+            if handler.requires_issued_document and _is_draft(document):
+                raise serializers.ValidationError(
+                    f'Anhänge vom Typ „{handler.label}" können erst nach dem '
+                    f'Ausstellen des Dokuments angelegt werden.')
+        elif not handler.editable:
+            # Only a real change counts, so a client that resends the whole
+            # object alongside a new delivery mode is not refused.
+            changed = [field for field in _CONTENT_FIELDS
+                       if field in data and data[field] != getattr(self.instance, field)]
+            if changed:
+                raise serializers.ValidationError(dict.fromkeys(
+                    changed,
+                    f'Anhänge vom Typ „{handler.label}" können nach dem '
+                    f'Anlegen nicht mehr geändert werden.'))
+
+        return handler.validate(data, self.instance)
 
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,13 @@
               <v-tooltip v-if="item.status === 'issued'" text="Per E-Mail versenden"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
+              <v-tooltip :text="item.attachment_count ? `Anhänge (${item.attachment_count})` : 'Anhänge'">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" size="small" class="ml-1"
+                    :color="item.attachment_count ? 'primary' : undefined"
+                    @click.stop="openAttachments(item)">mdi-paperclip</v-icon>
+                </template>
+              </v-tooltip>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" @click.stop="openEdit(item)">mdi-pencil</v-icon>
               <v-icon v-if="item.status === 'draft'" size="small" class="ml-1" color="error" @click.stop="deleteItem(item)">mdi-delete</v-icon>
               <v-tooltip text="Verlauf"><template #activator="{ props }">
@@ -155,9 +162,24 @@
       </v-card>
     </v-dialog>
 
-    <DocumentPreviewDialog v-model="previewDialog" :doc-path="previewPath" :title="previewTitle" />
+    <!-- The document as it always goes out: with its mandatory attachments
+         (Berichtigungsnoten) merged in.  Download saves this same PDF. -->
+    <PdfPreviewDialog
+      v-model="previewDialog"
+      :api-path="previewPath ? documentPreviewPath(previewPath) : null"
+      :title="previewTitle"
+    />
 
     <HistoryDialog v-if="historyItem" v-model="historyDialog" :api-path="`/reminders/${historyItem.id}`" />
+
+    <DocumentAttachmentsDialog
+      v-if="attachmentsItem"
+      v-model="attachmentsDialog"
+      :doc-status="attachmentsItem.status"
+      :api-path="`/reminders/${attachmentsItem.id}`"
+      :doc-label="`Mahnung ${attachmentsItem.number || '#' + attachmentsItem.id}`"
+      @changed="fetchItems"
+    />
 
     <SendEmailDialog
       v-if="sendItem"
@@ -183,9 +205,11 @@ import { useTheme } from 'vuetify'
 import { hexToRgba } from '../utils/color'
 import api from '../api'
 import NumberInput from '../components/NumberInput.vue'
-import DocumentPreviewDialog from '../components/DocumentPreviewDialog.vue'
+import PdfPreviewDialog from '../components/PdfPreviewDialog.vue'
+import { documentPreviewPath } from '../utils/attachmentPreview'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
+import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'
 import { extractErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
@@ -236,6 +260,8 @@ const historyDialog = ref(false)
 const historyItem = ref(null)
 const sendDialog = ref(false)
 const sendItem = ref(null)
+const attachmentsDialog = ref(false)
+const attachmentsItem = ref(null)
 const errorSnackbar = ref(false)
 const errorMessage = ref('')
 
@@ -341,6 +367,11 @@ async function issueReminder(item) {
 function openHistory(item) {
   historyItem.value = item
   historyDialog.value = true
+}
+
+function openAttachments(item) {
+  attachmentsItem.value = item
+  attachmentsDialog.value = true
 }
 
 function openSend(item) {

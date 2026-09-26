@@ -3,6 +3,9 @@ Document rendering service for billing documents.
 
 render_document_html(doc)  → full HTML string (browser preview via iframe)
 render_document_pdf(doc)   → PDF bytes (download endpoint)
+render_attachment_html(attachment, template)
+                           → one attachment rendered in the document's layout
+render_html_to_pdf(html)   → PDF bytes for any already-rendered HTML
 build_email_defaults(doc)  → {recipient, subject, body} prefilled from Constance templates
 
 WeasyPrint is used for HTML→PDF conversion.  The same Django template is used for
@@ -14,15 +17,17 @@ the Docker image).  The /preview/ endpoint works without WeasyPrint; only /pdf/
 requires it.
 """
 import base64
+import datetime
 import mimetypes
 from pathlib import Path
+from typing import cast
 
 from constance import config
 from core.models import Address, Customer
 from django.conf import settings
 from django.template.loader import render_to_string
 
-from billing.models import Invoice, Offer, Reminder
+from billing.models import DocumentAttachment, Invoice, Offer, Reminder
 
 DocType = Offer | Invoice | Reminder
 
@@ -79,6 +84,52 @@ def _template_name(doc: DocType) -> str:
     raise TypeError(f'Unknown document type: {type(doc)}')
 
 
+def _doc_type_label(doc: DocType) -> str:
+    """What the document calls itself, for cross-references on attachments."""
+    if isinstance(doc, Offer):
+        return 'Angebot'
+    if isinstance(doc, Invoice):
+        return 'Stornorechnung' if doc.is_reversal else 'Rechnung'
+    if isinstance(doc, Reminder):
+        return 'Mahnung'
+    raise TypeError(f'Unknown document type: {type(doc)}')
+
+
+def _document_date(doc: DocType) -> datetime.date | None:
+    """The date printed on the document itself (None for an unissued draft)."""
+    if isinstance(doc, (Offer, Invoice)):
+        return doc.document_date
+    if isinstance(doc, Reminder):
+        return doc.reminder_date
+    raise TypeError(f'Unknown document type: {type(doc)}')
+
+
+def document_address(doc: DocType) -> tuple[Address, Customer | None]:
+    """The address a document is sent to, and the customer behind it.
+
+    A reminder carries no address of its own — it duns the invoice's.
+    """
+    if isinstance(doc, (Offer, Invoice)):
+        return doc.address, doc.customer
+    if isinstance(doc, Reminder):
+        return doc.invoice.address, doc.invoice.customer
+    raise TypeError(f'Unknown document type: {type(doc)}')
+
+
+def recipient_block(doc: DocType) -> str:
+    """The recipient block as printed on the document.
+
+    Mirrors base_document.html: the snapshot taken at issue time wins, the live
+    address fills in for drafts.  Resolved in Python rather than in the
+    template so it also works for reminders, which have neither field.
+    """
+    snapshot: str = getattr(doc, 'recipient_text', '') or ''
+    if snapshot:
+        return snapshot
+    address, _customer = document_address(doc)
+    return address.format_address_block()
+
+
 def render_document_html(doc: DocType) -> str:
     """Render the document to a full HTML string for browser preview."""
     ctx = _build_context(doc)
@@ -111,23 +162,19 @@ def build_email_defaults(doc: DocType) -> dict[str, str]:
     recipient is resolved by resolve_recipient_email() and may be empty.
     """
     company: str = getattr(config, 'COMPANY_NAME', '')
+    address: Address
+    customer: Customer | None
+    address, customer = document_address(doc)
 
     if isinstance(doc, Offer):
         subject_tpl: str = getattr(config, 'EMAIL_SUBJECT_OFFER', 'Ihr Angebot {number}')
         body_tpl: str = getattr(config, 'EMAIL_BODY_OFFER', '')
-        address: Address = doc.address
-        customer: Customer | None = doc.customer
     elif isinstance(doc, Invoice):
         subject_tpl = getattr(config, 'EMAIL_SUBJECT_INVOICE', 'Ihre Rechnung {number}')
         body_tpl = getattr(config, 'EMAIL_BODY_INVOICE', '')
-        address = doc.address
-        customer = doc.customer
     elif isinstance(doc, Reminder):
         subject_tpl = getattr(config, 'EMAIL_SUBJECT_REMINDER', 'Zahlungserinnerung {number}')
         body_tpl = getattr(config, 'EMAIL_BODY_REMINDER', '')
-        # A reminder has no address of its own — it duns the invoice's.
-        address = doc.invoice.address
-        customer = doc.invoice.customer
     else:
         raise TypeError(f'Unknown document type: {type(doc)}')
 
@@ -143,13 +190,43 @@ def build_email_defaults(doc: DocType) -> dict[str, str]:
     }
 
 
-def render_document_pdf(doc: DocType) -> bytes:
-    """Render the document to PDF bytes via WeasyPrint."""
+def render_attachment_html(
+    attachment: DocumentAttachment,
+    template: str,
+    extra: dict[str, object] | None = None,
+) -> str:
+    """Render one attachment as a standalone page in the document's layout.
+
+    The parent document supplies logo, company block, recipient, number and
+    date, so the page is recognisably part of the same document.  ``extra`` is
+    for context only one kind needs (e.g. a Berichtigungsnote's own number).
+    """
+    # The GenericForeignKey is typed as Any|None; an attachment always has a
+    # document, the FK is not nullable.
+    doc: DocType = cast('DocType', attachment.document)
+    ctx = _build_context(doc)
+    ctx.update({
+        'attachment': attachment,
+        'recipient_text': recipient_block(doc),
+        'doc_label': _doc_type_label(doc),
+        'doc_number': doc.number or '',
+        'doc_date': _document_date(doc),
+    })
+    ctx.update(extra or {})
+    return render_to_string(template, ctx)
+
+
+def render_html_to_pdf(html: str) -> bytes:
+    """Convert rendered HTML to PDF bytes via WeasyPrint."""
     try:
         import weasyprint  # noqa: PLC0415 — lazy import (system libs may not be present)
     except ImportError as exc:
         raise RuntimeError(
             'WeasyPrint is not installed. Rebuild the Docker image to enable PDF export.'
         ) from exc
-    html = render_document_html(doc)
     return weasyprint.HTML(string=html).write_pdf()  # type: ignore[no-any-return]
+
+
+def render_document_pdf(doc: DocType) -> bytes:
+    """Render the document to PDF bytes via WeasyPrint."""
+    return render_html_to_pdf(render_document_html(doc))

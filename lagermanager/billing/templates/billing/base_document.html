@@ -214,11 +214,13 @@
   </div>
 
   <!-- Notes -->
+  {% block notes %}
   {% if doc.notes %}
   <div class="notes-section">
     {{ doc.notes }}
   </div>
   {% endif %}
+  {% endblock %}
 
   <!-- Document body -->
   {% block doc_body %}{% endblock %}

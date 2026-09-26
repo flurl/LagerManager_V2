@@ -1,0 +1,36 @@
+{% extends "billing/base_document.html" %}
+
+{% block doc_title %}Ergänzung {% if doc_number %}{{ doc_number }}{% else %}(Entwurf){% endif %}{% endblock %}
+{% block doc_type_label %}Ergänzung{% endblock %}
+
+{% block extra_style %}
+<style>
+  .supplement-title {
+    font-size: 13pt;
+    margin: 0 0 10px 0;
+    color: #1a1a1a;
+  }
+  .supplement-body {
+    font-size: 10pt;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+</style>
+{% endblock %}
+
+{% block recipient %}{{ recipient_text }}{% endblock %}
+
+{% block meta_table %}
+<table class="meta-table">
+  <tr><td>{{ doc_label }}</td><td>{% if doc_number %}{{ doc_number }}{% else %}(Entwurf){% endif %}</td></tr>
+  <tr><td>Datum</td><td>{{ attachment.created_at|date:"d.m.Y" }}</td></tr>
+</table>
+{% endblock %}
+
+{# The parent document's Anmerkungen belong on the document, not on its supplement. #}
+{% block notes %}{% endblock %}
+
+{% block doc_body %}
+{% if attachment.title %}<h2 class="supplement-title">{{ attachment.title }}</h2>{% endif %}
+<div class="supplement-body">{{ attachment.body }}</div>
+{% endblock %}
