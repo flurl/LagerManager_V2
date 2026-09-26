@@ -110,7 +110,9 @@ class ConfigView(APIView):
         if not request.user.has_perm('constance.change_config'):
             return Response({'detail': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
         errors: dict[str, str] = {}
-        for key, value in request.data.items():
+        # The settings form always sends a JSON object; DRF types data as dict | list.
+        data: dict[str, Any] = cast(dict[str, Any], request.data)
+        for key, value in data.items():
             if key not in settings.CONSTANCE_CONFIG:
                 errors[key] = 'Unbekannter Schlüssel.'
                 continue
@@ -215,7 +217,8 @@ class MeView(APIView):
         })
 
     def patch(self, request: Request) -> Response:
-        prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
+        user: User = cast(User, request.user)  # IsAuthenticated guarantees a real User
+        prefs, _ = UserPreferences.objects.get_or_create(user=user)
         serializer = UserPreferencesSerializer(prefs, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
