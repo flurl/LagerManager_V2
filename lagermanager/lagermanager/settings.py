@@ -166,6 +166,20 @@ DEFAULT_FROM_EMAIL: str = config('DEFAULT_FROM_EMAIL', default='noreply@example.
 SERVER_EMAIL: str = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
 DEFAULT_REPLY_TO_EMAIL: str = config('DEFAULT_REPLY_TO_EMAIL', default='')
 
+# Preview environments (scripts/preview.sh): a feature branch running next to
+# production on a copy of its data. Set only there. It shows a warning banner and
+# redirects all outgoing mail to one address so no real customer is contacted.
+PREVIEW_BRANCH: str = config('PREVIEW_BRANCH', default='')
+PREVIEW_EMAIL_REDIRECT_TO: str = config('PREVIEW_EMAIL_REDIRECT_TO', default=DEFAULT_FROM_EMAIL)
+PREVIEW_EMAIL_INNER_BACKEND: str = EMAIL_BACKEND
+if PREVIEW_BRANCH:
+    EMAIL_BACKEND = 'core.mail.PreviewRedirectEmailBackend'
+
+# Commit the code was built from. Empty means "ask git at runtime", which fails
+# inside a preview's container (its .git is a worktree pointer to a host path).
+GIT_COMMIT: str = config('GIT_COMMIT', default='')
+GIT_COMMIT_COUNT: str = config('GIT_COMMIT_COUNT', default='')
+
 CORS_ALLOWED_ORIGINS: list[str] = cast(
     list[str],
     config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=_parse_list),

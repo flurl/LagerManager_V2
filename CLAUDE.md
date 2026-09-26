@@ -34,6 +34,14 @@ on checkout by the `post-checkout` hook from `scripts/hooks/`
 active database is the branch's own (`./scripts/branch-db.sh status`) — see the
 README for details.
 
+### Preview environments (production server)
+
+`scripts/preview.sh create|update|remove|list <branch>` runs a branch next to
+production on its own port, as a separate compose project on a copy of the
+production data (see README). Code must tolerate `PREVIEW_BRANCH` being set:
+it enables the warning banner (`PreviewBanner.vue`, baked in at build time via
+`VITE_PREVIEW_BRANCH`) and redirects all mail (`core/mail.py`).
+
 ### Backend (without Docker)
 ```bash
 cd lagermanager

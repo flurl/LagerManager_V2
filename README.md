@@ -161,6 +161,47 @@ If that has already happened, discard the change once:
 git checkout -- lager-frontend/package-lock.json
 ```
 
+### Preview environments (branches next to production)
+
+To let users try a feature branch before it is merged, run it as a preview
+on the production server, next to the live stack:
+
+```bash
+./scripts/preview.sh create feature/foo              # → https://<host>:8443/
+./scripts/preview.sh update feature/foo              # pull branch, rebuild, restart
+./scripts/preview.sh update feature/foo --reset-db   # … and re-copy data from production
+./scripts/preview.sh list
+./scripts/preview.sh remove feature/foo              # delete everything it created
+```
+
+A preview is fully separate from production:
+
+- **Code** — a `git worktree` of the production checkout in `../lm-previews/<slug>`
+  (override with `LM_PREVIEW_ROOT`), detached at the branch's commit. The
+  production checkout is never touched.
+- **Containers** — its own compose project `lm-preview-<slug>` with its own
+  network and volumes. Only `db`, `backend` (2 workers) and `nginx` run, never
+  `cron`, so stock and invoice alerts are not sent twice.
+- **Data** — a copy of the production database (`pg_dump | pg_restore`, which
+  doesn't disturb production connections) and of the media files, taken at
+  `create` or `update --reset-db`. Changes made in a preview are never
+  transferred back.
+- **Port** — the next free port from 8443 upwards; the URL is production's with
+  the port added. The server firewall must allow these ports.
+
+Every page, including the login page, carries a red warning banner naming the
+branch, the Django admin header says *VORSCHAU*, and every page of every
+generated offer, invoice and reminder PDF carries a diagonal *VORSCHAU* watermark
+with the branch name. **All outgoing mail is
+redirected** to `DEFAULT_FROM_EMAIL` (override with `PREVIEW_EMAIL_REDIRECT_TO`),
+with the branch in the subject and the original recipients at the top of the
+body, so no customer ever receives mail from a preview.
+
+The branch must contain preview support (merged master from this feature on);
+older branches are refused because they would bind port 443 and send real mail.
+`remove` deletes the containers, volumes, network, built image and checkout;
+only Docker's build cache remains (`docker builder prune` clears it).
+
 ---
 
 ## URLs

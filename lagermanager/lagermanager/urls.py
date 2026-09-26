@@ -4,6 +4,10 @@ from django.contrib import admin
 from django.urls import URLPattern, URLResolver, include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+if settings.PREVIEW_BRANCH:
+    admin.site.site_header = f'⚠ VORSCHAU – Branch {settings.PREVIEW_BRANCH} ⚠'
+    admin.site.site_title = f'[VORSCHAU] {admin.site.site_title}'
+
 urlpatterns: list[URLPattern | URLResolver] = [
     path('admin/', admin.site.urls),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
