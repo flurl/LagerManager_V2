@@ -32,13 +32,25 @@ const file = {
   default_delivery: 'separate', editable: true, deletable: true,
   requires_issued_document: false,
 }
-const kinds = [supplement, correction, file]
+const payments = {
+  kind: 'payments', label: 'Zahlungsübersicht', requires_file: false,
+  delivery_modes: ['merge'],
+  default_delivery: 'merge', editable: false, deletable: false,
+  requires_issued_document: true, creatable: false,
+}
+const kinds = [supplement, correction, payments, file]
 
 describe('textKinds', () => {
   // The text form offers Ergänzung and Berichtigungsnote but not Datei (an upload),
   // in the backend registry's order, which is also the order of the kind toggle.
   test('keeps everything but uploads, in registry order', () => {
     assert.deepEqual(textKinds(kinds).map((k) => k.kind), ['supplement', 'correction'])
+  })
+
+  // The Zahlungsübersicht is created by the backend from the invoice's payments,
+  // so the form must not offer it — the backend would refuse it anyway.
+  test('leaves out kinds that users may not create', () => {
+    assert.ok(!textKinds(kinds).some((k) => k.kind === 'payments'))
   })
 
   // Before the kinds request has answered the list is undefined: that must give an

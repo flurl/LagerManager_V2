@@ -513,23 +513,6 @@ class InvoiceViewSetTests(APITestCase):
 
     # ---- Preview --------------------------------------------------------
 
-    def test_preview_shows_the_open_amount_after_a_partial_payment(self) -> None:
-        invoice = _make_invoice(self.address, status='issued')
-        invoice.number = 'RE260601'
-        invoice.save()
-        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
-        Payment.objects.create(
-            customer=self.address.customer,
-            invoice=invoice,
-            payment_date=datetime.date(2026, 7, 1),
-            amount=Decimal('50.00'),
-        )
-        html = self.client.get(f'/api/invoices/{invoice.pk}/preview/').content.decode()
-        self.assertIn('Bereits bezahlt', html)
-        self.assertIn('Offener Betrag', html)
-        self.assertIn('01.07.2026', html)
-        self.assertIn('70,00', html)
-
     def test_preview_has_no_payment_block_without_payments(self) -> None:
         invoice = _make_invoice(self.address, status='issued')
         _add_line(invoice, self.tax, quantity='1', unit_price='100.00')

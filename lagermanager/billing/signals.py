@@ -4,6 +4,7 @@ from django.dispatch import receiver
 
 from .attachments.registry import UnknownAttachmentKind, get_handler
 from .models import DocumentAttachment
+from .services.payment_supplement import system_delete_in_progress
 
 
 @receiver(pre_delete, sender=DocumentAttachment)
@@ -30,7 +31,9 @@ def protect_undeletable_attachments(
             f'gelöscht werden.',
             {instance},
         ) from None
-    if not handler.deletable:
+    # The one exception: the Zahlungsübersicht is removed by its own service
+    # when its invoice loses the last payment (services/payment_supplement.py).
+    if not handler.deletable and not system_delete_in_progress():
         raise ProtectedError(
             f'Anhänge vom Typ „{handler.label}" können nicht gelöscht werden.',
             {instance},

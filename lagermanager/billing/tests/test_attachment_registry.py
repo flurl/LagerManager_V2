@@ -13,6 +13,7 @@ from billing.attachments import (
 from billing.attachments.handlers import (
     CorrectionNoteHandler,
     FileHandler,
+    PaymentSupplementHandler,
     SupplementHandler,
 )
 from billing.attachments.send import _unique_filename, parse_kind_setting
@@ -21,13 +22,15 @@ from billing.models import DocumentAttachment
 
 class RegistryTests(TestCase):
     def test_ships_its_kinds(self) -> None:
-        """All three kinds are registered, each with its own handler class.
+        """All four kinds are registered, each with its own handler class.
 
         Pinned so that adding or removing a kind is a deliberate edit here.
         """
-        self.assertEqual(set(known_kinds()), {'supplement', 'correction', 'file'})
+        self.assertEqual(
+            set(known_kinds()), {'supplement', 'correction', 'payments', 'file'})
         self.assertIsInstance(get_handler('supplement'), SupplementHandler)
         self.assertIsInstance(get_handler('correction'), CorrectionNoteHandler)
+        self.assertIsInstance(get_handler('payments'), PaymentSupplementHandler)
         self.assertIsInstance(get_handler('file'), FileHandler)
 
     def test_unknown_kind_raises(self) -> None:

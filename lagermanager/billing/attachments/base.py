@@ -35,6 +35,7 @@ class KindInfo:
     deletable: bool
     editable: bool
     requires_issued_document: bool
+    creatable: bool
     help_text: str = ''
 
     def as_dict(self) -> dict[str, Any]:
@@ -63,6 +64,13 @@ class AttachmentHandler:
     editable: ClassVar[bool] = True
     #: May only be attached once the document is no longer a draft.
     requires_issued_document: ClassVar[bool] = False
+    #: May be created through the API.  False for kinds the system maintains
+    #: itself (the Zahlungsübersicht follows the invoice's payments).
+    creatable: ClassVar[bool] = True
+    #: Where the merged pages go among the document's other merged
+    #: attachments: ascending, ties broken by position.  Lets a kind claim the
+    #: pages right after the document regardless of when it was created.
+    merge_order: ClassVar[int] = 100
     help_text: ClassVar[str] = ''
 
     @property
@@ -89,6 +97,7 @@ class AttachmentHandler:
             deletable=self.deletable,
             editable=self.editable,
             requires_issued_document=self.requires_issued_document,
+            creatable=self.creatable,
             help_text=self.help_text,
         )
 

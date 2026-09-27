@@ -40,6 +40,7 @@ Anleitung zum Erstellen von **Angeboten**, **Rechnungen** und **Mahnungen** sowi
     - [Vorschau / PDF](#vorschau--pdf)
     - [Anhänge](#anhänge)
         - [Berichtigungsnoten](#berichtigungsnoten)
+        - [Zahlungsübersicht](#zahlungsübersicht)
     - [E-Mail-Versand](#e-mail-versand)
     - [Verlauf](#verlauf)
 9. [Statusübersicht](#9-statusübersicht)
@@ -353,6 +354,11 @@ als die Forderung, bleibt die Rechnung bezahlt und der Überhang wird zum **Guth
 
 Die Spalte **Offen** in der Rechnungsliste zeigt den noch offenen Betrag inklusive Mahngebühren.
 
+Mit der ersten Zahlung oder Mahnung erhält die Rechnung automatisch eine
+[Zahlungsübersicht](#zahlungsübersicht): eine eigene Seite mit allen Zahlungen, Mahngebühren und dem
+offenen Betrag, die bei jedem Versand direkt nach der Rechnung folgt. Die Rechnung selbst führt
+Zahlungen und Mahngebühren nicht mehr auf.
+
 ### 6.5 Überfällige Rechnungen
 
 Ist eine ausgestellte, versendete oder teilweise bezahlte Rechnung nach dem Fälligkeitsdatum noch nicht vollständig bezahlt, wird die Zeile **rot hervorgehoben** und mit einem Warnsymbol gekennzeichnet. Für solche Rechnungen erscheint die Aktion **Mahnung erstellen** (siehe [Abschnitt 7](#7-mahnungen-erstellen)).
@@ -431,6 +437,8 @@ Mahnungen sind Zahlungserinnerungen zu überfälligen Rechnungen und werden in *
 
 Über das **Ausstellen**-Symbol wird die Mahnungsnummer vergeben und der Status auf **Ausgestellt** gesetzt.
 Die Mahngebühr wird damit dem Kundenkonto belastet und ist danach nicht mehr änderbar.
+Die Rechnung erhält dabei eine [Zahlungsübersicht](#zahlungsübersicht) (falls noch keine besteht), die
+bei jedem Versand der Rechnung Mahngebühren, Zahlungen und offenen Betrag ausweist.
 
 ### 7.4 Mahnungsliste
 
@@ -452,7 +460,7 @@ Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E
 
 ### Vorschau / PDF
 
-Über das **Augen-Symbol** (oder Klick auf eine ausgestellte Zeile) öffnet sich die **Dokumentvorschau**: das Dokument als PDF, so wie es verschickt wird. [Berichtigungsnoten](#berichtigungsnoten) sind darin **immer als zusätzliche Seiten enthalten**, da sie untrennbar zum Dokument gehören. Ergänzungen und Dateien sind dagegen nicht enthalten – sie werden erst beim [E-Mail-Versand](#e-mail-versand) ausgewählt. Oben rechts steht **Herunterladen** zur Verfügung, um genau dieses PDF zu speichern und anschließend zu drucken oder zu versenden. Auch ein ausgedrucktes oder anderweitig verschicktes Dokument enthält so stets seine Berichtigungen.
+Über das **Augen-Symbol** (oder Klick auf eine ausgestellte Zeile) öffnet sich die **Dokumentvorschau**: das Dokument als PDF, so wie es verschickt wird. [Berichtigungsnoten](#berichtigungsnoten) und die [Zahlungsübersicht](#zahlungsübersicht) einer Rechnung sind darin **immer als zusätzliche Seiten enthalten**, da sie untrennbar zum Dokument gehören. Ergänzungen und Dateien sind dagegen nicht enthalten – sie werden erst beim [E-Mail-Versand](#e-mail-versand) ausgewählt. Oben rechts steht **Herunterladen** zur Verfügung, um genau dieses PDF zu speichern und anschließend zu drucken oder zu versenden. Auch ein ausgedrucktes oder anderweitig verschicktes Dokument enthält so stets seine Berichtigungen.
 
 ![Dokumentvorschau](img/fakturierung/14-dokument-vorschau.png)
 
@@ -460,10 +468,11 @@ Ausgestellte Mahnungen können über das **Senden**-Symbol (Papierflieger) per E
 
 ### Anhänge
 
-Zu jedem Angebot, jeder Rechnung und jeder Mahnung können **Anhänge** hinterlegt werden. Das **Büroklammer-Symbol** in der jeweiligen Liste öffnet den Dialog **Anhänge**. Hat ein Dokument bereits Anhänge, ist die Büroklammer farbig hervorgehoben; beim Überfahren mit der Maus wird ihre Anzahl angezeigt. Es gibt drei Arten:
+Zu jedem Angebot, jeder Rechnung und jeder Mahnung können **Anhänge** hinterlegt werden. Das **Büroklammer-Symbol** in der jeweiligen Liste öffnet den Dialog **Anhänge**. Hat ein Dokument bereits Anhänge, ist die Büroklammer farbig hervorgehoben; beim Überfahren mit der Maus wird ihre Anzahl angezeigt. Es gibt vier Arten:
 
 - **Ergänzung** – ein frei erfassbarer Text (Titel und Inhalt), der im Layout des Dokuments gesetzt wird, also mit Logo, Absender, Empfänger und Dokumentnummer. Je Dokument sind beliebig viele Ergänzungen möglich.
 - **Berichtigungsnote** – eine verbindliche Korrektur eines ausgestellten Dokuments, siehe [unten](#berichtigungsnoten).
+- **Zahlungsübersicht** – Zahlungen, Mahngebühren und offener Betrag einer Rechnung. Wird automatisch erzeugt, siehe [unten](#zahlungsübersicht).
 - **Datei** – eine hochgeladene Datei mit einer kurzen Beschreibung (z. B. ein eingescannter Lieferschein).
 
 ![Dialog „Anhänge" mit allen drei Anhangsarten](img/fakturierung/21-anhaenge-dialog.png)
@@ -525,6 +534,23 @@ So erscheint eine Berichtigungsnote in der Dokumentvorschau – hier als zweite 
 
 ![Berichtigungsnote als zusätzliche Seite in der Dokumentvorschau](img/fakturierung/23-berichtigungsnote-seite.png)
 
+#### Zahlungsübersicht
+
+Sobald zu einer Rechnung eine [Zahlung](#64-zahlungen-erfassen-auch-teilzahlungen) erfasst oder eine [Mahnung ausgestellt](#73-mahnung-ausstellen) ist, legt das System eine **Zahlungsübersicht** an – bei Mahnungen auch ohne Mahngebühr. Sie ist im Layout der Rechnung gesetzt und listet:
+
+- den **Rechnungsbetrag** (brutto),
+- die Gebühren **ausgestellter Mahnungen** samt **Gesamtforderung**,
+- **jede Zahlung** mit Datum und Zahlungsart sowie die **Summe der Zahlungen**,
+- den **offenen Betrag** – oder, wenn mehr bezahlt wurde als gefordert, das **Guthaben (Überzahlung)**.
+
+Der Inhalt wird bei jeder Vorschau und jedem Versand **aus den aktuellen Zahlungen und Mahnungen** erzeugt; das Feld **Stand** nennt das Datum der Erstellung. Jede neue, geänderte oder gelöschte Zahlung ist daher sofort berücksichtigt. Wird die letzte Zahlung gelöscht und ist keine Mahnung ausgestellt, verschwindet die Zahlungsübersicht wieder.
+
+Für die Zahlungsübersicht gelten feste Regeln:
+
+- Sie kann **nicht von Hand angelegt, geändert oder gelöscht** werden – sie folgt allein den Zahlungen und Mahnungen.
+- Sie wird wie eine Berichtigungsnote **bei jedem Versand mitgeschickt** (Kennzeichnung **Pflicht**) und ist in der [Dokumentvorschau](#vorschau--pdf) und im heruntergeladenen PDF immer enthalten.
+- Sie steht im Dokument-PDF **immer direkt nach der Rechnung**, vor Berichtigungsnoten und Ergänzungen.
+
 ### E-Mail-Versand
 
 Ausgestellte (und bereits versendete) Angebote, Rechnungen und Mahnungen können direkt aus der Anwendung per E-Mail an den Empfänger geschickt werden. Das Dokument wird dabei automatisch als **PDF-Anhang** beigefügt – es muss nichts manuell hochgeladen werden.
@@ -533,7 +559,7 @@ Ausgestellte (und bereits versendete) Angebote, Rechnungen und Mahnungen können
 2. Der Dialog **Dokument versenden** öffnet sich. Vorbelegt sind:
    - **An** – die E-Mail-Adresse aus der hinterlegten Adresse (kann überschrieben oder ergänzt werden; Pflichtfeld).
    - **Betreff** und **Nachricht** – aus den in den [Einstellungen](#1-überblick--voraussetzungen) hinterlegten Vorlagen, wobei Platzhalter wie `{number}` und `{company}` automatisch durch die tatsächlichen Werte ersetzt sind.
-   - **Anhänge mitsenden** – sind zum Dokument [Anhänge](#anhänge) hinterlegt, werden sie hier zum Ankreuzen aufgelistet. Welche Arten vorausgewählt sind, bestimmt die Einstellung **Anhangstypen, die im Versand-Dialog vorausgewählt sind**. Bei jedem Anhang steht, ob er an das Dokument-PDF angehängt oder als eigene Datei verschickt wird. [Berichtigungsnoten](#berichtigungsnoten) sind mit **Pflicht** gekennzeichnet, immer angekreuzt und nicht abwählbar.
+   - **Anhänge mitsenden** – sind zum Dokument [Anhänge](#anhänge) hinterlegt, werden sie hier zum Ankreuzen aufgelistet. Welche Arten vorausgewählt sind, bestimmt die Einstellung **Anhangstypen, die im Versand-Dialog vorausgewählt sind**. Bei jedem Anhang steht, ob er an das Dokument-PDF angehängt oder als eigene Datei verschickt wird. [Berichtigungsnoten](#berichtigungsnoten) und die [Zahlungsübersicht](#zahlungsübersicht) sind mit **Pflicht** gekennzeichnet, immer angekreuzt und nicht abwählbar.
 3. **Vorher ansehen:** Das **Vorschau-Symbol** neben „Das Dokument wird als PDF-Anhang beigefügt" zeigt das Dokument **genau so, wie es verschickt wird** – also inklusive aller angekreuzten Ergänzungen und Berichtigungsnoten, die als zusätzliche Seiten mitgehen. Dieselbe Zeile nennt auch, wie viele Anhänge als Seiten eingefügt und wie viele zusätzliche Dateien angehängt werden. Jeder einzelne Anhang hat ebenfalls ein Vorschau-Symbol (bzw. ein Download-Symbol, wenn der Browser die Datei nicht anzeigen kann).
 4. Text bei Bedarf anpassen, Anhänge auswählen und auf **Senden** klicken.
 
@@ -595,6 +621,7 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 | Datum | Änderung |
 |-------|----------|
+| September 2026 | Neu: **Zahlungsübersicht** – Rechnungen mit Zahlungen oder ausgestellter Mahnung erhalten automatisch eine eigene Seite mit Rechnungsbetrag, Mahngebühren, allen Zahlungen und dem offenen Betrag bzw. Guthaben. Sie wird bei jedem Versand und Download direkt nach der Rechnung angehängt und kann nicht von Hand geändert oder gelöscht werden. Die Rechnung selbst führt Zahlungen und Mahngebühren nicht mehr auf. |
 | September 2026 | Neu: **Berichtigungsnoten** – verbindliche Korrekturen ausgestellter Angebote, Rechnungen und Mahnungen. Sie werden bei jedem Versand automatisch als zusätzliche Seite an das Dokument-PDF angehängt, sind fortlaufend nummeriert und können weder geändert noch gelöscht werden. Auch die Dokumentvorschau und das heruntergeladene PDF enthalten sie. |
 | September 2026 | Neu: **Anhänge** zu Angeboten, Rechnungen und Mahnungen – frei erfassbare **Ergänzungen** (wahlweise als zusätzliche Seiten im Dokument-PDF oder als eigenes PDF) und hochgeladene **Dateien**. Beim E-Mail-Versand ist auswählbar, welche Anhänge mitgehen; eine **Vorschau** zeigt das Dokument genau so, wie es beim Empfänger ankommt. |
 | September 2026 | Neu: **Kunden** (Menü Stammdaten) mit mehreren Adressen, Kundennummer und **Saldo**; das Kundenkonto zeigt alle Bewegungen und nimmt Anzahlungen entgegen. |

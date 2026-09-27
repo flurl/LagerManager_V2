@@ -203,7 +203,7 @@ class DocumentAttachmentApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         by_kind = {row['kind']: row for row in response.data}
-        self.assertEqual(set(by_kind), {'supplement', 'correction', 'file'})
+        self.assertEqual(set(by_kind), {'supplement', 'correction', 'payments', 'file'})
         self.assertTrue(by_kind['supplement']['supports_merge'])
         self.assertTrue(by_kind['file']['requires_file'])
 

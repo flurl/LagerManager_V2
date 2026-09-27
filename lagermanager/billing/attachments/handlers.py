@@ -5,6 +5,9 @@ Ergänzung         — a note (title + text) rendered into the corporate documen
                     its own PDF.
 Berichtigungsnote — like an Ergänzung, but a binding correction of an issued
                     document: always sent, never deleted, never edited.
+Zahlungsübersicht — the invoice's payments, reminder fees and open amount,
+                    generated once it has payments or an issued reminder: always sent, always right after the invoice,
+                    maintained by the system alone.
 Datei             — an uploaded file with a short description.  Always its own
                     file: merging arbitrary uploads into the document is out of
                     scope.
@@ -13,13 +16,16 @@ from __future__ import annotations
 
 import mimetypes
 import os
-from typing import Any, ClassVar
+from decimal import Decimal
+from typing import Any, ClassVar, cast
 
 from django.core.files.uploadedfile import UploadedFile
+from django.utils import timezone
 from emails.services.email import AttachmentSpec
 from rest_framework import serializers
 
-from billing.models import MAX_ATTACHMENT_BYTES, DocumentAttachment
+from billing.models import MAX_ATTACHMENT_BYTES, DocumentAttachment, Invoice, Reminder
+from billing.services.payment_supplement import PAYMENTS_KIND
 from billing.services.render import render_attachment_html, render_html_to_pdf
 
 from .base import AttachmentHandler
@@ -27,6 +33,7 @@ from .registry import register
 
 SUPPLEMENT_TEMPLATE = 'billing/supplement.html'
 CORRECTION_TEMPLATE = 'billing/correction_note.html'
+PAYMENTS_TEMPLATE = 'billing/payment_supplement.html'
 
 
 def _document_slug(attachment: DocumentAttachment) -> str:
@@ -138,6 +145,76 @@ class CorrectionNoteHandler(SupplementHandler):
         return render_attachment_html(
             attachment, CORRECTION_TEMPLATE,
             {'correction_number': _correction_number(attachment)})
+
+
+@register
+class PaymentSupplementHandler(AttachmentHandler):
+    """Zahlungsübersicht — what was paid on an invoice and what is still open.
+
+    Created, kept and removed by services/payment_supplement.py as payments and
+    reminders come and go; nobody else may create, edit or delete one.  It carries no content of
+    its own: every rendering reads the invoice's current payments, so whatever
+    goes out is the state at the time of sending.
+    """
+
+    kind = PAYMENTS_KIND
+    label = 'Zahlungsübersicht'
+    delivery_modes = (DocumentAttachment.Delivery.MERGE,)
+    default_delivery = DocumentAttachment.Delivery.MERGE
+    requires_file = False
+    renderable = True
+    mandatory = True
+    deletable = False
+    editable = False
+    requires_issued_document = True
+    creatable = False
+    # Directly after the invoice pages, before any Berichtigungsnote or Ergänzung.
+    merge_order = 0
+    help_text = ('Wird aus den Zahlungen und Mahnungen der Rechnung erzeugt und bei '
+                 'jedem Versand direkt nach der Rechnung angehängt.')
+
+    def validate(
+        self, attrs: dict[str, Any], instance: DocumentAttachment | None
+    ) -> dict[str, Any]:
+        # The serializer already refuses to create or edit one; this is the
+        # handler's own guard should that ever be bypassed.
+        if instance is None:
+            raise serializers.ValidationError(
+                f'Die {self.label} wird automatisch aus Zahlungen und Mahnungen '
+                f'erzeugt.')
+        return attrs
+
+    def display_title(self, attachment: DocumentAttachment) -> str:
+        return self.label
+
+    def email_filename(self, attachment: DocumentAttachment) -> str:
+        return f'zahlungsuebersicht_{_document_slug(attachment)}.pdf'
+
+    def render_html(self, attachment: DocumentAttachment) -> str:
+        # Typed Any|None by the GenericForeignKey; only invoices get this kind.
+        invoice: Invoice = cast('Invoice', attachment.document)
+        open_amount: Decimal = invoice.open_amount
+        return render_attachment_html(attachment, PAYMENTS_TEMPLATE, {
+            'invoice': invoice,
+            'reminders_with_fee': [
+                reminder for reminder in invoice.reminders.order_by('level', 'pk')
+                if reminder.status != Reminder.Status.DRAFT and reminder.fee
+            ],
+            'payments': list(invoice.payments.all()),
+            'open_amount': max(open_amount, Decimal('0.00')),
+            'credit': max(-open_amount, Decimal('0.00')),
+            'as_of': timezone.localdate(),
+        })
+
+    def render_pdf(self, attachment: DocumentAttachment) -> bytes:
+        return render_html_to_pdf(self.render_html(attachment))
+
+    def email_attachments(self, attachment: DocumentAttachment) -> list[AttachmentSpec]:
+        return [(
+            self.email_filename(attachment),
+            self.render_pdf(attachment),
+            'application/pdf',
+        )]
 
 
 @register

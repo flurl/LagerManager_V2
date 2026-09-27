@@ -4,9 +4,12 @@
 // /api/document-attachment-kinds/, so a new kind shows up in the dialog with
 // the right behaviour without a change here.
 
-/** Kinds created through the text form, i.e. everything that is not an upload. */
+/**
+ * Kinds created through the text form: everything that is not an upload and
+ * that users may create at all (the Zahlungsübersicht is system-maintained).
+ */
 export function textKinds(kinds) {
-  return (kinds || []).filter((k) => !k.requires_file)
+  return (kinds || []).filter((k) => !k.requires_file && k.creatable !== false)
 }
 
 /** Whether a kind may be created on a document with the given status. */
