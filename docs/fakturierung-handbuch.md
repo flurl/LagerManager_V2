@@ -104,6 +104,8 @@ Darunter folgt die Gruppe **Dokument-Anhänge** mit der Vorauswahl für den Vers
 
 > Der **Absender**, die **SMTP-Zugangsdaten** sowie eine optionale **Reply-To-Adresse** (`DEFAULT_REPLY_TO_EMAIL`) für den tatsächlichen Mailversand werden serverseitig (Umgebungs-/Serverkonfiguration) hinterlegt. Ist `DEFAULT_REPLY_TO_EMAIL` gesetzt, wird diese Adresse als Reply-To-Header aller ausgehenden Dokument-E-Mails verwendet.
 
+> Jede Dokument-E-Mail geht zusätzlich als **Blindkopie (BCC)** an `EMAIL_ARCHIVE_BCC` (standardmäßig die Absenderadresse), damit eine Kopie im Postfach des Absenders landet. Mit `faktura+Sent@…` legt der Mailserver sie direkt im Ordner *Gesendet* ab. Die Kundin bzw. der Kunde sieht diese Adresse nicht. Ein leerer Wert schaltet die Kopie ab.
+
 ---
 
 ## 2. Wo finde ich die Fakturierung?
