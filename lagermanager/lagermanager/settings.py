@@ -1,4 +1,5 @@
 from datetime import timedelta
+from email.utils import parseaddr
 from pathlib import Path
 from typing import Any, cast
 
@@ -165,6 +166,9 @@ EMAIL_USE_SSL: bool = config('EMAIL_USE_SSL', default=False, cast=bool)
 DEFAULT_FROM_EMAIL: str = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
 SERVER_EMAIL: str = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
 DEFAULT_REPLY_TO_EMAIL: str = config('DEFAULT_REPLY_TO_EMAIL', default='')
+# BCC added to every billing mail so a copy lands in the sender's mailbox, e.g.
+# faktura+Sent@… which the mail server files into the Sent folder. Empty disables it.
+EMAIL_ARCHIVE_BCC: str = config('EMAIL_ARCHIVE_BCC', default=parseaddr(DEFAULT_FROM_EMAIL)[1])
 
 # Preview environments (scripts/preview.sh): a feature branch running next to
 # production on a copy of its data. Set only there. It shows a warning banner and
