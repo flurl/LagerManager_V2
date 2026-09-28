@@ -16,6 +16,7 @@ from emails.services.email import AttachmentSpec
 
 from billing.models import DocumentAttachment
 
+from .base import AttachmentHandler
 from .registry import UnknownAttachmentKind, all_handlers, get_handler, known_kinds
 
 DEFAULT_KINDS_SETTING = 'EMAIL_DEFAULT_ATTACHMENT_KINDS'
@@ -91,8 +92,9 @@ def build_send_attachments(
 
     A selected attachment is appended to the document PDF when its own
     ``delivery`` says ``merge`` and its kind supports merging — the kind only
-    grants the option, the attachment decides.  Everything else becomes its own
-    file.  The document PDF is always the first spec.
+    grants the option, the attachment decides.  Merged pages follow the kinds'
+    merge_order, then position.  Everything else becomes its own file.  The
+    document PDF is always the first spec.
 
     Raises ValueError (→ 400) for an invalid selection or an unreadable file,
     and RuntimeError (→ 500) when rendering or merging fails.
@@ -105,16 +107,22 @@ def build_send_attachments(
     if len(selected) != len(wanted):
         raise ValueError('Ungültige Anhang-Auswahl.')
 
-    merge_parts: list[bytes] = []
-    separate_specs: list[AttachmentSpec] = []
-
+    handled: list[tuple[DocumentAttachment, AttachmentHandler]] = []
     for attachment in selected:
         try:
-            handler = get_handler(attachment.kind)
+            handled.append((attachment, get_handler(attachment.kind)))
         except UnknownAttachmentKind:
             raise ValueError(
                 f'Unbekannter Anhangstyp „{attachment.kind}".') from None
+    # A kind may claim its place among the merged pages (the Zahlungsübersicht
+    # comes right after the document); position orders the rest.  The sort is
+    # stable, so ties keep the (position, pk) order of attachments_for().
+    handled.sort(key=lambda pair: pair[1].merge_order)
 
+    merge_parts: list[bytes] = []
+    separate_specs: list[AttachmentSpec] = []
+
+    for attachment, handler in handled:
         if handler.resolve_delivery(attachment) == DocumentAttachment.Delivery.MERGE:
             merge_parts.append(handler.render_pdf(attachment))
             continue

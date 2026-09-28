@@ -1,0 +1,85 @@
+{% extends "billing/base_document.html" %}
+
+{% block doc_title %}Zahlungsübersicht zu {{ doc_label }} {% if doc_number %}{{ doc_number }}{% else %}(Entwurf){% endif %}{% endblock %}
+{% block doc_type_label %}Zahlungsübersicht{% endblock %}
+
+{% block extra_style %}
+<style>
+  .payment-table tr.credit-row td { background: #2e7d32; }
+</style>
+{% endblock %}
+
+{% block recipient %}{{ recipient_text }}{% endblock %}
+
+{# Rendered from the live payments, so the page states when it was produced. #}
+{% block meta_table %}
+<table class="meta-table">
+  {% if invoice.customer.customer_number %}
+  <tr><td>Kundennummer</td><td>{{ invoice.customer.customer_number }}</td></tr>
+  {% endif %}
+  <tr><td>Zu {{ doc_label }}</td><td>{% if doc_number %}{{ doc_number }}{% else %}(Entwurf){% endif %}</td></tr>
+  {% if doc_date %}<tr><td>vom</td><td>{{ doc_date|date:"d.m.Y" }}</td></tr>{% endif %}
+  <tr><td>Stand</td><td>{{ as_of|date:"d.m.Y" }}</td></tr>
+</table>
+{% endblock %}
+
+{# The invoice's Anmerkungen belong on the invoice, not on its payment list. #}
+{% block notes %}{% endblock %}
+
+{% block doc_body %}
+<table class="line-table payment-table">
+  <thead>
+    <tr>
+      <th style="width:6em">Datum</th>
+      <th>Buchung</th>
+      <th class="num" style="width:9em">Betrag</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>{{ doc_date|date:"d.m.Y" }}</td>
+      <td>{{ doc_label }}{% if doc_number %} {{ doc_number }}{% endif %} (brutto)</td>
+      <td class="num">{{ invoice.gross_total|floatformat:"2" }} €</td>
+    </tr>
+    {% for reminder in reminders_with_fee %}
+    <tr>
+      <td>{{ reminder.reminder_date|date:"d.m.Y" }}</td>
+      <td>Mahngebühr {{ reminder.level }}. Mahnung{% if reminder.number %} {{ reminder.number }}{% endif %}</td>
+      <td class="num">{{ reminder.fee|floatformat:"2" }} €</td>
+    </tr>
+    {% endfor %}
+    {% for payment in payments %}
+    <tr>
+      <td>{{ payment.payment_date|date:"d.m.Y" }}</td>
+      <td>Zahlung – {{ payment.get_method_display }}</td>
+      <td class="num">−{{ payment.amount|floatformat:"2" }} €</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    {% if reminders_with_fee %}
+    <tr>
+      <td colspan="2" class="num">Gesamtforderung</td>
+      <td class="num">{{ invoice.total_due|floatformat:"2" }} €</td>
+    </tr>
+    {% endif %}
+    {% if payments %}
+    <tr>
+      <td colspan="2" class="num">Summe der Zahlungen</td>
+      <td class="num">−{{ invoice.paid_amount|floatformat:"2" }} €</td>
+    </tr>
+    {% endif %}
+    {% if credit %}
+    <tr class="grand-total credit-row">
+      <td colspan="2" class="num">Guthaben (Überzahlung)</td>
+      <td class="num">{{ credit|floatformat:"2" }} €</td>
+    </tr>
+    {% else %}
+    <tr class="grand-total">
+      <td colspan="2" class="num">Offener Betrag</td>
+      <td class="num">{{ open_amount|floatformat:"2" }} €</td>
+    </tr>
+    {% endif %}
+  </tfoot>
+</table>
+{% endblock %}

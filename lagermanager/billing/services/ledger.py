@@ -20,6 +20,7 @@ from django.db.models import Sum
 from emails.models import EmailLog
 
 from billing.models import CustomerLedgerEntry, Invoice, Payment, Reminder
+from billing.services.payment_supplement import sync_payment_supplement
 
 ZERO = Decimal('0.00')
 
@@ -91,13 +92,14 @@ def record_invoice_issued(invoice: Invoice) -> CustomerLedgerEntry | None:
     Returns None when the invoice has no customer (only possible for rows that
     predate the backfill) or a zero total.
     """
-    if invoice.customer_id is None:
+    customer: Customer | None = invoice.customer
+    if customer is None:
         return None
     gross = invoice.gross_total
     if gross == 0:
         return None
     return CustomerLedgerEntry.objects.create(
-        customer=invoice.customer,
+        customer=customer,
         entry_type=CustomerLedgerEntry.EntryType.INVOICE,
         entry_date=invoice.document_date,
         amount=-gross,
@@ -109,10 +111,11 @@ def record_invoice_issued(invoice: Invoice) -> CustomerLedgerEntry | None:
 def record_reminder_issued(reminder: Reminder) -> CustomerLedgerEntry | None:
     """Charge the customer this reminder's fee.  None when there is no fee."""
     invoice = reminder.invoice
-    if invoice.customer_id is None or reminder.fee == 0:
+    customer: Customer | None = invoice.customer
+    if customer is None or reminder.fee == 0:
         return None
     return CustomerLedgerEntry.objects.create(
-        customer=invoice.customer,
+        customer=customer,
         entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE,
         entry_date=reminder.reminder_date,
         amount=-reminder.fee,
@@ -129,14 +132,15 @@ def reverse_reminder_fees(invoice: Invoice) -> list[CustomerLedgerEntry]:
     The Storno invoice reverses the invoice amount itself; the fees dunned on
     top of it have to be reversed explicitly.
     """
-    if invoice.customer_id is None:
+    customer: Customer | None = invoice.customer
+    if customer is None:
         return []
     entries: list[CustomerLedgerEntry] = []
     for reminder in invoice.reminders.exclude(status=Reminder.Status.DRAFT):
         if reminder.fee == 0:
             continue
         entries.append(CustomerLedgerEntry.objects.create(
-            customer=invoice.customer,
+            customer=customer,
             entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE,
             entry_date=invoice.document_date,
             amount=reminder.fee,
@@ -231,12 +235,17 @@ def apply_credit(
 # ---------------------------------------------------------------------------
 
 def recalculate_invoice_status(invoice: Invoice) -> None:
-    """Bring status and paid_at in line with the invoice's payments.
+    """Bring status, paid_at and the Zahlungsübersicht in line with the payments.
 
-    The single owner of the PAID transition.  Drafts and cancelled invoices are
-    never touched.  An invoice that loses its payments reopens — to SENT if it
+    The single owner of the PAID transition.  Drafts and cancelled invoices keep
+    their status.  An invoice that loses its payments reopens — to SENT if it
     was ever sent, otherwise to ISSUED.
+
+    Every change to an invoice's payments and every issued reminder ends here,
+    which is why the Zahlungsübersicht is synced here too — for cancelled invoices as
+    well, whose payments may still be corrected.
     """
+    sync_payment_supplement(invoice)
     if invoice.status in (Invoice.Status.DRAFT, Invoice.Status.CANCELLED):
         return
 

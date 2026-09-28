@@ -596,6 +596,10 @@ class DocumentAttachmentSerializer(serializers.ModelSerializer[DocumentAttachmen
             data['delivery'] = handler.default_delivery
 
         if self.instance is None:
+            if not handler.creatable:
+                raise serializers.ValidationError(
+                    {'kind': f'Anhänge vom Typ „{handler.label}" werden automatisch '
+                             f'angelegt.'})
             document = self.context.get('document')
             if handler.requires_issued_document and _is_draft(document):
                 raise serializers.ValidationError(
