@@ -32,6 +32,7 @@ from .attachments.send import (
     build_send_attachments,
     default_selection_ids,
     mandatory_selection_ids,
+    merged_selection_ids,
 )
 from .models import (
     BillingArticle,
@@ -196,6 +197,9 @@ class DocumentEmailMixin:
         the send dialog posts; attachments that merge become extra pages here,
         so the preview shows what the recipient will actually open.  Built
         through build_send_attachments so preview and send cannot drift apart.
+
+        ``merged=all`` adds every attachment set to merge, for previews of the
+        document itself where there is no send selection (the list views).
         """
         doc = self.get_object()  # type: ignore[attr-defined]
 
@@ -206,6 +210,8 @@ class DocumentEmailMixin:
         except ValueError:
             return Response({'detail': 'Ungültige Anhang-Auswahl.'},
                             status=status.HTTP_400_BAD_REQUEST)
+        if request.query_params.get('merged') == 'all':
+            attachment_ids.extend(merged_selection_ids(doc))
 
         try:
             base_pdf: bytes = render_document_pdf(doc)

@@ -64,6 +64,23 @@ def mandatory_selection_ids(doc: Any) -> list[int]:
         attachments_for(doc).filter(kind__in=kinds).values_list('pk', flat=True))
 
 
+def merged_selection_ids(doc: Any) -> list[int]:
+    """Attachments that end up inside the document PDF: every one set to merge.
+
+    Lets a preview show "the document" when there is no send selection to go by.
+    Kinds no longer registered are skipped rather than failing the preview.
+    """
+    ids: list[int] = []
+    for attachment in attachments_for(doc):
+        try:
+            handler: AttachmentHandler = get_handler(attachment.kind)
+        except UnknownAttachmentKind:
+            continue
+        if handler.resolve_delivery(attachment) == DocumentAttachment.Delivery.MERGE:
+            ids.append(attachment.pk)
+    return ids
+
+
 def _unique_filename(filename: str, used: set[str]) -> str:
     """Append _2, _3 … so two attachments never share a filename in one mail."""
     if filename not in used:

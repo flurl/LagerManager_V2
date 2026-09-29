@@ -5,6 +5,7 @@ import {
   attachmentPreviewTarget,
   documentPreviewPath,
   isPreviewableMime,
+  mergedDocumentPath,
   mergedAttachmentIds,
 } from '../src/utils/attachmentPreview.js'
 
@@ -46,6 +47,14 @@ describe('documentPreviewPath', () => {
   test('drops the query string when nothing is selected', () => {
     assert.equal(documentPreviewPath('/invoices/5'), '/invoices/5/send-pdf/')
     assert.equal(documentPreviewPath('/invoices/5', []), '/invoices/5/send-pdf/')
+  })
+})
+
+// The list views preview "the document" with no send selection: the server has
+// to add every attachment set to merge itself, so the path asks for merged=all.
+describe('mergedDocumentPath', () => {
+  test('asks send-pdf for every merging attachment', () => {
+    assert.equal(mergedDocumentPath('/invoices/5'), '/invoices/5/send-pdf/?merged=all')
   })
 })
 
