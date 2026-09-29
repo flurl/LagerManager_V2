@@ -68,6 +68,31 @@ npm run dev
 Frontend is available at **http://localhost:5173**.  
 Vite proxies all `/api/*` requests to the Django backend.
 
+### Sending real mail from dev
+
+With `DJANGO_DEBUG=True` all mail is printed to the backend's console. To send
+through a real SMTP server instead (e.g. to test the Sent-folder archive BCC),
+create a gitignored `.env.mail` next to `docker-compose.yml`:
+
+```bash
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=mail.example.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=faktura@example.com
+EMAIL_HOST_PASSWORD=secret
+DEFAULT_FROM_EMAIL=faktura@example.com
+EMAIL_ARCHIVE_BCC=faktura+Sent@example.com
+```
+
+and recreate the containers with `docker compose up -d` (a plain `restart`
+does not re-read env files). Delete the file and run `docker compose up -d`
+again to go back to console output.
+
+> **Careful:** the dev database is usually a copy of production data, so every
+> customer address in it is real. While `.env.mail` is active, only send
+> documents to customers whose address is your own.
+
 ### Per-branch databases
 
 A feature branch that adds migrations changes the schema, so its database no

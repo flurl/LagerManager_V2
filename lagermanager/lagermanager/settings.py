@@ -152,10 +152,15 @@ LOGGING: dict[str, Any] = {
 
 
 # Email
-EMAIL_BACKEND: str = (
-    'django.core.mail.backends.console.EmailBackend'
-    if DEBUG
-    else 'django.core.mail.backends.smtp.EmailBackend'
+# Dev prints mail to the console unless EMAIL_BACKEND says otherwise (see README,
+# "Sending real mail from dev").
+EMAIL_BACKEND: str = config(
+    'EMAIL_BACKEND',
+    default=(
+        'django.core.mail.backends.console.EmailBackend'
+        if DEBUG
+        else 'django.core.mail.backends.smtp.EmailBackend'
+    ),
 )
 EMAIL_HOST: str = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT: int = config('EMAIL_PORT', default=587, cast=int)
