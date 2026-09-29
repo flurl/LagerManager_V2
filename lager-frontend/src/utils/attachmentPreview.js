@@ -33,6 +33,14 @@ export function documentPreviewPath(apiPath, ids = []) {
 }
 
 /**
+ * Path of the document PDF with every attachment set to merge in it.
+ * For previews of the document itself, where there is no send selection.
+ */
+export function mergedDocumentPath(apiPath) {
+  return `${apiPath}/send-pdf/?merged=all`
+}
+
+/**
  * Ids of the attachments that end up inside the document PDF.
  *
  * Used where there is no send selection (the attachments dialog): a "whole

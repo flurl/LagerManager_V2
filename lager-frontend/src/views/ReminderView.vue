@@ -162,11 +162,11 @@
       </v-card>
     </v-dialog>
 
-    <!-- The document as it always goes out: with its mandatory attachments
-         (Berichtigungsnoten) merged in.  Download saves this same PDF. -->
+    <!-- The document with every attachment set to merge in it, mandatory ones
+         (Berichtigungsnoten) included.  Download saves this same PDF. -->
     <PdfPreviewDialog
       v-model="previewDialog"
-      :api-path="previewPath ? documentPreviewPath(previewPath) : null"
+      :api-path="previewPath ? mergedDocumentPath(previewPath) : null"
       :title="previewTitle"
     />
 
@@ -206,7 +206,7 @@ import { hexToRgba } from '../utils/color'
 import api from '../api'
 import NumberInput from '../components/NumberInput.vue'
 import PdfPreviewDialog from '../components/PdfPreviewDialog.vue'
-import { documentPreviewPath } from '../utils/attachmentPreview'
+import { mergedDocumentPath } from '../utils/attachmentPreview'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
 import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'

@@ -163,7 +163,7 @@
          (Berichtigungsnoten) merged in.  Download saves this same PDF. -->
     <PdfPreviewDialog
       v-model="previewDialog"
-      :api-path="previewPath ? documentPreviewPath(previewPath) : null"
+      :api-path="previewPath ? mergedDocumentPath(previewPath) : null"
       :title="previewTitle"
     />
 
@@ -340,7 +340,7 @@ import { extractErrorMessage } from '../utils/errorMessage'
 import api from '../api'
 import InvoiceDialog from '../components/InvoiceDialog.vue'
 import PdfPreviewDialog from '../components/PdfPreviewDialog.vue'
-import { documentPreviewPath } from '../utils/attachmentPreview'
+import { mergedDocumentPath } from '../utils/attachmentPreview'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import SendEmailDialog from '../components/SendEmailDialog.vue'
 import DocumentAttachmentsDialog from '../components/DocumentAttachmentsDialog.vue'

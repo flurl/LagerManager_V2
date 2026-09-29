@@ -587,6 +587,39 @@ class SendEmailAttachmentTests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.content, b'%PDF-document')
 
+    def test_send_pdf_merged_all_includes_every_merging_attachment(self) -> None:
+        """merged=all merges each attachment set to merge, without an explicit selection.
+
+        The list's preview shows "the document" with no send selection to go by;
+        an attachment the user set to merge is part of that document.
+        """
+        self._supplement(delivery=DocumentAttachment.Delivery.MERGE)
+        self._supplement(delivery=DocumentAttachment.Delivery.SEPARATE, position=2)
+
+        with patch('billing.views.render_document_pdf', return_value=b'%PDF-document'), \
+             patch('billing.attachments.handlers.render_html_to_pdf',
+                   return_value=b'%PDF-supplement') as render, \
+             patch('billing.attachments.send.merge_pdfs',
+                   return_value=b'%PDF-merged') as merge:
+            resp = self.client.get(
+                f'/api/invoices/{self.invoice.pk}/send-pdf/', {'merged': 'all'})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(render.call_count, 1, 'only the merging supplement is rendered')
+        merge.assert_called_once_with([b'%PDF-document', b'%PDF-supplement'])
+        self.assertEqual(resp.content, b'%PDF-merged')
+
+    def test_send_pdf_merged_all_without_merging_attachments_is_bare(self) -> None:
+        """merged=all on a document whose attachments are all separate returns the bare PDF."""
+        self._supplement(delivery=DocumentAttachment.Delivery.SEPARATE)
+
+        with patch('billing.views.render_document_pdf', return_value=b'%PDF-document'):
+            resp = self.client.get(
+                f'/api/invoices/{self.invoice.pk}/send-pdf/', {'merged': 'all'})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content, b'%PDF-document')
+
     def test_send_pdf_refuses_a_foreign_attachment(self) -> None:
         other_invoice = _make_invoice(self.address, status='issued')
         foreign = DocumentAttachment.objects.create(
