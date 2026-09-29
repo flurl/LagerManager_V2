@@ -1,6 +1,8 @@
 # Development stack. DB_NAME selects the database the app talks to and defaults
 # to `lagermanager`; scripts/branch-db.sh sets it in .env to give each feature
 # branch its own database (see README, "Per-branch databases").
+# Optional .env.mail switches dev to real SMTP (see README, "Sending real mail
+# from dev"); the values under `environment:` take precedence over it.
 services:
   db:
     image: postgres:16-alpine
@@ -27,6 +29,9 @@ services:
       - ./.git:/app/.git:ro
     ports:
       - "8000:8000"
+    env_file:
+      - path: .env.mail
+        required: false
     environment:
       DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/${DB_NAME:-lagermanager}
       DJANGO_DEBUG: "True"
@@ -39,6 +44,9 @@ services:
   cron:
     build: ./lagermanager
     command: /usr/local/bin/supercronic /app/crontab
+    env_file:
+      - path: .env.mail
+        required: false
     environment:
       DATABASE_URL: postgres://lagermanager:lagermanager@db:5432/${DB_NAME:-lagermanager}
       DJANGO_DEBUG: "True"
