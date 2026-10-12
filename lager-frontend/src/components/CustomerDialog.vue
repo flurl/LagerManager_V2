@@ -112,7 +112,21 @@ watch(() => props.customer, (c) => {
     ? { ...c }
     : { name: '', email: '', telefon: '', uid: '', notes: '', is_active: true, default_address: null }
   addresses.value = c?.addresses ? [...c.addresses] : []
+  // The caller's copy can be stale: an invoice dialog, for one, adds addresses
+  // to a customer without touching the customer object it later hands in here.
+  if (c?.id) refreshCustomer(c.id)
 }, { immediate: true })
+
+async function refreshCustomer(id) {
+  try {
+    const res = await api.get(`/customers/${id}/`)
+    if (form.value.id !== id) return  // dialog moved on to another customer meanwhile
+    form.value = { ...form.value, default_address: res.data.default_address }
+    addresses.value = res.data.addresses || []
+  } catch (err) {
+    error.value = extractErrorMessage(err, 'Adressen konnten nicht geladen werden.')
+  }
+}
 
 function addressLabel(addr) {
   // postal_label already omits the "Adresse #120" placeholder for nameless rows.
@@ -136,10 +150,7 @@ async function onAddressSaved() {
 }
 
 async function reloadAddresses() {
-  if (!form.value.id) return
-  const res = await api.get(`/customers/${form.value.id}/`)
-  addresses.value = res.data.addresses || []
-  form.value.default_address = res.data.default_address
+  if (form.value.id) await refreshCustomer(form.value.id)
 }
 
 async function save() {
