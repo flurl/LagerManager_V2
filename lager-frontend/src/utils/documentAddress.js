@@ -22,3 +22,17 @@ export function pickAddressForCustomer({
   )
   return belongs ? currentAddressId : (defaultAddressId ?? null)
 }
+
+/**
+ * The address list after a customer was saved in the customer dialog.
+ *
+ * The saved customer carries its complete, current address set (addresses may
+ * have been added or edited in that dialog), so it replaces whatever the list
+ * held for that customer. Sorted by display name like the initially loaded list.
+ */
+export function replaceCustomerAddresses(addresses, customer) {
+  return [
+    ...addresses.filter((a) => a.customer !== customer.id),
+    ...(customer.addresses || []),
+  ].sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
+}
