@@ -2,7 +2,8 @@
 Email sending service.
 
 send_document_email() is the single entry-point for sending application emails.
-It sends the message via Django's configured mail backend, then always writes an
+It sends the message via Django's configured mail backend (with a BCC to
+EMAIL_ARCHIVE_BCC, if set, to keep a copy in the sender's Sent folder), then always writes an
 EmailLog row (status SENT or FAILED) and persists any attachments to the filesystem.
 On failure it re-raises the original exception after logging so the caller can
 surface an appropriate error response.
@@ -65,6 +66,7 @@ def send_document_email(
     from_email: str = settings.DEFAULT_FROM_EMAIL
     reply_to: list[str] = [settings.DEFAULT_REPLY_TO_EMAIL] if settings.DEFAULT_REPLY_TO_EMAIL else []
     cc_list: list[str] = [a.strip() for a in cc.split(',') if a.strip()] if cc else []
+    bcc_list: list[str] = [settings.EMAIL_ARCHIVE_BCC] if settings.EMAIL_ARCHIVE_BCC else []
 
     content_type_obj: ContentType | None = None
     object_id: str | None = None
@@ -79,6 +81,7 @@ def send_document_email(
             from_email=from_email,
             to=[recipient],
             cc=cc_list,
+            bcc=bcc_list,
             reply_to=reply_to,
         )
         for filename, data, mime in (attachments or []):

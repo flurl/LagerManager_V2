@@ -96,3 +96,54 @@ class SendDocumentEmailTests(TestCase):
         self.assertEqual(mail.outbox[0].cc, ['b@example.com'])
         log = EmailLog.objects.get(subject='CC test')
         self.assertEqual(log.cc, 'b@example.com')
+
+
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    EMAIL_ARCHIVE_BCC='faktura+Sent@example.com',
+)
+class ArchiveBccTests(TestCase):
+    """Every billing mail is BCC'd to EMAIL_ARCHIVE_BCC so a copy lands in the Sent folder."""
+
+    def _send(self) -> None:
+        send_document_email(subject='Rechnung', body='', recipient='customer@example.com')
+
+    def test_archive_address_is_bcc_recipient(self) -> None:
+        """The archive address is an envelope recipient of the sent message."""
+        self._send()
+
+        self.assertEqual(mail.outbox[0].bcc, ['faktura+Sent@example.com'])
+        self.assertIn('faktura+Sent@example.com', mail.outbox[0].recipients())
+
+    def test_archive_address_is_not_in_headers(self) -> None:
+        """The archive address never appears in the message headers.
+
+        As a visible To/Cc the customer would see it, and a "reply all" would be
+        filed straight into the Sent folder where nobody reads it.
+        """
+        self._send()
+
+        raw: str = mail.outbox[0].message().as_string()
+        self.assertNotIn('faktura+Sent@example.com', raw)
+
+    @override_settings(EMAIL_ARCHIVE_BCC='')
+    def test_empty_setting_disables_archive_bcc(self) -> None:
+        """An empty EMAIL_ARCHIVE_BCC sends the mail without any BCC."""
+        self._send()
+
+        self.assertEqual(mail.outbox[0].bcc, [])
+
+    @override_settings(
+        EMAIL_BACKEND='core.mail.PreviewRedirectEmailBackend',
+        PREVIEW_EMAIL_INNER_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PREVIEW_BRANCH='feature/foo',
+        PREVIEW_EMAIL_REDIRECT_TO='self@example.com',
+    )
+    def test_preview_drops_archive_bcc(self) -> None:
+        """On a preview the mail goes only to the redirect address, not to the archive.
+
+        Preview test mail must not clutter the production Sent folder.
+        """
+        self._send()
+
+        self.assertEqual(mail.outbox[0].recipients(), ['self@example.com'])

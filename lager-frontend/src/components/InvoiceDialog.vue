@@ -13,15 +13,27 @@
     <v-card-text>
       <v-row dense>
         <v-col cols="6">
-          <v-autocomplete v-model="form.customer" :items="customers" :item-title="c => c.display_name"
-            item-value="id" label="Kunde *" :rules="[v => !!v || 'Pflichtfeld']"
-            :disabled="!isDraft" />
+          <div class="d-flex align-start gap-1">
+            <v-autocomplete v-model="form.customer" :items="customers" :item-title="c => c.display_name"
+              item-value="id" label="Kunde *" :rules="[v => !!v || 'Pflichtfeld']" class="flex-grow-1"
+              :disabled="!isDraft" />
+            <v-tooltip v-if="isDraft" text="Neuen Kunden erstellen">
+              <template #activator="{ props: tip }">
+                <v-btn v-bind="tip" icon size="small" variant="text" class="mt-2" @click="openNewCustomer">
+                  <v-icon>mdi-account-plus-outline</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
+          </div>
         </v-col>
         <v-col cols="6">
           <v-text-field v-model="form.service_date" label="Leistungsdatum" type="date" clearable
             :disabled="!isDraft" />
         </v-col>
       </v-row>
+      <CustomerDetails v-if="selectedCustomer" :customer="selectedCustomer" :editable="isDraft"
+        @edit="openEditCustomer" />
+
       <v-row dense>
         <v-col cols="6">
           <div class="d-flex align-start gap-1">
@@ -242,6 +254,13 @@
     </v-card-actions>
   </v-card>
 
+  <v-dialog v-model="customerDialogOpen" max-width="760">
+    <!-- Keyed per opening: "new" passes null twice in a row, which the dialog's
+         prop watcher would not notice, leaving the previous customer in the form. -->
+    <CustomerDialog :key="customerDialogKey" :customer="customerToEdit" @saved="onCustomerSaved"
+      @close="customerDialogOpen = false" />
+  </v-dialog>
+
   <v-dialog v-model="addressDialogOpen" max-width="640">
     <AddressDialog :address="addressToEdit" @saved="onAddressSaved" @close="addressDialogOpen = false" />
   </v-dialog>
@@ -287,11 +306,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
 import AddressDialog from './AddressDialog.vue'
+import CustomerDetails from './CustomerDetails.vue'
+import CustomerDialog from './CustomerDialog.vue'
 import BillingArticleDialog from './BillingArticleDialog.vue'
 import WzImportDialog from './WzImportDialog.vue'
 import { useLineCalculations } from '../composables/useLineCalculations'
 import { extractErrorMessage } from '../utils/errorMessage'
-import { pickAddressForCustomer } from '../utils/documentAddress'
+import { pickAddressForCustomer, replaceCustomerAddresses } from '../utils/documentAddress'
 
 const props = defineProps({
   invoice: { type: Object, default: null },
@@ -314,6 +335,9 @@ const taxRates = ref([])
 
 const form = ref({ customer: null, address: null, service_date: null, notes: '' })
 const lines = ref([])
+const customerDialogOpen = ref(false)
+const customerToEdit = ref(null)
+const customerDialogKey = ref(0)
 const addressDetailOpen = ref(false)
 const addressDialogOpen = ref(false)
 const addressToEdit = ref(null)
@@ -423,6 +447,29 @@ async function loadLines(invoiceId) {
   } catch (err) {
     showError(err, 'Positionen konnten nicht geladen werden.')
   }
+}
+
+function openNewCustomer() {
+  customerToEdit.value = null
+  customerDialogKey.value++
+  customerDialogOpen.value = true
+}
+
+function openEditCustomer() {
+  customerToEdit.value = selectedCustomer.value
+  customerDialogKey.value++
+  customerDialogOpen.value = true
+}
+
+function onCustomerSaved(cust) {
+  // Addresses first: selecting a new customer below lets the customer watcher
+  // pick its default address from this list.
+  addresses.value = replaceCustomerAddresses(addresses.value, cust)
+  const isNewCustomer = !customers.value.some(c => c.id === cust.id)
+  customers.value = [...customers.value.filter(c => c.id !== cust.id), cust]
+    .sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'))
+  if (isNewCustomer) form.value.customer = cust.id
+  customerDialogOpen.value = false
 }
 
 function openNewAddress() {

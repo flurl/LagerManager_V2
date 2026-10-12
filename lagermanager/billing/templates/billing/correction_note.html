@@ -1,0 +1,14 @@
+{% extends "billing/supplement.html" %}
+
+{% block doc_title %}Berichtigungsnote {{ correction_number }} zu {{ doc_label }} {% if doc_number %}{{ doc_number }}{% else %}(Entwurf){% endif %}{% endblock %}
+{% block doc_type_label %}Berichtigungsnote{% endblock %}
+
+{# A correction has to identify what it corrects unambiguously: number and date. #}
+{% block meta_table %}
+<table class="meta-table">
+  <tr><td>Berichtigung Nr.</td><td>{{ correction_number }}</td></tr>
+  <tr><td>Zu {{ doc_label }}</td><td>{% if doc_number %}{{ doc_number }}{% else %}(Entwurf){% endif %}</td></tr>
+  {% if doc_date %}<tr><td>vom</td><td>{{ doc_date|date:"d.m.Y" }}</td></tr>{% endif %}
+  <tr><td>Datum der Berichtigung</td><td>{{ attachment.created_at|date:"d.m.Y" }}</td></tr>
+</table>
+{% endblock %}

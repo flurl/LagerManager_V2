@@ -4,28 +4,6 @@
 {% block doc_title %}{% if doc.is_reversal %}Stornorechnung{% else %}Rechnung{% endif %} {% if doc.number %}{{ doc.number }}{% else %}(Entwurf){% endif %}{% endblock %}
 {% block doc_type_label %}{% if doc.is_reversal %}Stornorechnung{% else %}Rechnung{% endif %}{% endblock %}
 
-{% block extra_style %}
-<style>
-  .payment-summary {
-    margin-top: 18px;
-    margin-left: auto;
-    width: 60%;
-    font-size: 10pt;
-  }
-  .payment-summary table { width: 100%; border-collapse: collapse; }
-  .payment-summary td { padding: 3px 0; }
-  .payment-summary td.num { text-align: right; }
-  .payment-summary .section-label { color: #777; padding-top: 8px; }
-  .payment-summary .payment-row td { color: #555; padding-left: 12px; }
-  .payment-summary .open-row td {
-    font-size: 12pt;
-    font-weight: 700;
-    border-top: 1px solid #ccc;
-    padding-top: 6px;
-  }
-</style>
-{% endblock %}
-
 {% block meta_table %}
 <table class="meta-table">
   {% if doc.customer.customer_number %}
@@ -51,6 +29,8 @@
 </table>
 {% endblock %}
 
+{# Payments and the open amount are on the Zahlungsübersicht, which follows
+   this page whenever the invoice has payments (see payment_supplement.html). #}
 {% block doc_body %}
 <table class="line-table">
   <thead>
@@ -94,34 +74,4 @@
     </tr>
   </tfoot>
 </table>
-
-{% if doc.payments.all or doc.reminder_fee_total %}
-<div class="payment-summary">
-  <table>
-    {% if doc.reminder_fee_total %}
-    <tr>
-      <td>Mahngebühren</td>
-      <td class="num">{{ doc.reminder_fee_total|floatformat:"2" }} €</td>
-    </tr>
-    <tr>
-      <td>Gesamtforderung</td>
-      <td class="num">{{ doc.total_due|floatformat:"2" }} €</td>
-    </tr>
-    {% endif %}
-    {% if doc.payments.all %}
-    <tr><td class="section-label" colspan="2">Bereits bezahlt</td></tr>
-    {% for payment in doc.payments.all %}
-    <tr class="payment-row">
-      <td>{{ payment.payment_date|date:"d.m.Y" }} – {{ payment.get_method_display }}</td>
-      <td class="num">−{{ payment.amount|floatformat:"2" }} €</td>
-    </tr>
-    {% endfor %}
-    {% endif %}
-    <tr class="open-row">
-      <td>Offener Betrag</td>
-      <td class="num">{{ doc.open_amount|floatformat:"2" }} €</td>
-    </tr>
-  </table>
-</div>
-{% endif %}
 {% endblock %}

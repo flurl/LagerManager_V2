@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     BillingArticleViewSet,
+    DocumentAttachmentKindsView,
     InvoiceTemplateViewSet,
     InvoiceViewSet,
     OfferViewSet,
@@ -19,5 +20,7 @@ router.register('reminders', ReminderViewSet, basename='reminder')
 router.register('payments', PaymentViewSet, basename='payment')
 
 urlpatterns: list[URLPattern | URLResolver] = [
+    path('document-attachment-kinds/', DocumentAttachmentKindsView.as_view(),
+         name='document-attachment-kinds'),
     path('', include(router.urls)),
 ]

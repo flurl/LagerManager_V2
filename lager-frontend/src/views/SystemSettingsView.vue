@@ -35,6 +35,20 @@
             </div>
 
             <v-select
+              v-else-if="key === 'EMAIL_DEFAULT_ATTACHMENT_KINDS'"
+              v-model="attachmentKindSelection"
+              :items="attachmentKindChoices"
+              item-title="label"
+              item-value="value"
+              :label="configData[key]?.help_text"
+              :disabled="!canEdit"
+              :loading="attachmentKindsLoading"
+              multiple
+              chips
+              closable-chips
+              class="mb-2"
+            />
+            <v-select
               v-else-if="key === 'DEFAULT_TAX_RATE_ID' || key === 'DEFAULT_BILLING_TAX_RATE_ID'"
               v-model="formValues[key]"
               :items="taxRateChoices"
@@ -93,7 +107,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import api from '../api'
 
 const loading = ref(false)
@@ -105,6 +119,21 @@ const groups = ref([])
 const openPanels = ref([0])
 const taxRateChoices = ref([])
 const taxRatesLoading = ref(false)
+const attachmentKindChoices = ref([])
+const attachmentKindsLoading = ref(false)
+
+// The setting is stored as a comma-separated string; the select works on a
+// list.  Kinds come from the backend registry, so a new attachment type shows
+// up here without a frontend change.
+const attachmentKindSelection = computed({
+  get: () => (formValues.value.EMAIL_DEFAULT_ATTACHMENT_KINDS || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean),
+  set: (values) => {
+    formValues.value.EMAIL_DEFAULT_ATTACHMENT_KINDS = values.join(',')
+  },
+})
 const error = ref('')
 const saved = ref(false)
 
@@ -149,6 +178,19 @@ async function fetchTaxRates() {
     ]
   } finally {
     taxRatesLoading.value = false
+  }
+}
+
+async function fetchAttachmentKinds() {
+  attachmentKindsLoading.value = true
+  try {
+    const res = await api.get('/document-attachment-kinds/')
+    attachmentKindChoices.value = res.data.map((k) => ({ value: k.kind, label: k.label }))
+  } catch {
+    // The setting stays editable as a plain list of whatever is already stored.
+    attachmentKindChoices.value = []
+  } finally {
+    attachmentKindsLoading.value = false
   }
 }
 
@@ -209,5 +251,6 @@ onMounted(() => {
   fetchConfig()
   fetchLogo()
   fetchTaxRates()
+  fetchAttachmentKinds()
 })
 </script>

@@ -1,4 +1,5 @@
 from datetime import timedelta
+from email.utils import parseaddr
 from pathlib import Path
 from typing import Any, cast
 
@@ -151,10 +152,15 @@ LOGGING: dict[str, Any] = {
 
 
 # Email
-EMAIL_BACKEND: str = (
-    'django.core.mail.backends.console.EmailBackend'
-    if DEBUG
-    else 'django.core.mail.backends.smtp.EmailBackend'
+# Dev prints mail to the console unless EMAIL_BACKEND says otherwise (see README,
+# "Sending real mail from dev").
+EMAIL_BACKEND: str = config(
+    'EMAIL_BACKEND',
+    default=(
+        'django.core.mail.backends.console.EmailBackend'
+        if DEBUG
+        else 'django.core.mail.backends.smtp.EmailBackend'
+    ),
 )
 EMAIL_HOST: str = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT: int = config('EMAIL_PORT', default=587, cast=int)
@@ -165,6 +171,9 @@ EMAIL_USE_SSL: bool = config('EMAIL_USE_SSL', default=False, cast=bool)
 DEFAULT_FROM_EMAIL: str = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
 SERVER_EMAIL: str = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
 DEFAULT_REPLY_TO_EMAIL: str = config('DEFAULT_REPLY_TO_EMAIL', default='')
+# BCC added to every billing mail so a copy lands in the sender's mailbox, e.g.
+# faktura+Sent@… which the mail server files into the Sent folder. Empty disables it.
+EMAIL_ARCHIVE_BCC: str = config('EMAIL_ARCHIVE_BCC', default=parseaddr(DEFAULT_FROM_EMAIL)[1])
 
 # Preview environments (scripts/preview.sh): a feature branch running next to
 # production on a copy of its data. Set only there. It shows a warning banner and
@@ -208,6 +217,7 @@ CONSTANCE_CONFIG_FIELDSETS: dict[str, tuple[str, ...]] = {
         'EMAIL_SUBJECT_INVOICE', 'EMAIL_BODY_INVOICE',
         'EMAIL_SUBJECT_REMINDER', 'EMAIL_BODY_REMINDER',
     ),
+    'Dokument-Anhänge': ('EMAIL_DEFAULT_ATTACHMENT_KINDS',),
 }
 CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
     'DEFAULT_TAX_RATE_ID': (0, 'Standard-Steuersatz (TaxRate-ID, 0 = keiner)', int),
@@ -273,6 +283,16 @@ CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {
         'Bitte überweisen Sie den offenen Betrag bis zum angegebenen Fälligkeitsdatum.\n\n'
         'Mit freundlichen Grüßen\n{company}',
         'E-Mail-Text beim Versand einer Mahnung',
+        str,
+    ),
+    # Comma-separated list of attachment kinds (billing/attachments/ registry).
+    # A plain str on purpose: ConfigView reads the third element as a real type
+    # and calls it to coerce the value.  Unknown entries are ignored when read,
+    # since /api/config/ does not validate per key.
+    'EMAIL_DEFAULT_ATTACHMENT_KINDS': (
+        'supplement,file',
+        'Anhangstypen, die im Versand-Dialog vorausgewählt sind '
+        '(ohne Auswahl ist nichts vorausgewählt)',
         str,
     ),
 }
