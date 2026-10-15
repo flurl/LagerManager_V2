@@ -1,4 +1,4 @@
-"""Preview environments stamp a VORSCHAU watermark on every billing document."""
+"""Watermarks on billing documents: VORSCHAU in preview environments, ENTWURF on drafts."""
 import datetime
 from decimal import Decimal
 
@@ -85,3 +85,69 @@ class PreviewWatermarkTests(TestCase):
         """A production PDF contains no VORSCHAU text."""
         pages = _pdf_page_texts(render_document_pdf(self.invoice))
         self.assertTrue(all('VORSCHAU' not in text for text in pages))
+
+
+class DraftWatermarkTests(TestCase):
+    def setUp(self) -> None:
+        self.address = Address.objects.create(vorname='Max', nachname='Mustermann', ort='Wien')
+        ensure_customer_for_address(self.address)
+        self.offer = Offer.objects.create(
+            customer=self.address.customer, address=self.address,
+            document_date=datetime.date(2026, 6, 15),
+        )
+        self.invoice = Invoice.objects.create(
+            customer=self.address.customer, address=self.address,
+            document_date=datetime.date(2026, 6, 15), due_date=datetime.date(2026, 6, 29),
+        )
+        self.reminder = Reminder.objects.create(
+            invoice=self.invoice, level=1,
+            reminder_date=datetime.date(2026, 7, 1), due_date=datetime.date(2026, 7, 15),
+        )
+
+    def test_draft_html_carries_watermark(self) -> None:
+        """Draft offers, invoices and reminders all render the ENTWURF watermark."""
+        for doc in (self.offer, self.invoice, self.reminder):
+            with self.subTest(doc=type(doc).__name__):
+                self.assertIn('class="draft-watermark"', render_document_html(doc))
+
+    def test_issued_html_has_no_watermark(self) -> None:
+        """Once issued, offers, invoices and reminders no longer carry ENTWURF."""
+        Offer.objects.filter(pk=self.offer.pk).update(status=Offer.Status.ISSUED)
+        Invoice.objects.filter(pk=self.invoice.pk).update(status=Invoice.Status.ISSUED)
+        Reminder.objects.filter(pk=self.reminder.pk).update(status=Reminder.Status.ISSUED)
+        for doc in (self.offer, self.invoice, self.reminder):
+            doc.refresh_from_db()
+            with self.subTest(doc=type(doc).__name__):
+                self.assertNotIn('class="draft-watermark"', render_document_html(doc))
+
+    @override_settings(PREVIEW_BRANCH='feature/foo')
+    def test_draft_in_preview_carries_both_watermarks(self) -> None:
+        """A draft in a preview environment shows both VORSCHAU and ENTWURF.
+
+        The two marks say different things (not real data / not issued yet),
+        so neither may suppress the other.
+        """
+        html = render_document_html(self.invoice)
+        self.assertIn('class="preview-watermark"', html)
+        self.assertIn('class="draft-watermark', html)
+
+    def test_draft_pdf_watermarks_every_page(self) -> None:
+        """Every page of a multi-page draft PDF shows ENTWURF.
+
+        A single printed or forwarded page must not pass for an issued document.
+        """
+        tax = TaxRate.objects.create(name='Normal', percent=Decimal('20.00'))
+        InvoiceLine.objects.bulk_create(
+            InvoiceLine(
+                invoice=self.invoice, position=i, description=f'Position {i}',
+                quantity=Decimal('1'), unit_price=Decimal('10.00'), tax_rate=tax,
+            )
+            for i in range(1, 81)
+        )
+
+        pages = _pdf_page_texts(render_document_pdf(self.invoice))
+
+        self.assertGreater(len(pages), 1)
+        for number, text in enumerate(pages, start=1):
+            with self.subTest(page=number):
+                self.assertIn('ENTWURF', text)

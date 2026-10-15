@@ -71,6 +71,8 @@ def _build_context(doc: DocType) -> dict[str, object]:
         'reminder_max_level': getattr(config, 'REMINDER_MAX_LEVEL', 3),
         # Set only in preview environments: stamps a VORSCHAU watermark on every page.
         'preview_branch': settings.PREVIEW_BRANCH,
+        # Stamps an ENTWURF watermark on every page until the document is issued.
+        'is_draft': doc.status == type(doc).Status.DRAFT,
     }
 
 
