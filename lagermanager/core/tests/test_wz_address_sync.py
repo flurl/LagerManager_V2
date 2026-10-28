@@ -196,3 +196,64 @@ class SyncCreatesCustomersTests(TestCase):
         mock_connect.return_value = self._mock_connect([])
         self.assertEqual(sync_addresses('host', 'db', 'user', 'pass'), 0)
         self.assertEqual(Customer.objects.count(), 0)
+
+
+class SyncAfterBackfillTests(TestCase):
+    """The sync must reuse customers that backfill_customers_and_ledger created.
+
+    Regression: the backfill gave every address a customer without a
+    wz_source_id, and the sync, which looked customers up by wz_source_id only,
+    then created a second customer for every WZ address and moved the address
+    over to it — leaving the documents and ledger on the old one.
+    """
+
+    def _mock_connect(self, rows: list[tuple[Any, ...]]) -> MagicMock:
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = rows
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        return mock_conn
+
+    def _backfilled_address(self, wz_source_id: int) -> Address:
+        """A WZ address as the backfill left it: own customer, no wz_source_id on it."""
+        address = Address.objects.create(wz_source_id=wz_source_id, vorname='Alt')
+        customer = Customer.objects.create(
+            customer_number=f'K900{wz_source_id}', name='Alt', default_address=address)
+        address.customer = customer
+        address.save(update_fields=['customer'])
+        return address
+
+    @patch('core.services.wz_address_sync.connect_mssql')
+    def test_adopts_the_addresss_existing_customer(self, mock_connect: MagicMock) -> None:
+        """No new customer; the existing one keeps its number and gains the wz_source_id."""
+        address = self._backfilled_address(1)
+        customer_pk = address.customer_id
+        assert customer_pk is not None
+        mock_connect.return_value = self._mock_connect(_make_wz_rows()[:1])
+        sync_addresses('host', 'db', 'user', 'pass')
+
+        self.assertEqual(Customer.objects.count(), 1)
+        address.refresh_from_db()
+        self.assertEqual(address.customer_id, customer_pk)
+        customer = Customer.objects.get(pk=customer_pk)
+        self.assertEqual(customer.wz_source_id, 1)
+        self.assertEqual(customer.customer_number, 'K9001')
+
+    @patch('core.services.wz_address_sync.connect_mssql')
+    def test_never_moves_an_address_to_another_customer(self, mock_connect: MagicMock) -> None:
+        """An address the user gave to a local customer stays with that customer.
+
+        The customer can own only one wz_source_id, so the second WZ address
+        just keeps pointing at it instead of getting a customer of its own.
+        """
+        local = Customer.objects.create(customer_number='K9000', name='Lokal')
+        Address.objects.create(wz_source_id=1, customer=local)
+        Address.objects.create(wz_source_id=2, customer=local)
+        mock_connect.return_value = self._mock_connect(_make_wz_rows())
+        sync_addresses('host', 'db', 'user', 'pass')
+
+        self.assertEqual(Customer.objects.count(), 1)
+        self.assertEqual(
+            set(Address.objects.values_list('customer_id', flat=True)), {local.pk})
+        local.refresh_from_db()
+        self.assertEqual(local.wz_source_id, 1)

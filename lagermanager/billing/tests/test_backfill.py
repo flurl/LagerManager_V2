@@ -211,3 +211,23 @@ class BackfillOrderingTests(TestCase):
         self.assertEqual(booked, [
             'Rechnung PG260610', 'Rechnung PG260612', 'Rechnung PG260613',
         ])
+
+
+class BackfillWzAddressTests(TestCase):
+    def test_customer_of_a_wz_address_carries_its_wz_source_id(self) -> None:
+        """So the next WZ sync finds the customer instead of creating a duplicate."""
+        address = Address.objects.create(wz_source_id=42, firma='Muster GmbH')
+        call_command('backfill_customers_and_ledger', stdout=StringIO())
+        address.refresh_from_db()
+        assert address.customer is not None
+        self.assertEqual(address.customer.wz_source_id, 42)
+
+    def test_reuses_an_existing_customer_with_the_same_wz_source_id(self) -> None:
+        """An unlinked WZ address is reattached to its customer, not given a second one."""
+        customer = Customer.objects.create(
+            wz_source_id=42, customer_number='K0001', name='Muster GmbH')
+        address = Address.objects.create(wz_source_id=42, firma='Muster GmbH')
+        call_command('backfill_customers_and_ledger', stdout=StringIO())
+        address.refresh_from_db()
+        self.assertEqual(address.customer_id, customer.pk)
+        self.assertEqual(Customer.objects.count(), 1)

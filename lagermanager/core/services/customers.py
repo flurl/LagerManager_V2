@@ -33,15 +33,32 @@ def _link(address: Address, customer: Customer) -> Customer:
     return customer
 
 
+def _wz_customer(address: Address) -> Customer | None:
+    """The customer the Wiffzack sync keys on this address, if it has one."""
+    if address.wz_source_id is None:
+        return None
+    return Customer.objects.filter(wz_source_id=address.wz_source_id).first()
+
+
 def ensure_customer_for_address(address: Address) -> Customer:
     """Return the address's customer, creating a 1:1 one if it has none.
+
+    A Wiffzack address is reattached to the customer the sync keys on it, and a
+    new customer for one carries its wz_source_id: otherwise the next sync would
+    not recognise the customer and create a duplicate.
 
     Caller is responsible for the surrounding transaction.
     """
     if address.customer_id is not None and address.customer is not None:
         return address.customer
+    existing: Customer | None = _wz_customer(address)
+    if existing is not None:
+        address.customer = existing
+        address.save(update_fields=['customer'])
+        return existing
     customer = Customer.objects.create(
         customer_number=allocate_customer_number(),
+        wz_source_id=address.wz_source_id,
         **_customer_kwargs(address),
     )
     return _link(address, customer)
@@ -54,11 +71,21 @@ def ensure_customers_for_addresses(addresses: list[Address]) -> int:
     backfill, which can walk thousands of addresses.  Returns how many customers
     were created.
     """
-    orphans = [a for a in addresses if a.customer_id is None]
+    orphans: list[Address] = []
+    for address in addresses:
+        if address.customer_id is not None:
+            continue
+        existing: Customer | None = _wz_customer(address)
+        if existing is not None:
+            address.customer = existing
+            address.save(update_fields=['customer'])
+        else:
+            orphans.append(address)
     if not orphans:
         return 0
     numbers = allocate_customer_numbers(len(orphans))
     for address, number in zip(orphans, numbers, strict=True):
         _link(address, Customer.objects.create(
-            customer_number=number, **_customer_kwargs(address)))
+            customer_number=number, wz_source_id=address.wz_source_id,
+            **_customer_kwargs(address)))
     return len(orphans)

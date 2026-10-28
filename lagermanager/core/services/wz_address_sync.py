@@ -7,7 +7,9 @@ The sync:
   - upserts rows by wz_source_id (bulk_create with update_conflicts=True)
   - creates a matching Customer 1:1 for every WZ address, keyed on the same
     wz_source_id, so that every address a document can be billed to has a
-    customer to keep a balance for
+    customer to keep a balance for — unless the address already has a
+    customer, which it keeps (and which takes over the wz_source_id if it has
+    none yet); the sync never moves an address to another customer
   - NEVER deletes — preserves locally-created addresses (wz_source_id=None)
     and WZ rows referenced by existing documents
   - is idempotent (can be run repeatedly without side-effects)
@@ -92,18 +94,59 @@ def _wz_customer_name(row: Any) -> str:
     return (postal or f'WZ-Adresse {row[0]}')[:255]
 
 
+def _adopt_address_customers(wz_ids: list[int]) -> dict[int, int]:
+    """Return {wz_source_id: customer pk} for WZ addresses that already have a customer.
+
+    Such an address keeps its customer: it may come from
+    backfill_customers_and_ledger, or the user may have moved the address to a
+    customer of their choice.  A customer that has no wz_source_id yet takes
+    over the one of its (first) WZ address, so its name and contact details are
+    refreshed from then on and it is found by wz_source_id like any synced one.
+    """
+    linked: dict[int, int] = {
+        wz_id: customer_pk
+        for wz_id, customer_pk in
+        Address.objects.filter(wz_source_id__in=wz_ids, customer__isnull=False)
+        .order_by('wz_source_id')
+        .values_list('wz_source_id', 'customer_id')
+        if wz_id is not None and customer_pk is not None
+    }
+    claimed: set[int | None] = set(
+        Customer.objects.filter(wz_source_id__in=wz_ids)
+        .values_list('wz_source_id', flat=True)
+    )
+    adoptable: dict[int, Customer] = {
+        c.pk: c for c in Customer.objects.filter(
+            pk__in=linked.values(), wz_source_id__isnull=True)
+    }
+    adopted: list[Customer] = []
+    for wz_id, customer_pk in linked.items():
+        customer: Customer | None = adoptable.pop(customer_pk, None)
+        if customer is not None and wz_id not in claimed:
+            customer.wz_source_id = wz_id
+            adopted.append(customer)
+    if adopted:
+        Customer.objects.bulk_update(adopted, ['wz_source_id'], batch_size=BATCH_SIZE)
+    return linked
+
+
 def _upsert_customers(rows: list[Any]) -> dict[int, int]:
     """Create/update one Customer per WZ address; return {wz_source_id: pk}.
+
+    An address that already has a customer keeps it (see
+    _adopt_address_customers); a customer is only created for one that has
+    neither a customer nor a customer keyed on its wz_source_id.
 
     Numbers are allocated in a single locked bump for all new customers rather
     than one lock per row — a first sync creates thousands at once.
     """
     wz_ids: list[int] = [r[0] for r in rows]
+    linked: dict[int, int] = _adopt_address_customers(wz_ids)
     existing: dict[int, int] = dict(
         Customer.objects.filter(wz_source_id__in=wz_ids)
         .values_list('wz_source_id', 'pk')
     )
-    new_rows: list[Any] = [r for r in rows if r[0] not in existing]
+    new_rows: list[Any] = [r for r in rows if r[0] not in existing and r[0] not in linked]
     numbers: list[str] = allocate_customer_numbers(len(new_rows))
 
     to_create = [
@@ -135,10 +178,12 @@ def _upsert_customers(rows: list[Any]) -> dict[int, int]:
             Customer.objects.bulk_update(
                 updates, ['name', 'email', 'telefon', 'uid'], batch_size=BATCH_SIZE)
 
-    return dict(
+    keyed: dict[int, int] = dict(
         Customer.objects.filter(wz_source_id__in=wz_ids)
         .values_list('wz_source_id', 'pk')
     )
+    # The address's own customer wins, so the upsert never re-points an address.
+    return {**keyed, **linked}
 
 
 def _upsert_addresses(rows: list[Any], customer_ids: dict[int, int]) -> None:
