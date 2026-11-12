@@ -12,120 +12,56 @@
 
     <v-card-text>
       <v-row dense>
-        <v-col cols="6">
-          <div class="d-flex align-start gap-1">
-            <v-autocomplete v-model="form.customer" :items="customers" :item-title="c => c.display_name"
-              item-value="id" label="Kunde *" :rules="[v => !!v || 'Pflichtfeld']" class="flex-grow-1"
-              :disabled="!isDraft" />
-            <v-tooltip v-if="isDraft" text="Neuen Kunden erstellen">
-              <template #activator="{ props: tip }">
-                <v-btn v-bind="tip" icon size="small" variant="text" class="mt-2" @click="openNewCustomer">
-                  <v-icon>mdi-account-plus-outline</v-icon>
-                </v-btn>
-              </template>
-            </v-tooltip>
-          </div>
+        <!-- Customer and address, each framed together with its details -->
+        <v-col cols="12" md="7">
+          <DetailsGroup title="Kundendetails" icon="mdi-account-details-outline" edit-label="Kunde bearbeiten"
+            :editable="isDraft" :has-details="!!selectedCustomer" :reset-key="form.customer"
+            @edit="openEditCustomer">
+            <template #field>
+              <div class="d-flex align-start gap-1">
+                <v-autocomplete v-model="form.customer" :items="customers" :item-title="c => c.display_name"
+                  item-value="id" label="Kunde *" :rules="[v => !!v || 'Pflichtfeld']" class="flex-grow-1"
+                  :disabled="!isDraft" />
+                <v-tooltip v-if="isDraft" text="Neuen Kunden erstellen">
+                  <template #activator="{ props: tip }">
+                    <v-btn v-bind="tip" icon size="small" variant="text" class="mt-2" @click="openNewCustomer">
+                      <v-icon>mdi-account-plus-outline</v-icon>
+                    </v-btn>
+                  </template>
+                </v-tooltip>
+              </div>
+            </template>
+            <CustomerDetails v-if="selectedCustomer" :customer="selectedCustomer" />
+          </DetailsGroup>
+
+          <DetailsGroup title="Adressdetails" icon="mdi-map-marker-outline" edit-label="Adresse bearbeiten"
+            :editable="isDraft" :has-details="!!selectedAddress" :reset-key="form.address"
+            @edit="openEditAddress">
+            <template #field>
+              <div class="d-flex align-start gap-1">
+                <v-autocomplete v-model="form.address" :items="customerAddresses" :item-title="addressTitle"
+                  item-value="id" label="Adresse *" :rules="[v => !!v || 'Pflichtfeld']" class="flex-grow-1"
+                  :disabled="!isDraft || !form.customer"
+                  :hint="form.customer ? '' : 'Zuerst einen Kunden wählen.'" persistent-hint />
+                <v-tooltip v-if="isDraft" text="Neue Adresse für diesen Kunden erstellen">
+                  <template #activator="{ props: tip }">
+                    <v-btn v-bind="tip" icon size="small" variant="text" class="mt-2"
+                      :disabled="!form.customer" @click="openNewAddress">
+                      <v-icon>mdi-plus-circle-outline</v-icon>
+                    </v-btn>
+                  </template>
+                </v-tooltip>
+              </div>
+            </template>
+            <AddressDetails v-if="selectedAddress" :address="selectedAddress" />
+          </DetailsGroup>
         </v-col>
-        <v-col cols="6">
+
+        <v-col cols="12" md="5">
           <v-text-field v-model="form.service_date" label="Leistungsdatum" type="date" clearable
             :disabled="!isDraft" />
         </v-col>
       </v-row>
-      <CustomerDetails v-if="selectedCustomer" :customer="selectedCustomer" :editable="isDraft"
-        @edit="openEditCustomer" />
-
-      <v-row dense>
-        <v-col cols="6">
-          <div class="d-flex align-start gap-1">
-            <v-autocomplete v-model="form.address" :items="customerAddresses" :item-title="addressTitle"
-              item-value="id" label="Adresse *" :rules="[v => !!v || 'Pflichtfeld']" class="flex-grow-1"
-              :disabled="!isDraft || !form.customer"
-              :hint="form.customer ? '' : 'Zuerst einen Kunden wählen.'" persistent-hint />
-            <v-tooltip v-if="isDraft" text="Neue Adresse für diesen Kunden erstellen">
-              <template #activator="{ props: tip }">
-                <v-btn v-bind="tip" icon size="small" variant="text" class="mt-2"
-                  :disabled="!form.customer" @click="openNewAddress">
-                  <v-icon>mdi-plus-circle-outline</v-icon>
-                </v-btn>
-              </template>
-            </v-tooltip>
-          </div>
-        </v-col>
-      </v-row>
-
-      <!-- Address detail expand -->
-      <div v-if="selectedAddress" class="mb-2">
-        <div class="d-flex align-center gap-1">
-          <v-btn variant="text" size="x-small" density="compact"
-            :append-icon="addressDetailOpen ? 'mdi-chevron-up' : 'mdi-chevron-down'"
-            @click="addressDetailOpen = !addressDetailOpen">
-            Adressdetails
-          </v-btn>
-          <v-tooltip v-if="addressDetailOpen && isDraft" text="Adresse bearbeiten">
-            <template #activator="{ props: tip }">
-              <v-btn v-bind="tip" icon size="x-small" variant="text" @click="openEditAddress">
-                <v-icon size="small">mdi-pencil</v-icon>
-              </v-btn>
-            </template>
-          </v-tooltip>
-        </div>
-        <v-expand-transition>
-          <v-card v-if="addressDetailOpen" variant="tonal" class="pa-3 mt-1 text-body-2">
-            <v-row dense>
-              <v-col v-if="selectedAddress.anrede" cols="2">
-                <div class="text-caption text-medium-emphasis">Anrede</div>
-                <div>{{ selectedAddress.anrede }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.vorname" cols="2">
-                <div class="text-caption text-medium-emphasis">Vorname</div>
-                <div>{{ selectedAddress.vorname }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.nachname" cols="3">
-                <div class="text-caption text-medium-emphasis">Nachname</div>
-                <div>{{ selectedAddress.nachname }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.firma" cols="5">
-                <div class="text-caption text-medium-emphasis">Firma</div>
-                <div>{{ selectedAddress.firma }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.abteilung" cols="5">
-                <div class="text-caption text-medium-emphasis">Abteilung</div>
-                <div>{{ selectedAddress.abteilung }}</div>
-              </v-col>
-            </v-row>
-            <v-row dense class="mt-1">
-              <v-col v-if="selectedAddress.strasse" cols="4">
-                <div class="text-caption text-medium-emphasis">Straße</div>
-                <div>{{ selectedAddress.strasse }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.plz" cols="2">
-                <div class="text-caption text-medium-emphasis">PLZ</div>
-                <div>{{ selectedAddress.plz }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.ort" cols="3">
-                <div class="text-caption text-medium-emphasis">Ort</div>
-                <div>{{ selectedAddress.ort }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.telefon" cols="3">
-                <div class="text-caption text-medium-emphasis">Telefon</div>
-                <div>{{ selectedAddress.telefon }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.email" cols="4">
-                <div class="text-caption text-medium-emphasis">E-Mail</div>
-                <div>{{ selectedAddress.email }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.uid" cols="4">
-                <div class="text-caption text-medium-emphasis">UID-Nummer</div>
-                <div>{{ selectedAddress.uid }}</div>
-              </v-col>
-              <v-col v-if="selectedAddress.anmerkung" cols="12">
-                <div class="text-caption text-medium-emphasis">Anmerkung</div>
-                <div>{{ selectedAddress.anmerkung }}</div>
-              </v-col>
-            </v-row>
-          </v-card>
-        </v-expand-transition>
-      </div>
 
       <v-row dense>
         <v-col cols="12">
@@ -208,7 +144,7 @@
             </tr>
             <tr class="line-bottom" :class="{ 'line-alt': idx % 2 === 1, 'line-dragging': dragIdx === idx }">
               <td>
-                <div class="field-label">Beschreibung</div>
+                <div class="field-label">Rechnungstext</div>
                 <v-textarea v-if="!line.billing_article" v-model="line.description"
                   auto-grow rows="1" max-rows="3" density="compact" hide-details :disabled="!isDraft" />
                 <div v-else class="text-body-2 pt-1">{{ line.description }}</div>
@@ -306,7 +242,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
 import AddressDialog from './AddressDialog.vue'
+import AddressDetails from './AddressDetails.vue'
 import CustomerDetails from './CustomerDetails.vue'
+import DetailsGroup from './DetailsGroup.vue'
 import CustomerDialog from './CustomerDialog.vue'
 import BillingArticleDialog from './BillingArticleDialog.vue'
 import WzImportDialog from './WzImportDialog.vue'
@@ -338,7 +276,6 @@ const lines = ref([])
 const customerDialogOpen = ref(false)
 const customerToEdit = ref(null)
 const customerDialogKey = ref(0)
-const addressDetailOpen = ref(false)
 const addressDialogOpen = ref(false)
 const addressToEdit = ref(null)
 const articleDialogOpen = ref(false)
@@ -386,10 +323,6 @@ function addressTitle(addr) {
 }
 
 const { lineNet, lineGross, totalNet, totalGross } = useLineCalculations(taxRates, lines)
-
-watch(() => form.value.address, () => {
-  addressDetailOpen.value = false
-})
 
 watch(() => form.value.customer, (customerId) => {
   // Master data drives the decision, so stay out of the way until it is loaded.
