@@ -37,7 +37,10 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue'])
+// `change` is emitted on blur once the final value (incl. evaluated formulas) has been committed.
+// The native input `change` event fires *before* blur, i.e. before formulas are evaluated, so it
+// must not reach the parent.
+const emit = defineEmits(['update:modelValue', 'change'])
 
 const isFocused = ref(false)
 const rawValue = ref('')
@@ -46,6 +49,7 @@ const lastFormulaResult = ref(null)
 // Input that could not be interpreted — kept verbatim so the user can come back and fix it.
 const invalidInput = ref(null)
 const invalidMessage = ref('')
+let valueOnFocus = null
 
 const locale = computed(() => localeFromLanguage(auth.preferences?.language))
 
@@ -64,6 +68,7 @@ const displayValue = computed(() => {
 
 function onFocus() {
   isFocused.value = true
+  valueOnFocus = props.modelValue
   if (invalidInput.value !== null) {
     rawValue.value = invalidInput.value
     invalidInput.value = null
@@ -88,6 +93,11 @@ function onUpdate(val) {
   emit('update:modelValue', num)
 }
 
+function commit(value) {
+  emit('update:modelValue', value)
+  if (value !== valueOnFocus) emit('change', value)
+}
+
 function onBlur() {
   isFocused.value = false
   const trimmed = rawValue.value.trim()
@@ -98,7 +108,7 @@ function onBlur() {
       invalidInput.value = null
       lastFormula.value = trimmed
       lastFormulaResult.value = rounded
-      emit('update:modelValue', rounded)
+      commit(rounded)
     } catch {
       invalidInput.value = trimmed
       invalidMessage.value = 'Ungültige Formel'
@@ -109,9 +119,7 @@ function onBlur() {
   try {
     const num = parseNumber(trimmed)
     invalidInput.value = null
-    if (num === null) return
-    const rounded = parseFloat(num.toFixed(props.decimals))
-    if (rounded !== props.modelValue) emit('update:modelValue', rounded)
+    commit(num === null ? null : parseFloat(num.toFixed(props.decimals)))
   } catch (e) {
     invalidInput.value = trimmed
     invalidMessage.value = e.message
