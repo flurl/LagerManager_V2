@@ -214,6 +214,7 @@ import NumberInput from './NumberInput.vue'
 import AttachmentGallery from './AttachmentGallery.vue'
 import ImportDialog from './ImportDialog.vue'
 import { useLineCalculations } from '../composables/useLineCalculations'
+import { saveStockMovement } from '../utils/stockMovementSave'
 
 const props = defineProps({
   movement: { type: Object, default: null },
@@ -403,35 +404,18 @@ function showSaveError(err) {
 async function doSave({ silent = false } = {}) {
   saving.value = true
   try {
-    let movementId = form.value.id
-    if (isNew.value) {
-      const res = await api.post('/stock-movements/', {
-        ...form.value,
-        period: periodStore.currentPeriodId,
-      })
-      movementId = res.data.id
-      form.value.id = movementId
-    } else {
-      await api.put(`/stock-movements/${movementId}/`, form.value)
-    }
-    // Replace all detail lines in one atomic backend request, preserving entry order
-    const linesPayload = lines.value.map((l) => ({
-      article: l.article,
-      quantity: l.quantity,
-      unit_price: l.unit_price,
-      tax_rate: l.tax_rate,
-    }))
-    const detailsRes = await api.post(`/stock-movements/${movementId}/details/`, linesPayload)
-    lines.value = detailsRes.data
-    // Assign any pending (orphaned) attachments to the newly created movement
-    if (isNew.value && pendingAttachments.value.length) {
-      await Promise.all(
-        pendingAttachments.value.map((a) =>
-          api.patch(`/attachments/${a.id}/`, { stock_movement: movementId })
-        )
-      )
-      pendingAttachments.value = []
-    }
+    const { details } = await saveStockMovement(api, {
+      id: form.value.id,
+      payload: isNew.value
+        ? { ...form.value, period: periodStore.currentPeriodId }
+        : form.value,
+      lines: lines.value,
+      pendingAttachments: pendingAttachments.value,
+      onCreated: (id) => { form.value.id = id },
+    })
+    lines.value = details
+    // Linked now; handleClose must no longer delete them as abandoned uploads.
+    pendingAttachments.value = []
     captureSnapshot()
     if (!silent) emit('saved')
   } catch (err) {
