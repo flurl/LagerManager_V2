@@ -19,7 +19,7 @@ services:
     command: >
       sh -c "python manage.py migrate --no-input &&
              python manage.py collectstatic --no-input &&
-             gunicorn lagermanager.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-4} --timeout 120"
+             gunicorn lagermanager.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-4} --timeout ${GUNICORN_TIMEOUT:-600}"
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
