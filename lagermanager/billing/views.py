@@ -150,6 +150,9 @@ class DocumentEmailMixin:
         _email_pdf_filename(doc) -> str
         _allowed_send_statuses()  -> tuple[str, ...]  (statuses that may be sent)
         _after_send_status()      -> str | None        (None = no status change)
+
+    Drafts may always be sent (e.g. for the customer to review them) and stay
+    drafts: only issuing assigns the number and freezes the document.
     """
 
     def _email_pdf_filename(self, doc: Any) -> str:
@@ -237,7 +240,8 @@ class DocumentEmailMixin:
         """Email the document plus the selected attachments, and record the attempt."""
         doc = self.get_object()  # type: ignore[attr-defined]
 
-        if doc.status not in self._allowed_send_statuses():
+        is_draft: bool = doc.status == type(doc).Status.DRAFT
+        if not is_draft and doc.status not in self._allowed_send_statuses():
             return Response(
                 {'detail': 'Dieses Dokument kann in seinem aktuellen Status nicht versendet werden.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -295,7 +299,7 @@ class DocumentEmailMixin:
             )
 
         new_status = self._after_send_status()
-        if new_status is not None and doc.status != new_status:
+        if new_status is not None and not is_draft and doc.status != new_status:
             doc.status = new_status
             doc.save(update_fields=['status'])
 
@@ -817,7 +821,7 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
 
     def _email_pdf_filename(self, doc: Any) -> str:
         invoice: Invoice = doc
-        return f'rechnung_{invoice.number or invoice.pk}.pdf'
+        return f'rechnung_{invoice.number or "entwurf_" + str(invoice.pk)}.pdf'
 
     def _allowed_send_statuses(self) -> tuple[str, ...]:
         return Invoice.OPEN_STATUSES
@@ -1295,7 +1299,7 @@ class ReminderViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHisto
 
     def _email_pdf_filename(self, doc: Any) -> str:
         reminder: Reminder = doc
-        return f'mahnung_{reminder.number or reminder.pk}.pdf'
+        return f'mahnung_{reminder.number or "entwurf_" + str(reminder.pk)}.pdf'
 
     def _allowed_send_statuses(self) -> tuple[str, ...]:
         # Reminders have no SENT status; allow sending once issued (and re-sending).

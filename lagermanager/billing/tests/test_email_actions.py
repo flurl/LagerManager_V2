@@ -160,14 +160,66 @@ class SendEmailActionTests(APITestCase):
             )
         self.assertEqual(EmailLog.objects.count(), 2)
 
-    def test_draft_invoice_returns_400(self) -> None:
-        invoice = _make_invoice(self.address, status='draft')
+    def test_cancelled_invoice_returns_400(self) -> None:
+        """A cancelled invoice cannot be sent (400)."""
+        invoice = _make_invoice(self.address, status='cancelled')
         resp = self.client.post(
             f'/api/invoices/{invoice.pk}/send-email/',
             {'recipient': 'x@example.com', 'subject': 'S', 'body': ''},
             format='json',
         )
         self.assertEqual(resp.status_code, 400)
+
+    # ---- Drafts -------------------------------------------------------------
+
+    def test_send_draft_documents_logs_and_keeps_draft_status(self) -> None:
+        """Draft offers, invoices and reminders can be sent and stay drafts.
+
+        Sending a draft is for review (e.g. letting the customer check it). It
+        must not flip the status to sent: that would skip issuing, which assigns
+        the number and freezes the document.
+        """
+        offer = _make_offer(self.address, status='draft')
+        invoice = _make_invoice(self.address, status='draft')
+        reminder = Reminder.objects.create(
+            invoice=_make_invoice(self.address, status='issued'), level=1,
+            reminder_date=datetime.date(2026, 2, 1), due_date=datetime.date(2026, 2, 14),
+        )
+        cases: list[tuple[str, Offer | Invoice | Reminder]] = [
+            ('offers', offer), ('invoices', invoice), ('reminders', reminder),
+        ]
+        for path, doc in cases:
+            with self.subTest(doc=path), \
+                 patch('billing.views.render_document_pdf', return_value=b'%PDF'):
+                resp = self.client.post(
+                    f'/api/{path}/{doc.pk}/send-email/',
+                    {'recipient': f'{path}@example.com', 'subject': 'Entwurf', 'body': ''},
+                    format='json',
+                )
+                self.assertEqual(resp.status_code, 200)
+                doc.refresh_from_db()
+                self.assertEqual(doc.status, 'draft')
+                self.assertIsNone(doc.number)
+                self.assertTrue(
+                    EmailLog.objects.filter(recipient=f'{path}@example.com').exists())
+
+    def test_draft_attachment_filename_marks_draft(self) -> None:
+        """A sent draft's PDF is named ..._entwurf_<pk>.pdf, not like an issued number."""
+        invoice = _make_invoice(self.address, status='draft')
+        with patch('billing.views.render_document_pdf', return_value=b'%PDF'):
+            self.client.post(
+                f'/api/invoices/{invoice.pk}/send-email/',
+                {'recipient': 'x@example.com', 'subject': 'S', 'body': ''},
+                format='json',
+            )
+        self.assertEqual(mail.outbox[0].attachments[0][0], f'rechnung_entwurf_{invoice.pk}.pdf')
+
+    def test_draft_email_defaults_name_the_draft(self) -> None:
+        """The prefilled subject of a draft says "Entwurf" where the number would go."""
+        invoice = _make_invoice(self.address, status='draft')
+        with override_config(EMAIL_SUBJECT_INVOICE='Ihre Rechnung {number}'):
+            defaults: dict[str, str] = build_email_defaults(invoice)
+        self.assertEqual(defaults['subject'], 'Ihre Rechnung Entwurf')
 
     def test_missing_recipient_returns_400(self) -> None:
         invoice = _make_invoice(self.address, status='issued')

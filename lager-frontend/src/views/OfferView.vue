@@ -39,7 +39,7 @@
               <v-tooltip v-if="item.status === 'draft'" text="Ausstellen"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="issueOffer(item)">mdi-file-check</v-icon>
               </template></v-tooltip>
-              <v-tooltip v-if="['issued','sent'].includes(item.status)" text="Per E-Mail versenden"><template #activator="{ props }">
+              <v-tooltip v-if="['draft','issued','sent'].includes(item.status)" text="Per E-Mail versenden"><template #activator="{ props }">
                 <v-icon v-bind="props" size="small" class="ml-1" @click.stop="openSend(item)">mdi-send</v-icon>
               </template></v-tooltip>
               <v-tooltip :text="item.attachment_count ? `Anhänge (${item.attachment_count})` : 'Anhänge'">

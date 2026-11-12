@@ -181,7 +181,8 @@ def build_email_defaults(doc: DocType) -> dict[str, str]:
         raise TypeError(f'Unknown document type: {type(doc)}')
 
     fmt = _SafeFormatMap(
-        number=doc.number or '',
+        # A draft has no number yet; say what it is instead of leaving a gap.
+        number=doc.number or 'Entwurf',
         company=company,
         recipient_name=address.display_name,
     )
