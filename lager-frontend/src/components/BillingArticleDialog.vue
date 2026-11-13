@@ -56,10 +56,12 @@ const emit = defineEmits(['saved', 'close'])
 const isNew = computed(() => !props.article?.id)
 const saving = ref(false)
 const taxRates = ref([])
+// DEFAULT_BILLING_TAX_RATE_ID from the system settings (0 = none configured).
+const defaultTaxRateId = ref(null)
 
 const emptyForm = () => ({
   article_number: '', name: '', description: '', unit: '',
-  unit_price: 0, tax_rate: null, is_active: true,
+  unit_price: 0, tax_rate: defaultTaxRateId.value, is_active: true,
 })
 const form = ref(emptyForm())
 
@@ -83,7 +85,10 @@ async function doSave() {
 }
 
 onMounted(async () => {
-  const res = await api.get('/tax-rates/')
-  taxRates.value = res.data.results || res.data
+  const [t, cfg] = await Promise.all([api.get('/tax-rates/'), api.get('/config/')])
+  taxRates.value = t.data.results || t.data
+  defaultTaxRateId.value = cfg.data.config?.DEFAULT_BILLING_TAX_RATE_ID?.value || null
+  // The form was built before the config arrived; prefill it unless the user already chose one.
+  if (isNew.value && form.value.tax_rate == null) form.value.tax_rate = defaultTaxRateId.value
 })
 </script>
