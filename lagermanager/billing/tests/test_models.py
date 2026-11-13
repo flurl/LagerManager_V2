@@ -2,7 +2,7 @@
 import datetime
 from decimal import Decimal
 
-from core.models import Address
+from core.models import Address, Customer
 from core.services.customers import ensure_customer_for_address
 from deliveries.models import TaxRate
 from django.test import TestCase
@@ -61,6 +61,35 @@ class AddressStrTests(TestCase):
         self.assertIn('Max Mustermann', block)
         self.assertIn('Musterstr. 1', block)
         self.assertIn('1010 Wien', block)
+
+    def test_address_block_falls_back_to_the_customer_name(self) -> None:
+        """An address without company and person name is addressed to its customer.
+
+        Otherwise offers, invoices and reminders would carry only a street.
+        """
+        customer = Customer.objects.create(name='Gasthaus Zur Linde')
+        a = Address(customer=customer, strasse='Lindenweg 3', plz='1010', ort='Wien')
+
+        self.assertEqual(
+            a.format_address_block(), 'Gasthaus Zur Linde\nLindenweg 3\n1010 Wien')
+
+    def test_address_block_prefers_the_given_customer(self) -> None:
+        """The document's customer wins over the address's own when passed in."""
+        own = Customer.objects.create(name='Eigener Kunde')
+        document_customer = Customer.objects.create(name='Belegkunde')
+        a = Address(customer=own, strasse='Lindenweg 3')
+
+        self.assertEqual(
+            a.format_address_block(document_customer), 'Belegkunde\nLindenweg 3')
+
+    def test_address_block_ignores_the_customer_when_the_address_has_a_name(self) -> None:
+        """A company or person on the address is the addressee; no customer line is added."""
+        customer = Customer.objects.create(name='Gasthaus Zur Linde')
+        with_company = Address(customer=customer, firma='Linde GmbH', strasse='Lindenweg 3')
+        with_person = Address(customer=customer, nachname='Huber', strasse='Lindenweg 3')
+
+        self.assertEqual(with_company.format_address_block(), 'Linde GmbH\nLindenweg 3')
+        self.assertEqual(with_person.format_address_block(), 'Huber\nLindenweg 3')
 
 
 class OfferTotalTests(TestCase):

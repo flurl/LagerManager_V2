@@ -1,4 +1,5 @@
 """Rendering of attachments in the document layout."""
+from core.models import Address, Customer
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Model
 from django.test import TestCase
@@ -55,6 +56,35 @@ class RecipientBlockTests(TestCase):
         # A Reminder has neither recipient_text nor address of its own, so this
         # is the assertion that keeps its supplement pages addressed.
         self.assertIn('Mustermann', recipient_block(reminder))
+
+
+class NamelessAddressRenderTests(TestCase):
+    """Documents sent to an address without company or person name."""
+
+    def setUp(self) -> None:
+        customer = Customer.objects.create(name='Gasthaus Zur Linde')
+        address = Address.objects.create(
+            customer=customer, strasse='Lindenweg 3', plz='1010', ort='Wien')
+        self.invoice = _make_invoice(address)
+
+    def test_invoice_is_addressed_to_the_customer(self) -> None:
+        """The rendered invoice shows the customer name in the recipient block."""
+        from billing.services.render import render_document_html
+
+        self.assertIn('Gasthaus Zur Linde', render_document_html(self.invoice))
+
+    def test_reminder_is_addressed_to_the_customer(self) -> None:
+        """The rendered reminder shows the customer name too.
+
+        Reminders have no address or snapshot of their own; the main document
+        used to read both straight off the reminder and printed no recipient.
+        """
+        from billing.services.render import render_document_html
+
+        html = render_document_html(_make_reminder(self.invoice))
+
+        self.assertIn('Gasthaus Zur Linde', html)
+        self.assertIn('Lindenweg 3', html)
 
 
 class SupplementRenderTests(TestCase):

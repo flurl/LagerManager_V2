@@ -230,7 +230,7 @@
 
   <!-- Recipient + metadata -->
   <div class="address-meta">
-    <div class="recipient-block">{% block recipient %}{% if doc.recipient_text %}{{ doc.recipient_text }}{% else %}{{ doc.address.format_address_block }}{% endif %}{% endblock %}</div>
+    <div class="recipient-block">{% block recipient %}{{ recipient_text }}{% endblock %}</div>
     <div>
       {% block meta_table %}{% endblock %}
     </div>

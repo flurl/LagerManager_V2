@@ -225,8 +225,13 @@ class Address(models.Model):
             return f'{self.name_line}, {self.postal_line}'
         return self.display_name
 
-    def format_address_block(self) -> str:
-        """Multi-line address block suitable for document headers."""
+    def format_address_block(self, customer: Customer | None = None) -> str:
+        """Multi-line address block suitable for document headers.
+
+        An address without company and person name would leave the document
+        without any addressee, so the customer's name stands in for it —
+        ``customer`` (the document's) when given, else the address's own.
+        """
         lines: list[str] = []
         if self.anrede:
             lines.append(self.anrede)
@@ -237,6 +242,10 @@ class Address(models.Model):
         name_parts = [p for p in (self.vorname, self.nachname) if p]
         if name_parts:
             lines.append(' '.join(name_parts))
+        if not self.firma and not name_parts:
+            owner: Customer | None = customer or self.customer
+            if owner is not None and owner.name:
+                lines.append(owner.name)
         if self.strasse:
             lines.append(self.strasse)
         plz_ort = ' '.join(p for p in (self.plz, self.ort) if p)

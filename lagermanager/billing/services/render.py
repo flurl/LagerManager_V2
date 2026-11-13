@@ -55,6 +55,9 @@ def _build_context(doc: DocType) -> dict[str, object]:
     """Build the template context common to all document types."""
     return {
         'doc': doc,
+        # Resolved here rather than in the template: reminders carry neither a
+        # snapshot nor an address of their own.
+        'recipient_text': recipient_block(doc),
         'company_logo_data_uri': _logo_data_uri(),
         # Company / issuer data from Constance
         'company_name': getattr(config, 'COMPANY_NAME', ''),
@@ -121,15 +124,15 @@ def document_address(doc: DocType) -> tuple[Address, Customer | None]:
 def recipient_block(doc: DocType) -> str:
     """The recipient block as printed on the document.
 
-    Mirrors base_document.html: the snapshot taken at issue time wins, the live
-    address fills in for drafts.  Resolved in Python rather than in the
-    template so it also works for reminders, which have neither field.
+    The snapshot taken at issue time wins, the live address fills in for
+    drafts.  Resolved in Python rather than in the template so it also works
+    for reminders, which have neither field.
     """
     snapshot: str = getattr(doc, 'recipient_text', '') or ''
     if snapshot:
         return snapshot
-    address, _customer = document_address(doc)
-    return address.format_address_block()
+    address, customer = document_address(doc)
+    return address.format_address_block(customer)
 
 
 def render_document_html(doc: DocType) -> str:
@@ -210,7 +213,6 @@ def render_attachment_html(
     ctx = _build_context(doc)
     ctx.update({
         'attachment': attachment,
-        'recipient_text': recipient_block(doc),
         'doc_label': _doc_type_label(doc),
         'doc_number': doc.number or '',
         'doc_date': _document_date(doc),

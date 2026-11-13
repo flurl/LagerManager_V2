@@ -489,7 +489,7 @@ class BillingArticleViewSet(viewsets.ModelViewSet[BillingArticle]):
 
 def _snapshot_recipient(doc: Offer | Invoice) -> None:
     """Snapshot the formatted address block onto the document at issue time."""
-    doc.recipient_text = doc.address.format_address_block()
+    doc.recipient_text = doc.address.format_address_block(doc.customer)
 
 
 class OfferViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistoryMixin,
