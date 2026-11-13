@@ -66,9 +66,10 @@ const displayValue = computed(() => {
   return formatNumber(num, props.decimals, locale.value)
 })
 
-function onFocus() {
+function onFocus(event) {
   isFocused.value = true
   valueOnFocus = props.modelValue
+  selectAllOnFocus(event?.target)
   if (invalidInput.value !== null) {
     rawValue.value = invalidInput.value
     invalidInput.value = null
@@ -79,6 +80,16 @@ function onFocus() {
     return
   }
   rawValue.value = formatNumberRaw(props.modelValue, locale.value)
+}
+
+// Select the whole content so the user can simply type to overwrite it. Deferred with a macrotask:
+// the input only shows the raw value/formula after Vue re-renders, and on mouse focus the browser
+// places the caret after the focus event, which would undo an immediate select().
+function selectAllOnFocus(el) {
+  if (!(el instanceof HTMLInputElement)) return
+  setTimeout(() => {
+    if (document.activeElement === el) el.select()
+  })
 }
 
 function onUpdate(val) {
