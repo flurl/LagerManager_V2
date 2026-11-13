@@ -120,6 +120,8 @@ Alle Funktionen befinden sich in der oberen Navigationsleiste im Menü **Fakturi
 
 **Kunden** und **Adressen** befinden sich im Menü **Stammdaten**.
 
+Dieses Handbuch ist auch direkt in der Anwendung verfügbar: **Hilfe → Handbuch Fakturierung** öffnet es in einer Seitenleiste rechts neben der aktuellen Ansicht, so dass beim Lesen weitergearbeitet werden kann. Die Breite lässt sich durch Ziehen am linken Rand ändern; über das Symbol **In neuem Tab öffnen** wird das Handbuch als eigene Seite angezeigt. Die Fassung in der Anwendung entspricht immer dem installierten Programmstand.
+
 ![Menü „Fakturierung" aufgeklappt](img/fakturierung/01-fakturierung-menue.png)
 
 > **Berechtigungen:** Die einzelnen Punkte sind nur sichtbar, wenn das Benutzerkonto die jeweilige Berechtigung besitzt (Angebote, Rechnungen, Mahnungen, Kunden, Adressen). Fehlt eine Berechtigung, ist der Menüpunkt ausgeblendet.
@@ -235,7 +237,7 @@ Die Artikelliste zeigt die **Beschreibung** als eigene Spalte an (gekürzt mit T
    - **Gültig bis** – optionales Ablaufdatum des Angebots (darf nicht vor dem Angebotsdatum liegen).
    - **Anmerkungen** – freier Text, erscheint auf dem Dokument.
 
-Unter den Kopfdaten lassen sich **Kundendetails** (Kundennummer, Name, UID, Kontaktdaten) und **Adressdetails** aufklappen. Das **Stift-Symbol** im aufgeklappten Bereich öffnet den Kunden bzw. die Adresse zum Bearbeiten; Änderungen gelten sofort für die Stammdaten.
+Die Felder **Kunde** und **Adresse** stehen jeweils in einem eigenen Rahmen. Darunter lassen sich über die Leiste **Kundendetails** (Kundennummer, Name, UID, Kontaktdaten) bzw. **Adressdetails** mit dem Hinweis **anzeigen & bearbeiten** die Details aufklappen. Die Schaltfläche **Kunde bearbeiten** bzw. **Adresse bearbeiten** im aufgeklappten Bereich öffnet den Datensatz zum Bearbeiten; Änderungen gelten sofort für die Stammdaten. Wird ein anderer Kunde oder eine andere Adresse gewählt, klappen die Details wieder zu.
 
 ![Angebot – Dialog mit Kopfbereich und Positionen](img/fakturierung/07-angebot-dialog.png)
 
@@ -251,7 +253,7 @@ Pro Position werden erfasst:
 | Feld | Bedeutung |
 |------|-----------|
 | **Artikel / Bezeichnung** | Faktura-Artikel auswählen *oder* leer lassen für Freitext. Artikel mit Beschreibung werden im Dropdown als „Name – Beschreibung" angezeigt (Beschreibung auf 50 Zeichen gekürzt). |
-| **Beschreibung** | Freitext (bei Artikeln automatisch befüllt) |
+| **Rechnungstext** | Text der Position auf dem Dokument (bei Artikeln automatisch befüllt) |
 | **Einh.** | Einheit (z. B. Stk., Std.) |
 | **Menge** | Stückzahl/Menge |
 | **EP (netto)** | Einzelpreis netto |
@@ -266,6 +268,8 @@ Eine Position wird über das rote Mülleimer-Symbol am Zeilenende entfernt.
 > **Positionen umsortieren:** Solange das Dokument bearbeitbar ist, kann die Reihenfolge der Positionen per **Drag-and-Drop** an der Positionsnummer oder über die kleinen **Pfeil-hoch/-runter-Symbole** daneben geändert werden. Die Reihenfolge bestimmt die Position („Pos"-Spalte) auf dem gedruckten Dokument.
 
 > **Tipp – Formeln in Zahlenfeldern:** In Zahlenfeldern wie **Menge** oder **EP (netto)** kann statt eines Werts auch eine einfache Rechenformel eingegeben werden, beginnend mit `=` (z. B. `=12*3,5` oder `=(2+3)*4`). Nach Bestätigen mit Enter oder Verlassen des Felds wird das Ergebnis berechnet und eingesetzt. Ist die Formel ungültig, wird `NaN` angezeigt und das Speichern verhindert; beim erneuten Anklicken des Felds erscheint die ursprüngliche Formel wieder zur Korrektur.
+
+> **Tipp – Werte überschreiben:** Beim Anklicken eines Zahlenfelds wird der gesamte Inhalt – Wert oder Formel – markiert. Einfach lostippen ersetzt ihn; ein zweiter Klick setzt den Cursor, um nur einen Teil zu ändern.
 
 4. **Speichern**. Das Angebot wird zunächst als **Entwurf** angelegt.
 
@@ -639,6 +643,9 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 | Datum | Änderung |
 |-------|----------|
+| November 2026 | Neu: Menü **Hilfe** – dieses Handbuch lässt sich über **Hilfe → Handbuch Fakturierung** direkt in der Anwendung lesen, in einer verstellbaren Seitenleiste oder in einem eigenen Tab, und ist dort immer auf dem aktuellen Stand. Der Punkt **Über** ist vom Menü System nach Hilfe gewandert. |
+| November 2026 | Beim Anklicken eines **Zahlenfelds** (z. B. Menge, Preis) wird der Inhalt markiert, so dass ein neuer Wert oder eine Formel ihn direkt überschreibt. |
+| November 2026 | Im Angebots- und Rechnungsdialog sind **Kunde** und **Adresse** jeweils mit ihren aufklappbaren Details eingerahmt („anzeigen & bearbeiten", Schaltflächen **Kunde bearbeiten** / **Adresse bearbeiten**); beide Dialoge sind jetzt gleich aufgebaut. Das Positionsfeld **Beschreibung** heißt nun **Rechnungstext**. |
 | November 2026 | Neu: **Entwürfe versenden** – Angebote, Rechnungen und Mahnungen können schon als Entwurf per E-Mail verschickt werden, z. B. zur Prüfung durch den Kunden. Sie bleiben dabei Entwurf und erhalten keine Nummer. |
 | Oktober 2026 | Neu: Wasserzeichen **ENTWURF** auf jeder Seite noch nicht ausgestellter Angebote, Rechnungen und Mahnungen (Vorschau, Download und Versand). |
 | Oktober 2026 | Behoben: Der **WZ-Abgleich** legte für bereits vorhandene Kunden doppelte Kunden an. Adressen bleiben jetzt bei ihrem bisherigen Kunden. |
