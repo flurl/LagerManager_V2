@@ -155,6 +155,11 @@ const routes = [
     meta: { title: 'Mahnungen', permission: 'billing.view_reminder' },
   },
   {
+    path: '/help/billing',
+    component: () => import('./views/BillingHandbookView.vue'),
+    meta: { title: 'Handbuch Fakturierung' },
+  },
+  {
     path: '/forbidden',
     component: () => import('./views/ForbiddenView.vue'),
     meta: { title: 'Kein Zugriff', public: true },

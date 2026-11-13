@@ -46,6 +46,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}'],
+        // Handbook screenshots are only needed on the help page — don't push them to every device
+        globIgnores: ['**/assets/handbook/**'],
         navigateFallback: 'index.html',
         // Backend-served paths must never be hijacked by the SPA's SW
         navigateFallbackDenylist: [/^\/admin/, /^\/api/, /^\/static/, /^\/media/],
@@ -97,6 +99,18 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep the handbook screenshots (bundled from docs/img) in their own folder so the PWA
+        // precache can exclude them
+        assetFileNames: (assetInfo) =>
+          (assetInfo.originalFileNames ?? []).some((name) => name.includes('docs/img/'))
+            ? 'assets/handbook/[name]-[hash][extname]'
+            : 'assets/[name]-[hash][extname]',
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

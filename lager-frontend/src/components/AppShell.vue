@@ -131,6 +131,25 @@
     </v-card>
   </v-dialog>
 
+  <!-- Handbook sidebar: sits beside the content on desktop, overlays it on small screens -->
+  <v-navigation-drawer v-model="help.sidebarOpen" location="right" :width="sidebarWidth" :temporary="mobile"
+    disable-resize-watcher class="handbook-drawer" :class="{ 'handbook-drawer--resizing': resizing }">
+    <div v-if="!mobile" class="handbook-drawer__handle" title="Breite ändern" @pointerdown="startResize"
+      @pointermove="onResize" @pointerup="endResize" @pointercancel="endResize" />
+    <div class="handbook-drawer__layout">
+      <v-toolbar density="compact" color="surface" class="border-b">
+        <v-toolbar-title class="text-subtitle-1">Handbuch Fakturierung</v-toolbar-title>
+        <v-btn icon="mdi-open-in-new" size="small" title="In neuem Tab öffnen" href="/help/billing"
+          target="_blank" rel="noopener" />
+        <v-btn icon="mdi-close" size="small" title="Schließen" @click="help.closeHandbook()" />
+      </v-toolbar>
+      <div class="handbook-drawer__scroll pa-4" data-handbook-scroll>
+        <!-- Mounted on first open only (then kept, to preserve the scroll position) -->
+        <HandbookContent v-if="handbookLoaded" ref="handbookRef" />
+      </div>
+    </div>
+  </v-navigation-drawer>
+
   <v-main>
     <!-- Nags until the page is reloaded onto the deployed version -->
     <v-alert v-if="versionOutdated && !versionSnoozed" type="warning" variant="tonal" density="compact"
@@ -157,9 +176,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { usePeriodStore } from '../stores/period'
 import { useAuthStore } from '../stores/auth'
+import { useHelpStore } from '../stores/help'
+import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH } from '../utils/sidebarWidth'
 import NumberInput from './NumberInput.vue'
 import NotificationBell from './NotificationBell.vue'
 import { useVersionCheck } from '../composables/useVersionCheck'
@@ -167,6 +189,7 @@ import api from '../api'
 
 const periodStore = usePeriodStore()
 const auth = useAuthStore()
+const help = useHelpStore()
 
 const allNavGroups = [
   {
@@ -246,6 +269,13 @@ const allNavGroups = [
       { to: '/import', icon: 'mdi-database-import', title: 'Daten importieren', permission: 'core.run_import' },
       { to: '/settings', icon: 'mdi-tune', title: 'Einstellungen', permission: 'constance.change_config' },
       { href: '/admin/', icon: 'mdi-shield-account', title: 'Django Admin' },
+    ],
+  },
+  {
+    label: 'Hilfe',
+    icon: 'mdi-help-circle-outline',
+    items: [
+      { icon: 'mdi-book-open-variant', title: 'Handbuch Fakturierung', action: () => help.openHandbook() },
       { icon: 'mdi-information-outline', title: 'Über', action: openAbout },
     ],
   },
@@ -272,6 +302,51 @@ function onNavHover(i) {
     openMenus[i] = true
   }
 }
+
+// Handbook sidebar
+const SIDEBAR_WIDTH_KEY = 'handbookSidebarWidth'
+const { mobile, width: viewportWidth } = useDisplay()
+// Loaded lazily: the handbook (Markdown renderer, text, screenshots) is only fetched when needed
+const HandbookContent = defineAsyncComponent(() => import('./HandbookContent.vue'))
+const handbookRef = ref(null)
+const handbookLoaded = ref(false)
+const resizing = ref(false)
+// Width as chosen by the user; clamped against the current viewport for display.
+const requestedSidebarWidth = ref(
+  parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) ?? '', 10) || SIDEBAR_DEFAULT_WIDTH,
+)
+const sidebarWidth = computed(() => clampSidebarWidth(requestedSidebarWidth.value, viewportWidth.value))
+
+function startResize(event) {
+  event.preventDefault()  // no text selection while dragging
+  event.currentTarget.setPointerCapture(event.pointerId)
+  resizing.value = true
+}
+
+function onResize(event) {
+  if (!resizing.value) return
+  requestedSidebarWidth.value = clampSidebarWidth(window.innerWidth - event.clientX, window.innerWidth)
+}
+
+function endResize() {
+  if (!resizing.value) return
+  resizing.value = false
+  localStorage.setItem(SIDEBAR_WIDTH_KEY, String(requestedSidebarWidth.value))
+}
+
+watch(
+  () => help.openRequest,
+  async () => {
+    handbookLoaded.value = true
+    if (!help.anchor) return
+    // The async component may still be loading on first open
+    for (let i = 0; i < 100 && !handbookRef.value; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    await nextTick()
+    handbookRef.value?.scrollToAnchor(help.anchor)
+  },
+)
 
 // New period dialog
 const newPeriodDialog = ref(false)
@@ -378,3 +453,38 @@ onMounted(() => {
   periodStore.fetchPeriods()
 })
 </script>
+
+<style scoped>
+.handbook-drawer__layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.handbook-drawer__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.handbook-drawer__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.handbook-drawer__handle:hover,
+.handbook-drawer--resizing .handbook-drawer__handle {
+  background: rgba(var(--v-theme-primary), 0.4);
+}
+
+/* Follow the pointer directly instead of animating every width change */
+.handbook-drawer--resizing {
+  transition: none !important;
+}
+</style>
