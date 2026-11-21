@@ -97,9 +97,9 @@ def _wz_customer_name(row: Any) -> str:
 def _adopt_address_customers(wz_ids: list[int]) -> dict[int, int]:
     """Return {wz_source_id: customer pk} for WZ addresses that already have a customer.
 
-    Such an address keeps its customer: it may come from
-    backfill_customers_and_ledger, or the user may have moved the address to a
-    customer of their choice.  A customer that has no wz_source_id yet takes
+    Such an address keeps its customer: it may come from the one-off
+    backfill_customers_and_ledger command (since removed), or the user may have
+    moved the address to a customer of their choice.  A customer that has no wz_source_id yet takes
     over the one of its (first) WZ address, so its name and contact details are
     refreshed from then on and it is found by wz_source_id like any synced one.
     """

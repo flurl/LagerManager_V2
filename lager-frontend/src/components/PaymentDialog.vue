@@ -87,11 +87,24 @@
             <tbody>
               <tr v-for="p in info.payments" :key="p.id">
                 <td class="text-no-wrap">{{ fmtDate(p.payment_date) }}</td>
-                <td class="text-right">{{ fmtEuro(p.amount) }}</td>
-                <td>{{ p.method_display }}</td>
+                <td class="text-right text-no-wrap">
+                  {{ fmtEuro(p.amount) }}
+                  <!-- Only part of the payment settles this invoice (overpaid,
+                       or the rest went to another invoice). -->
+                  <div v-if="!p.is_credit && Number(p.entry_amount) !== Number(p.amount)"
+                    class="text-caption text-medium-emphasis">
+                    von {{ fmtEuro(p.entry_amount) }}
+                  </div>
+                </td>
+                <td>
+                  {{ p.method_display }}
+                  <div v-if="p.is_credit" class="text-caption text-medium-emphasis">
+                    aus Zahlung vom {{ fmtDate(p.entry_date) }}
+                  </div>
+                </td>
                 <td class="text-caption">{{ p.note || '—' }}</td>
                 <td class="text-right">
-                  <v-tooltip text="Zahlung löschen">
+                  <v-tooltip :text="p.is_credit ? 'Verrechnung rückgängig machen' : 'Zahlung löschen'">
                     <template #activator="{ props }">
                       <v-icon
                         v-bind="props"
@@ -99,7 +112,7 @@
                         color="error"
                         :disabled="deletingId === p.id"
                         @click="remove(p)"
-                      >mdi-delete</v-icon>
+                      >{{ p.is_credit ? 'mdi-undo' : 'mdi-delete' }}</v-icon>
                     </template>
                   </v-tooltip>
                 </td>
@@ -293,17 +306,29 @@ async function save() {
   }
 }
 
+// A payment booked for this invoice is deleted outright.  Applied credit is
+// only released: the money stays the customer's and becomes credit again.
 async function remove(payment) {
-  if (!confirm(`Zahlung vom ${fmtDate(payment.payment_date)} über ${fmtEuro(payment.amount)} löschen?`)) return
+  const question = payment.is_credit
+    ? `Verrechnung von ${fmtEuro(payment.amount)} Guthaben rückgängig machen?`
+    : `Zahlung vom ${fmtDate(payment.payment_date)} über ${fmtEuro(payment.entry_amount)} löschen?`
+  if (!confirm(question)) return
   deletingId.value = payment.id
   error.value = ''
   try {
-    await api.delete(`/payments/${payment.id}/`)
+    if (payment.is_credit) {
+      await api.post(`/invoices/${props.invoiceId}/release-credit/`, { entry: payment.id })
+    } else {
+      await api.delete(`/payments/${payment.id}/`)
+    }
     await load()
     resetForm()
     emit('changed')
   } catch (err) {
-    error.value = extractErrorMessage(err, 'Zahlung konnte nicht gelöscht werden.')
+    error.value = extractErrorMessage(
+      err, payment.is_credit
+        ? 'Verrechnung konnte nicht rückgängig gemacht werden.'
+        : 'Zahlung konnte nicht gelöscht werden.')
   } finally {
     deletingId.value = null
   }

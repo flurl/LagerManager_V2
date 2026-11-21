@@ -156,10 +156,11 @@ async function deleteItem(item) {
   }
 }
 
+// Saldo: positive = Soll (the customer owes us), negative = credit.
 function balanceClass(v) {
   const n = Number(v ?? 0)
-  if (n < 0) return 'text-error font-weight-medium'
-  if (n > 0) return 'text-success font-weight-medium'
+  if (n > 0) return 'text-error font-weight-medium'
+  if (n < 0) return 'text-success font-weight-medium'
   return ''
 }
 

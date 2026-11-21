@@ -12,13 +12,13 @@ from rest_framework.test import APITestCase
 
 from billing.models import (
     BillingArticle,
+    CustomerLedgerEntry,
     Invoice,
     InvoiceLine,
     InvoiceTemplate,
     InvoiceTemplateLine,
     Offer,
     OfferLine,
-    Payment,
     Reminder,
 )
 
@@ -304,18 +304,22 @@ class InvoiceViewSetTests(APITestCase):
 
     @patch('billing.views.allocate_number', return_value='RE260601')
     def test_mark_paid(self, mock_alloc: object) -> None:
+        """The shortcut books one payment for the open amount, dated as requested."""
+        from billing.services import ledger
         invoice = _make_invoice(self.address, status='issued')
         invoice.number = 'RE260601'
         invoice.save()
         _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
         resp = self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-01'})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()['status'], 'paid')
         self.assertEqual(resp.json()['paid_at'], '2026-07-01')
         # The shortcut books a real payment for the whole open amount.
-        payment = Payment.objects.get(invoice=invoice)
-        self.assertEqual(payment.amount, Decimal('120.00'))
-        self.assertEqual(payment.payment_date, datetime.date(2026, 7, 1))
+        payment = CustomerLedgerEntry.objects.get(
+            invoice=invoice, entry_type=CustomerLedgerEntry.EntryType.PAYMENT)
+        self.assertEqual(payment.amount, Decimal('-120.00'))
+        self.assertEqual(payment.entry_date, datetime.date(2026, 7, 1))
 
     def test_mark_paid_without_open_amount_rejected(self) -> None:
         invoice = _make_invoice(self.address, status='issued')
@@ -324,8 +328,11 @@ class InvoiceViewSetTests(APITestCase):
         self.assertIn('offenen Betrag', resp.json()['detail'])
 
     def test_mark_paid_twice_rejected(self) -> None:
+        """Once settled there is no open amount left to mark as paid."""
+        from billing.services import ledger
         invoice = _make_invoice(self.address, status='issued')
         _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
         self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-01'})
         resp = self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-02'})
         self.assertEqual(resp.status_code, 400)
@@ -335,12 +342,9 @@ class InvoiceViewSetTests(APITestCase):
     def _give_credit(self, amount: str) -> None:
         """Book a prepayment, the way a standalone payment would."""
         from billing.services import ledger
-        payment = Payment.objects.create(
-            customer=self.address.customer,
-            payment_date=datetime.date(2026, 6, 1),
-            amount=Decimal(amount),
-        )
-        ledger.record_payment(payment)
+        assert self.address.customer is not None
+        ledger.record_payment(
+            self.address.customer, datetime.date(2026, 6, 1), Decimal(amount))
 
     @patch('billing.views.allocate_number', return_value='RE260601')
     def test_issue_offsets_available_credit_automatically(self, mock_alloc: object) -> None:
@@ -358,7 +362,7 @@ class InvoiceViewSetTests(APITestCase):
         self.assertEqual(resp.json()['applied_credit'], '50.00')
         # The credit was already on the ledger — offsetting must not re-book it.
         self.assertEqual(
-            ledger.customer_balance(self.address.customer), Decimal('-70.00'))
+            ledger.customer_balance(self.address.customer), Decimal('70.00'))
 
     @patch('billing.views.allocate_number', return_value='RE260601')
     def test_issue_offsets_at_most_the_invoice_total(self, mock_alloc: object) -> None:
@@ -394,7 +398,7 @@ class InvoiceViewSetTests(APITestCase):
         _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
         self.client.post(f'/api/invoices/{invoice.pk}/issue/', {'due_date': _future_due_date()})
         self.assertEqual(
-            ledger.customer_balance(self.address.customer), Decimal('-120.00'))
+            ledger.customer_balance(self.address.customer), Decimal('120.00'))
 
     # ---- Applying credit to an already-issued invoice -------------------
 
@@ -412,7 +416,7 @@ class InvoiceViewSetTests(APITestCase):
         self.assertEqual(resp.json()['status'], 'partially_paid')
         self.assertEqual(resp.json()['open_amount'], '70.00')
         self.assertEqual(
-            ledger.customer_balance(self.address.customer), Decimal('-70.00'))
+            ledger.customer_balance(self.address.customer), Decimal('70.00'))
 
     def test_apply_credit_accepts_a_partial_amount(self) -> None:
         from billing.services import ledger
@@ -454,7 +458,7 @@ class InvoiceViewSetTests(APITestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_credit_payments_cannot_be_posted_directly(self) -> None:
-        """Booking one by hand would settle an invoice with money that is not there."""
+        """method=credit is no payment method: credit is applied, never booked as money in."""
         invoice = _make_invoice(self.address, status='issued')
         _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
         resp = self.client.post('/api/payments/', {
@@ -492,6 +496,42 @@ class InvoiceViewSetTests(APITestCase):
         self.assertEqual(resp.json()['reverse']['customer'], self.address.customer_id)
         self.assertEqual(resp.json()['draft']['customer'], self.address.customer_id)
 
+    def test_cancel_turns_payments_into_credit(self) -> None:
+        """Cancelling a partly paid invoice hands the paid money back as credit.
+
+        The Storno settles the whole invoice amount, so the 50 already paid are
+        released and become available for the customer's next invoice.
+        """
+        from billing.services import ledger
+        assert self.address.customer is not None
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
+        ledger.record_payment(
+            self.address.customer, datetime.date(2026, 7, 1), Decimal('50.00'),
+            invoice=invoice)
+
+        resp = self.client.post(
+            f'/api/invoices/{invoice.pk}/cancel/', {'reason': 'Test'}, format='json')
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(ledger.available_credit(self.address.customer), Decimal('50.00'))
+        self.assertEqual(ledger.customer_balance(self.address.customer), Decimal('-50.00'))
+
+    def test_history_includes_applied_credit(self) -> None:
+        """Applying credit books no payment, only an allocation — which history shows."""
+        from billing.services import ledger
+        assert self.address.customer is not None
+        invoice = _make_invoice(self.address, status='issued')
+        _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
+        ledger.record_payment(self.address.customer, datetime.date(2026, 6, 1), Decimal('50.00'))
+        self.client.post(f'/api/invoices/{invoice.pk}/apply-credit/')
+
+        entries = self.client.get(f'/api/invoices/{invoice.pk}/history/').json()
+
+        self.assertIn('payment', [e['source'] for e in entries])
+
     def test_duplicate_carries_the_customer(self) -> None:
         invoice = _make_invoice(self.address, status='issued')
         resp = self.client.post(f'/api/invoices/{invoice.pk}/duplicate/')
@@ -520,8 +560,11 @@ class InvoiceViewSetTests(APITestCase):
         self.assertNotIn('Bereits bezahlt', html)
 
     def test_history_includes_payments(self) -> None:
+        """The invoice history merges in the payments booked for it."""
+        from billing.services import ledger
         invoice = _make_invoice(self.address, status='issued')
         _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
         self.client.post('/api/payments/', {
             'customer': self.address.customer_id,
             'invoice': invoice.pk,
@@ -706,8 +749,11 @@ class InvoiceViewSetTests(APITestCase):
         self.assertIn('Stornorechnung', preview.content.decode())
 
     def test_mark_paid_from_sent(self) -> None:
+        """A sent invoice can be marked paid like an issued one."""
+        from billing.services import ledger
         invoice = _make_invoice(self.address, status='sent')
         _add_line(invoice, self.tax, quantity='1', unit_price='100.00')
+        ledger.record_invoice_issued(invoice)
         resp = self.client.post(f'/api/invoices/{invoice.pk}/mark-paid/', {'paid_at': '2026-07-01'})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()['status'], 'paid')

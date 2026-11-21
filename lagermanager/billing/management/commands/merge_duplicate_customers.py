@@ -1,22 +1,24 @@
 """
 One-off (but idempotent) repair of the customers the WZ address sync duplicated.
 
-backfill_customers_and_ledger created a customer for every address without a
-wz_source_id.  The WZ sync, which then looked customers up by wz_source_id only,
-created a second customer for every WZ address and moved the address over to
-it.  So for each WZ address there is now
+backfill_customers_and_ledger (a one-off command, since removed) created a
+customer for every address without a wz_source_id.  The WZ sync, which then
+looked customers up by wz_source_id only, created a second customer for every
+WZ address and moved the address over to it.  So for each WZ address there is
+now
 
   - the old customer: no wz_source_id, the address still its default address,
-    holding the backfilled documents, ledger entries and payments, and
+    holding the backfilled documents and ledger entries (payments included),
+    and
   - the duplicate: the address's wz_source_id, owning the address and whatever
     was billed to it since.
 
 The old customer is kept, because its number is the one on the documents issued
-before.  The duplicate's addresses, offers, invoices, payments and ledger entries
-move to it, empty contact fields are filled from the duplicate, its notes are
-appended, it takes over the wz_source_id and the duplicate is deleted.  Documents
-issued under the duplicate show the old customer's number from then on; the
-command lists them.
+before.  The duplicate's addresses, offers, invoices and ledger entries move to
+it (allocations follow their entries), empty contact fields are filled from the
+duplicate, its notes are appended, it takes over the wz_source_id and the
+duplicate is deleted.  Documents issued under the duplicate show the old
+customer's number from then on; the command lists them.
 """
 from typing import Any
 
@@ -25,12 +27,12 @@ from django.core.management.base import BaseCommand
 from django.db import models, transaction
 from django.db.models import F
 
-from billing.models import CustomerLedgerEntry, Invoice, Offer, Payment
+from billing.models import CustomerLedgerEntry, Invoice, Offer
 
 # Everything that points at a customer.  All but Address are PROTECT, so the
 # delete of the duplicate fails rather than lose anything that was missed here.
 _REFERENCING_MODELS: tuple[type[models.Model], ...] = (
-    Address, Offer, Invoice, Payment, CustomerLedgerEntry,
+    Address, Offer, Invoice, CustomerLedgerEntry,
 )
 
 

@@ -1,11 +1,12 @@
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 from core.models import Customer
 from rest_framework import serializers
 
 from .attachments import AttachmentHandler, UnknownAttachmentKind, get_handler
 from .models import (
+    AppliedPayment,
     BillingArticle,
     CustomerLedgerEntry,
     DocumentAttachment,
@@ -15,7 +16,6 @@ from .models import (
     InvoiceTemplateLine,
     Offer,
     OfferLine,
-    Payment,
     Reminder,
 )
 
@@ -192,23 +192,37 @@ class InvoiceLineSerializer(serializers.ModelSerializer[InvoiceLine]):
 # Payment
 # ---------------------------------------------------------------------------
 
-class PaymentSerializer(serializers.ModelSerializer[Payment]):
+class PaymentSerializer(serializers.ModelSerializer[CustomerLedgerEntry]):
+    """A PAYMENT ledger entry, in the shape the payment dialogs expect.
+
+    `amount` is the money received, so positive, although the entry itself is
+    Haben (negative).  Payments are booked and deleted, never edited; writes go
+    through services/ledger.record_payment() in PaymentViewSet.
+    """
     customer_display = serializers.CharField(source='customer.display_name', read_only=True)
     method_display = serializers.CharField(source='get_method_display', read_only=True)
     invoice_number = serializers.CharField(source='invoice.number', read_only=True, default=None)
+    payment_date = serializers.DateField(source='entry_date')
+    amount = serializers.DecimalField(max_digits=18, decimal_places=2)
+    method = serializers.ChoiceField(
+        choices=CustomerLedgerEntry.Method.choices, default=CustomerLedgerEntry.Method.TRANSFER)
 
     class Meta:
-        model = Payment
+        model = CustomerLedgerEntry
         fields = [
             'id', 'customer', 'customer_display',
             'invoice', 'invoice_number',
             'payment_date', 'amount', 'method', 'method_display', 'note',
-            'created_at', 'updated_at',
+            'created_at',
         ]
         read_only_fields = [
-            'id', 'customer_display', 'invoice_number', 'method_display',
-            'created_at', 'updated_at',
+            'id', 'customer_display', 'invoice_number', 'method_display', 'created_at',
         ]
+
+    def to_representation(self, instance: CustomerLedgerEntry) -> dict[str, Any]:
+        data: dict[str, Any] = super().to_representation(instance)
+        data['amount'] = str(-instance.amount)
+        return data
 
     def validate_amount(self, value: Decimal) -> Decimal:
         if value <= 0:
@@ -216,28 +230,12 @@ class PaymentSerializer(serializers.ModelSerializer[Payment]):
         return value
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        instance: Payment | None = getattr(self, 'instance', None)
         # `customer` is a required, non-nullable field, so DRF has already
-        # rejected a request that omits it; on a partial update it falls back to
-        # the instance's own customer.  The cast states that for the type
-        # checker, which only sees that the .get() default may be None.
-        customer: Customer = cast(
-            'Customer', data.get('customer', instance.customer if instance else None))
-        invoice = data.get('invoice', instance.invoice if instance else None)
-        method = data.get('method', instance.method if instance else None)
-
-        if method == Payment.Method.CREDIT:
-            # A credit application moves no money: it books no ledger entry, so
-            # accepting one here would let an invoice be settled from credit the
-            # customer does not have, without a trace on the account.  The whole
-            # invariant lives in services/ledger.apply_credit(), reachable through
-            # POST /invoices/{id}/apply-credit/.
-            raise serializers.ValidationError(
-                {'method': 'Guthaben wird nicht als Zahlung erfasst, sondern über '
-                           '„Guthaben verrechnen" bei der Rechnung gebucht.'})
-
+        # rejected a request that omits it.
+        customer: Customer = data['customer']
+        invoice: Invoice | None = data.get('invoice')
         if invoice is None:
-            # A payment without an invoice is a prepayment; it only raises the
+            # A payment without an invoice is a prepayment; it only lowers the
             # customer's balance and becomes credit.
             return data
 
@@ -253,6 +251,24 @@ class PaymentSerializer(serializers.ModelSerializer[Payment]):
         return data
 
 
+def serialize_applied_payment(row: AppliedPayment) -> dict[str, Any]:
+    """One row of an invoice's payment list (Invoice.applied_payments)."""
+    return {
+        # The ledger entry: DELETE /payments/{id}/ for a payment booked for the
+        # invoice, POST /invoices/{id}/release-credit/ for applied credit.
+        'id': row.entry.pk,
+        'payment_date': row.payment_date.isoformat(),
+        'amount': str(row.amount),
+        'method': row.method,
+        'method_display': row.get_method_display(),
+        'note': row.note,
+        'is_credit': row.is_credit,
+        # What the whole payment was, when only part of it settles this invoice.
+        'entry_amount': str(-row.entry.amount),
+        'entry_date': row.entry.entry_date.isoformat(),
+    }
+
+
 class CustomerLedgerEntrySerializer(serializers.ModelSerializer[CustomerLedgerEntry]):
     entry_type_display = serializers.CharField(source='get_entry_type_display', read_only=True)
     invoice_number = serializers.CharField(source='invoice.number', read_only=True, default=None)
@@ -261,8 +277,8 @@ class CustomerLedgerEntrySerializer(serializers.ModelSerializer[CustomerLedgerEn
         model = CustomerLedgerEntry
         fields = [
             'id', 'customer', 'entry_type', 'entry_type_display', 'entry_date',
-            'amount', 'description', 'invoice', 'invoice_number', 'reminder',
-            'payment', 'created_at',
+            'amount', 'description', 'method', 'note', 'invoice', 'invoice_number',
+            'reminder', 'created_at',
         ]
         read_only_fields = fields
 
@@ -330,7 +346,7 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
     paid_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     open_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     lines = InvoiceLineSerializer(many=True, read_only=True)
-    payments = PaymentSerializer(many=True, read_only=True)
+    payments = serializers.SerializerMethodField()
     reverses_number = serializers.CharField(source='reverses.number', read_only=True, default=None)
     reversed_by_id = serializers.SerializerMethodField()
 
@@ -365,6 +381,9 @@ class InvoiceSerializer(serializers.ModelSerializer[Invoice]):
     def get_reversed_by_id(self, obj: Invoice) -> int | None:
         reversal: Invoice | None = obj.reversed_by.first()
         return reversal.pk if reversal is not None else None
+
+    def get_payments(self, obj: Invoice) -> list[dict[str, Any]]:
+        return [serialize_applied_payment(row) for row in obj.applied_payments]
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         return validate_customer_address(self, data)

@@ -30,11 +30,12 @@
           <div class="d-flex align-center mb-4">
             <span class="text-subtitle-1 mr-2">Saldo:</span>
             <span class="text-h6" :class="balanceClass(balance)">{{ fmtEuro(balance) }}</span>
-            <v-chip v-if="Number(balance) > 0" size="small" color="success" class="ml-3">
-              Guthaben
-            </v-chip>
-            <v-chip v-else-if="Number(balance) < 0" size="small" color="error" class="ml-3">
+            <!-- Saldo as on an account statement: positive = Soll (owed to us). -->
+            <v-chip v-if="Number(balance) > 0" size="small" color="error" class="ml-3">
               Offen
+            </v-chip>
+            <v-chip v-else-if="Number(balance) < 0" size="small" color="success" class="ml-3">
+              Guthaben
             </v-chip>
           </div>
 
@@ -64,7 +65,7 @@
               </v-col>
             </v-row>
             <div class="text-caption text-medium-emphasis mt-2">
-              Der Betrag erhöht den Saldo und steht als Guthaben zur Verfügung. Über
+              Der Betrag wird im Haben gebucht und steht als Guthaben zur Verfügung. Über
               „… verrechnen“ im Zahlungsdialog einer Rechnung kann er später zugeordnet werden.
             </div>
             <div class="d-flex justify-end mt-2">
@@ -80,7 +81,8 @@
                 <th class="text-no-wrap">Datum</th>
                 <th>Art</th>
                 <th>Beschreibung</th>
-                <th class="text-right">Betrag</th>
+                <th class="text-right">Soll</th>
+                <th class="text-right">Haben</th>
                 <th class="text-right">Saldo</th>
                 <th>Benutzer</th>
               </tr>
@@ -99,9 +101,20 @@
                     {{ e.description }}
                   </a>
                   <template v-else>{{ e.description }}</template>
+                  <span v-if="e.method_display" class="text-medium-emphasis">
+                    · {{ e.method_display }}</span>
+                  <span v-if="e.note" class="text-medium-emphasis"> · {{ e.note }}</span>
+                  <div v-if="openLabel(e)" class="text-medium-emphasis">{{ openLabel(e) }}</div>
                 </td>
-                <td class="text-right" :class="balanceClass(e.amount)">{{ fmtEuro(e.amount) }}</td>
-                <td class="text-right">{{ fmtEuro(e.running_balance) }}</td>
+                <td class="text-right text-no-wrap">
+                  <template v-if="Number(e.amount) > 0">{{ fmtEuro(e.amount) }}</template>
+                </td>
+                <td class="text-right text-no-wrap">
+                  <template v-if="Number(e.amount) < 0">{{ fmtEuro(-Number(e.amount)) }}</template>
+                </td>
+                <td class="text-right text-no-wrap" :class="balanceClass(e.running_balance)">
+                  {{ fmtEuro(e.running_balance) }}
+                </td>
                 <td class="text-caption">{{ e.actor || '—' }}</td>
               </tr>
             </tbody>
@@ -178,7 +191,7 @@ async function savePayment() {
   saving.value = true
   saveError.value = ''
   try {
-    // No invoice: the payment raises the balance and becomes available credit.
+    // No invoice: the payment is Haben, settles nothing yet and is credit.
     await api.post('/payments/', {
       customer: props.customerId,
       payment_date: form.value.payment_date,
@@ -257,11 +270,23 @@ function typeLabel(e) {
   return e.entry_type === 'reminder_fee' ? 'Storno Gebühr' : 'Storno'
 }
 
+// Positive = Soll: the customer owes us.  Negative = credit.
 function balanceClass(v) {
   const n = Number(v ?? 0)
-  if (n < 0) return 'text-error'
-  if (n > 0) return 'text-success'
+  if (n > 0) return 'text-error'
+  if (n < 0) return 'text-success'
   return ''
+}
+
+// What of an entry is not yet settled (a charge) or not yet used (money in).
+// Stornos are always settled against what they cancel, so they never show one.
+function openLabel(e) {
+  const open = Number(e.open_amount ?? 0)
+  if (open <= 0 || e.is_reversal) return ''
+  if (Number(e.amount) > 0) {
+    return open === Number(e.amount) ? 'offen' : `davon offen: ${fmtEuro(open)}`
+  }
+  return `nicht zugeordnet: ${fmtEuro(open)}`
 }
 
 function fmtDate(d) {

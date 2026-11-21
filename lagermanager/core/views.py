@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from collections import defaultdict
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -357,8 +358,6 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
             blockers.append('Rechnungen')
         if customer.offers.exists():
             blockers.append('Angebote')
-        if customer.payments.exists():
-            blockers.append('Zahlungen')
         if customer.ledger_entries.exists():
             blockers.append('Kontobewegungen')
         if blockers:
@@ -387,7 +386,7 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
         the dialog can show who booked what without duplicating the actor on the
         ledger model itself.
         """
-        from billing.models import CustomerLedgerEntry
+        from billing.models import CustomerLedgerEntry, LedgerAllocation
 
         customer: Customer = self.get_object()
         # Ordered by content rather than by insertion: entry_date, then the
@@ -417,6 +416,16 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
         )
         actors = _create_actors(CustomerLedgerEntry, [e.pk for e in entries])
 
+        # What of each entry is allocated, from either side, in one query.
+        allocated: dict[int, Decimal] = defaultdict(Decimal)
+        for debit_id, credit_id, amount in (
+            LedgerAllocation.objects
+            .filter(debit_entry__customer=customer)
+            .values_list('debit_entry_id', 'credit_entry_id', 'amount')
+        ):
+            allocated[debit_id] += amount
+            allocated[credit_id] += amount
+
         running = Decimal('0.00')
         data: list[dict[str, Any]] = []
         for e in entries:
@@ -427,8 +436,14 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
                 'entry_type': e.entry_type,
                 'entry_type_display': e.get_entry_type_display(),
                 'description': e.description,
+                # Signed: positive = Soll (charge), negative = Haben (payment).
                 'amount': str(e.amount),
                 'running_balance': str(running),
+                # Not yet settled / not yet used, as a positive amount.
+                'open_amount': str(abs(e.amount) - allocated[e.pk]),
+                'method': e.method,
+                'method_display': e.get_method_display(),
+                'note': e.note,
                 'invoice': e.invoice_id,
                 'invoice_number': e.invoice.number if e.invoice_id and e.invoice else None,
                 # A reminder-fee movement links to the Mahnung that charged it,
