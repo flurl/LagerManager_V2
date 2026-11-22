@@ -46,6 +46,10 @@
           <v-alert v-if="error" type="error" density="compact" class="mb-4" closable @click:close="error = ''">
             {{ error }}
           </v-alert>
+          <v-alert v-if="notice" type="info" variant="tonal" density="compact" class="mb-4" closable
+            @click:close="notice = ''">
+            {{ notice }}
+          </v-alert>
 
           <!-- Credit that arrived after the invoice was issued -->
           <v-alert
@@ -85,34 +89,42 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="p in info.payments" :key="p.id">
+              <tr v-for="p in info.payments" :key="p.id" :class="{ 'text-medium-emphasis': p.is_reversed }">
                 <td class="text-no-wrap">{{ fmtDate(p.payment_date) }}</td>
                 <td class="text-right text-no-wrap">
-                  {{ fmtEuro(p.amount) }}
+                  <!-- A reversed payment settles nothing: show what it was. -->
+                  <span v-if="p.is_reversed" class="text-decoration-line-through">
+                    {{ fmtEuro(p.entry_amount) }}
+                  </span>
+                  <template v-else>{{ fmtEuro(p.amount) }}</template>
                   <!-- Only part of the payment settles this invoice (overpaid,
                        or the rest went to another invoice). -->
-                  <div v-if="!p.is_credit && Number(p.entry_amount) !== Number(p.amount)"
+                  <div v-if="!p.is_credit && !p.is_reversed && Number(p.entry_amount) !== Number(p.amount)"
                     class="text-caption text-medium-emphasis">
                     von {{ fmtEuro(p.entry_amount) }}
                   </div>
                 </td>
                 <td>
                   {{ p.method_display }}
+                  <v-chip v-if="p.is_reversed" size="x-small" color="deep-orange" class="ml-1">
+                    storniert
+                  </v-chip>
                   <div v-if="p.is_credit" class="text-caption text-medium-emphasis">
                     aus Zahlung vom {{ fmtDate(p.entry_date) }}
                   </div>
                 </td>
                 <td class="text-caption">{{ p.note || '—' }}</td>
                 <td class="text-right">
-                  <v-tooltip :text="p.is_credit ? 'Verrechnung rückgängig machen' : 'Zahlung löschen'">
+                  <v-tooltip v-if="!p.is_reversed"
+                    :text="p.is_credit ? 'Verrechnung rückgängig machen' : 'Zahlung stornieren'">
                     <template #activator="{ props }">
                       <v-icon
                         v-bind="props"
                         size="small"
                         color="error"
                         :disabled="deletingId === p.id"
-                        @click="remove(p)"
-                      >{{ p.is_credit ? 'mdi-undo' : 'mdi-delete' }}</v-icon>
+                        @click="p.is_credit ? releaseCredit(p) : startReversal(p)"
+                      >{{ p.is_credit ? 'mdi-undo' : 'mdi-cash-remove' }}</v-icon>
                     </template>
                   </v-tooltip>
                 </td>
@@ -180,6 +192,8 @@
           Zahlung speichern
         </v-btn>
       </v-card-actions>
+
+      <PaymentReversalDialog v-model="reversalOpen" :payment="reversalPayment" @reversed="onReversed" />
     </v-card>
   </v-dialog>
 </template>
@@ -188,6 +202,7 @@
 import { computed, ref, watch } from 'vue'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
+import PaymentReversalDialog from './PaymentReversalDialog.vue'
 import { extractErrorMessage } from '../utils/errorMessage'
 
 const props = defineProps({
@@ -214,7 +229,10 @@ const applyingCredit = ref(false)
 const availableCredit = ref(0)
 const deletingId = ref(null)
 const error = ref('')
+const notice = ref('')
 const info = ref(null)
+const reversalOpen = ref(false)
+const reversalPayment = ref(null)
 const form = ref({ payment_date: '', amount: null, method: 'transfer', note: '' })
 
 const openAmount = computed(() => Number(info.value?.open_amount ?? 0))
@@ -231,6 +249,7 @@ const canSave = computed(
 watch(() => props.modelValue, async (open) => {
   if (!open || !props.invoiceId) return
   error.value = ''
+  notice.value = ''
   await load()
   resetForm()
 }, { immediate: true })
@@ -306,32 +325,43 @@ async function save() {
   }
 }
 
-// A payment booked for this invoice is deleted outright.  Applied credit is
-// only released: the money stays the customer's and becomes credit again.
-async function remove(payment) {
-  const question = payment.is_credit
-    ? `Verrechnung von ${fmtEuro(payment.amount)} Guthaben rückgängig machen?`
-    : `Zahlung vom ${fmtDate(payment.payment_date)} über ${fmtEuro(payment.entry_amount)} löschen?`
-  if (!confirm(question)) return
+// Applied credit is only released: the money stays the customer's and becomes
+// credit again.  A payment booked for this invoice is reversed instead (below).
+async function releaseCredit(payment) {
+  if (!confirm(`Verrechnung von ${fmtEuro(payment.amount)} Guthaben rückgängig machen?`)) return
   deletingId.value = payment.id
   error.value = ''
+  notice.value = ''
   try {
-    if (payment.is_credit) {
-      await api.post(`/invoices/${props.invoiceId}/release-credit/`, { entry: payment.id })
-    } else {
-      await api.delete(`/payments/${payment.id}/`)
-    }
+    await api.post(`/invoices/${props.invoiceId}/release-credit/`, { entry: payment.id })
     await load()
     resetForm()
     emit('changed')
   } catch (err) {
-    error.value = extractErrorMessage(
-      err, payment.is_credit
-        ? 'Verrechnung konnte nicht rückgängig gemacht werden.'
-        : 'Zahlung konnte nicht gelöscht werden.')
+    error.value = extractErrorMessage(err, 'Verrechnung konnte nicht rückgängig gemacht werden.')
   } finally {
     deletingId.value = null
   }
+}
+
+// Payments are never deleted: a Zahlung Storno cancels a wrong one, and the
+// right one is then booked with the form below, which is prefilled again.
+function startReversal(payment) {
+  reversalPayment.value = {
+    id: payment.id,
+    amount: payment.entry_amount,
+    date: payment.entry_date,
+    label: payment.method_display,
+  }
+  reversalOpen.value = true
+}
+
+async function onReversed() {
+  error.value = ''
+  await load()
+  resetForm()
+  notice.value = 'Zahlung storniert. Die richtige Zahlung kann unten neu erfasst werden.'
+  emit('changed')
 }
 
 function fmtDate(d) {

@@ -109,6 +109,8 @@ class CustomerLedgerEntryReadSerializer(serializers.Serializer[Any]):
     reminder = serializers.IntegerField(allow_null=True)
     reminder_number = serializers.CharField(allow_null=True)
     is_reversal = serializers.BooleanField()
+    is_reversed = serializers.BooleanField()
+    reverses = serializers.IntegerField(allow_null=True)
     actor = serializers.CharField(allow_null=True)
 
 

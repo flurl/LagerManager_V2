@@ -801,7 +801,7 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
             # Allocations/reminders back the open_amount & status properties —
             # without them the list endpoint would issue extra queries per invoice.
             .prefetch_related('lines__tax_rate', 'reversed_by', 'reminders',
-                              INVOICE_SETTLEMENT_PREFETCH)
+                              *INVOICE_SETTLEMENT_PREFETCH)
             # Count over the GenericRelation — one join, so the paperclip
             # badge in the list view costs no extra query per row.  The explicit
             # order_by restates Meta.ordering, which annotate()'s GROUP BY would
@@ -923,20 +923,23 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
         line_entries = _line_log_entries(invoice, line_ct, 'invoice')
         # Payments booked for this invoice, and every allocation onto its
         # charges — which is how applied credit shows up.
+        payment_types = (CustomerLedgerEntry.EntryType.PAYMENT,
+                         CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL)
         payment_pks: set[str] = {
             str(pk) for pk in invoice.ledger_entries
-            .filter(entry_type=CustomerLedgerEntry.EntryType.PAYMENT)
+            .filter(entry_type__in=payment_types)
             .values_list('pk', flat=True)}
         payment_entries = [
             e for e in _child_log_entries(invoice, entry_ct, 'invoice', payment_pks)
             # A deleted payment is no longer in payment_pks; its log still
             # names the type, as [old, new] like every change.
             if e.object_pk in payment_pks
-            or CustomerLedgerEntry.EntryType.PAYMENT in e.changes_dict.get('entry_type', [])
+            or any(t in e.changes_dict.get('entry_type', []) for t in payment_types)
         ]
         charge_pks: list[str] = [
             str(pk) for pk in invoice.ledger_entries
-            .filter(amount__gt=0).values_list('pk', flat=True)]
+            .filter(amount__gt=0, entry_type__in=CustomerLedgerEntry.CHARGE_TYPES)
+            .values_list('pk', flat=True)]
         allocation_entries: list[LogEntry] = []
         if charge_pks:
             allocation_entries = list(
@@ -1427,13 +1430,14 @@ class ReminderViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHisto
 class PaymentViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[CustomerLedgerEntry]):
     """Zahlungen — the PAYMENT entries of the customer ledger.
 
-    Booked (optionally for an invoice, which they then settle) and deleted, never
-    edited: a wrong payment is deleted and booked again.  Every write goes
-    through services/ledger, which keeps allocations and invoice status in step.
+    Booked (optionally for an invoice, which they then settle), never edited or
+    deleted: a wrong payment is cancelled with POST {id}/reverse/ (a Zahlung
+    Storno) and the right one booked again.  Every write goes through
+    services/ledger, which keeps allocations and invoice status in step.
     """
 
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
-    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self) -> Any:
         qs = (
@@ -1476,7 +1480,30 @@ class PaymentViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[CustomerLedgerE
             if invoice is not None:
                 ledger.recalculate_invoice_status(invoice)
 
-    def perform_destroy(self, instance: CustomerLedgerEntry) -> None:
-        with transaction.atomic():
-            # The audit log preserves that the payment and its allocations existed.
-            ledger.delete_payment(instance)
+    @action(detail=True, methods=['post'], url_path='reverse')
+    def reverse(self, request: Request, pk: str | None = None) -> Response:
+        """Cancel this payment with a Zahlung Storno.
+
+        Body: {"reason": "…" (required), "date": "YYYY-MM-DD" (optional, today)}.
+        Answers with the payment, now marked is_reversed.
+        """
+        payment: CustomerLedgerEntry = self.get_object()
+        body = _payload(request)
+        reason: str = str(body.get('reason') or '')
+        date_str: str | None = body.get('date')
+        reversal_date: datetime.date
+        if date_str:
+            try:
+                reversal_date = datetime.date.fromisoformat(date_str)
+            except ValueError:
+                return Response({'detail': 'Ungültiges Datum.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+        else:
+            reversal_date = timezone.localdate()
+        try:
+            with transaction.atomic():
+                ledger.reverse_payment(payment, reason, reversal_date)
+        except ledger.ReversalError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payment = self.get_queryset().get(pk=payment.pk)
+        return Response(PaymentSerializer(payment).data)

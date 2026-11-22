@@ -50,7 +50,8 @@ def needs_payment_supplement(invoice: Invoice) -> bool:
     """True once the invoice has a payment or a reminder that was issued."""
     has_payment = (
         LedgerAllocation.objects
-        .filter(debit_entry__invoice=invoice, debit_entry__amount__gt=0)
+        .filter(debit_entry__invoice=invoice, debit_entry__amount__gt=0,
+                debit_entry__entry_type__in=CustomerLedgerEntry.CHARGE_TYPES)
         .exclude(credit_entry__entry_type__in=CustomerLedgerEntry.REVERSAL_TYPES)
         .exists()
     )

@@ -206,6 +206,7 @@ class PaymentSerializer(serializers.ModelSerializer[CustomerLedgerEntry]):
     amount = serializers.DecimalField(max_digits=18, decimal_places=2)
     method = serializers.ChoiceField(
         choices=CustomerLedgerEntry.Method.choices, default=CustomerLedgerEntry.Method.TRANSFER)
+    is_reversed = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = CustomerLedgerEntry
@@ -213,10 +214,11 @@ class PaymentSerializer(serializers.ModelSerializer[CustomerLedgerEntry]):
             'id', 'customer', 'customer_display',
             'invoice', 'invoice_number',
             'payment_date', 'amount', 'method', 'method_display', 'note',
-            'created_at',
+            'is_reversed', 'created_at',
         ]
         read_only_fields = [
-            'id', 'customer_display', 'invoice_number', 'method_display', 'created_at',
+            'id', 'customer_display', 'invoice_number', 'method_display',
+            'is_reversed', 'created_at',
         ]
 
     def to_representation(self, instance: CustomerLedgerEntry) -> dict[str, Any]:
@@ -254,8 +256,8 @@ class PaymentSerializer(serializers.ModelSerializer[CustomerLedgerEntry]):
 def serialize_applied_payment(row: AppliedPayment) -> dict[str, Any]:
     """One row of an invoice's payment list (Invoice.applied_payments)."""
     return {
-        # The ledger entry: DELETE /payments/{id}/ for a payment booked for the
-        # invoice, POST /invoices/{id}/release-credit/ for applied credit.
+        # The ledger entry: POST /payments/{id}/reverse/ for a payment booked
+        # for the invoice, POST /invoices/{id}/release-credit/ for applied credit.
         'id': row.entry.pk,
         'payment_date': row.payment_date.isoformat(),
         'amount': str(row.amount),
@@ -263,6 +265,8 @@ def serialize_applied_payment(row: AppliedPayment) -> dict[str, Any]:
         'method_display': row.get_method_display(),
         'note': row.note,
         'is_credit': row.is_credit,
+        # Cancelled by a Zahlung Storno: settles nothing, no further action.
+        'is_reversed': row.is_reversed,
         # What the whole payment was, when only part of it settles this invoice.
         'entry_amount': str(-row.entry.amount),
         'entry_date': row.entry.entry_date.isoformat(),
@@ -278,7 +282,7 @@ class CustomerLedgerEntrySerializer(serializers.ModelSerializer[CustomerLedgerEn
         fields = [
             'id', 'customer', 'entry_type', 'entry_type_display', 'entry_date',
             'amount', 'description', 'method', 'note', 'invoice', 'invoice_number',
-            'reminder', 'created_at',
+            'reminder', 'reverses', 'created_at',
         ]
         read_only_fields = fields
 

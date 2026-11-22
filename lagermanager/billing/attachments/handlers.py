@@ -199,7 +199,9 @@ class PaymentSupplementHandler(AttachmentHandler):
     def render_html(self, attachment: DocumentAttachment) -> str:
         # Typed Any|None by the GenericForeignKey; only invoices get this kind.
         invoice: Invoice = cast('Invoice', attachment.document)
-        payments: list[AppliedPayment] = invoice.applied_payments
+        # A reversed payment never reached us; the customer is not shown it.
+        payments: list[AppliedPayment] = [
+            p for p in invoice.applied_payments if not p.is_reversed]
         paid_total: Decimal = sum((p.received for p in payments), Decimal('0.00'))
         open_amount: Decimal = invoice.total_due - paid_total
         return render_attachment_html(attachment, PAYMENTS_TEMPLATE, {

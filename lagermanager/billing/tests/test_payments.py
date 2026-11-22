@@ -9,7 +9,7 @@ from deliveries.models import TaxRate
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
-from billing.models import Invoice, InvoiceLine, LedgerAllocation, Reminder
+from billing.models import CustomerLedgerEntry, Invoice, InvoiceLine, Reminder
 from billing.services import ledger
 
 
@@ -82,32 +82,63 @@ class PaymentApiTests(APITestCase):
         self.assertEqual(self.invoice.paid_at, datetime.date(2026, 7, 15))
         self.assertEqual(self.invoice.open_amount, Decimal('0.00'))
 
-    def test_deleting_a_payment_reopens_the_invoice(self) -> None:
-        """Deleting the only payment returns the invoice to issued, balance to 120."""
+    def _reverse(self, payment_id: int, reason: str = 'Falsch gebucht') -> Any:
+        return self.client.post(
+            f'/api/payments/{payment_id}/reverse/', {'reason': reason}, format='json')
+
+    def test_reversing_a_payment_reopens_the_invoice(self) -> None:
+        """Reversing the only payment returns the invoice to issued, balance to 120."""
         resp = self._pay('120.00')
         payment_id = resp.json()['id']
         self.invoice.refresh_from_db()
         self.assertEqual(self.invoice.status, Invoice.Status.PAID)
 
-        self.assertEqual(
-            self.client.delete(f'/api/payments/{payment_id}/').status_code, 204)
+        resp = self._reverse(payment_id)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['is_reversed'])
         self.invoice.refresh_from_db()
         self.assertEqual(self.invoice.status, Invoice.Status.ISSUED)
         self.assertIsNone(self.invoice.paid_at)
-        # The ledger entry goes with it, or the balance would keep counting it.
         self.assertEqual(ledger.customer_balance(self.customer), Decimal('120.00'))
-        self.assertFalse(LedgerAllocation.objects.exists())
 
-    def test_deleting_one_of_two_payments_leaves_it_partially_paid(self) -> None:
+    def test_reversing_one_of_two_payments_leaves_it_partially_paid(self) -> None:
         """The other payment still settles part of the invoice."""
         first = self._pay('50.00').json()['id']
         self._pay('70.00', date='2026-07-15')
         self.invoice.refresh_from_db()
         self.assertEqual(self.invoice.status, Invoice.Status.PAID)
 
-        self.client.delete(f'/api/payments/{first}/')
+        self._reverse(first)
         self.invoice.refresh_from_db()
         self.assertEqual(self.invoice.status, Invoice.Status.PARTIALLY_PAID)
+
+    def test_payments_cannot_be_deleted(self) -> None:
+        """Radierverbot: DELETE is not offered; a wrong payment is reversed."""
+        payment_id = self._pay('50.00').json()['id']
+        self.assertEqual(self.client.delete(f'/api/payments/{payment_id}/').status_code, 405)
+
+    def test_reversal_without_a_reason_is_rejected(self) -> None:
+        """The reason is required and nothing is booked without it."""
+        payment_id = self._pay('50.00').json()['id']
+        resp = self._reverse(payment_id, reason='')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Stornierungsgrund', resp.json()['detail'])
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('70.00'))
+
+    def test_a_payment_cannot_be_reversed_twice(self) -> None:
+        """The second request is refused instead of taking the money back again."""
+        payment_id = self._pay('50.00').json()['id']
+        self._reverse(payment_id)
+        self.assertEqual(self._reverse(payment_id).status_code, 400)
+
+    def test_the_reversal_date_can_be_given(self) -> None:
+        """Booked on the given day, e.g. the day the bank returned the money."""
+        payment_id = self._pay('50.00').json()['id']
+        self.client.post(f'/api/payments/{payment_id}/reverse/',
+                         {'reason': 'Rückbuchung', 'date': '2026-07-03'}, format='json')
+        reversal = CustomerLedgerEntry.objects.get(reverses_id=payment_id)
+        self.assertEqual(reversal.entry_date, datetime.date(2026, 7, 3))
 
     def test_payments_are_not_edited(self) -> None:
         """Ledger entries are append-only: a wrong payment is deleted and booked again."""
@@ -386,15 +417,15 @@ class PaymentApiTests(APITestCase):
             f'/api/invoices/{self.invoice.pk}/release-credit/', {'entry': payment_id})
         self.assertEqual(resp.status_code, 400)
 
-    def test_deleting_an_overpayment_also_reopens_the_invoice_its_rest_settled(self) -> None:
-        """An overpayment's rest applied to a second invoice goes when the payment goes."""
+    def test_reversing_an_overpayment_also_reopens_the_invoice_its_rest_settled(self) -> None:
+        """An overpayment's rest applied to a second invoice is taken back with the payment."""
         second = self._make_invoice(unit_price='20.00', number='RE260601-00002')  # 24.00
         payment_id = self._pay('150.00').json()['id']
         self.client.post(f'/api/invoices/{second.pk}/apply-credit/')
         second.refresh_from_db()
         self.assertEqual(second.status, Invoice.Status.PAID)
 
-        self.client.delete(f'/api/payments/{payment_id}/')
+        self._reverse(payment_id)
 
         second.refresh_from_db()
         self.assertEqual(second.status, Invoice.Status.ISSUED)

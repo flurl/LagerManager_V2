@@ -12,7 +12,7 @@
           variant="tonal"
           prepend-icon="mdi-cash-plus"
           class="mr-2"
-          @click="startRecording"
+          @click="startRecording()"
         >
           Zahlung erfassen
         </v-btn>
@@ -42,6 +42,26 @@
           <v-alert v-if="saveError" type="error" density="compact" class="mb-4" closable
             @click:close="saveError = ''">
             {{ saveError }}
+          </v-alert>
+
+          <!-- After a Storno: book the right payment.  A payment for an invoice
+               belongs in that invoice's payment dialog, which settles it. -->
+          <v-alert v-if="reversedNotice" type="info" variant="tonal" density="compact" class="mb-4"
+            closable @click:close="reversedNotice = null">
+            <div class="d-flex align-center flex-wrap ga-2">
+              <span v-if="reversedNotice.invoiceNumber">
+                Zahlung storniert. Die richtige Zahlung im Zahlungsdialog der Rechnung
+                <a href="#" @click.prevent="openInvoice(reversedNotice.invoiceNumber)">
+                  {{ reversedNotice.invoiceNumber }}</a> erfassen.
+              </span>
+              <template v-else>
+                <span>Zahlung storniert.</span>
+                <v-spacer />
+                <v-btn size="small" color="info" variant="flat" @click="recordCorrection">
+                  Richtige Zahlung erfassen
+                </v-btn>
+              </template>
+            </div>
           </v-alert>
 
           <!-- Standalone payment: no invoice, so it simply becomes credit. -->
@@ -85,6 +105,7 @@
                 <th class="text-right">Haben</th>
                 <th class="text-right">Saldo</th>
                 <th>Benutzer</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -104,7 +125,8 @@
                   <span v-if="e.method_display" class="text-medium-emphasis">
                     · {{ e.method_display }}</span>
                   <span v-if="e.note" class="text-medium-emphasis"> · {{ e.note }}</span>
-                  <div v-if="openLabel(e)" class="text-medium-emphasis">{{ openLabel(e) }}</div>
+                  <div v-if="e.is_reversed" class="text-deep-orange">storniert</div>
+                  <div v-else-if="openLabel(e)" class="text-medium-emphasis">{{ openLabel(e) }}</div>
                 </td>
                 <td class="text-right text-no-wrap">
                   <template v-if="Number(e.amount) > 0">{{ fmtEuro(e.amount) }}</template>
@@ -116,6 +138,15 @@
                   {{ fmtEuro(e.running_balance) }}
                 </td>
                 <td class="text-caption">{{ e.actor || '—' }}</td>
+                <td class="text-right">
+                  <v-tooltip v-if="e.entry_type === 'payment' && !e.is_reversed" text="Zahlung stornieren">
+                    <template #activator="{ props: tip }">
+                      <v-icon v-bind="tip" size="small" color="error" @click="startReversal(e)">
+                        mdi-cash-remove
+                      </v-icon>
+                    </template>
+                  </v-tooltip>
+                </td>
               </tr>
             </tbody>
           </v-table>
@@ -129,6 +160,8 @@
         <v-spacer />
         <v-btn @click="model = false">Schließen</v-btn>
       </v-card-actions>
+
+      <PaymentReversalDialog v-model="reversalOpen" :payment="reversalPayment" @reversed="onReversed" />
     </v-card>
   </v-dialog>
 </template>
@@ -138,6 +171,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
+import PaymentReversalDialog from './PaymentReversalDialog.vue'
 import { extractErrorMessage } from '../utils/errorMessage'
 
 const props = defineProps({
@@ -172,18 +206,60 @@ const saving = ref(false)
 const saveError = ref('')
 const form = ref({ payment_date: '', amount: null, method: 'transfer', note: '' })
 
+const reversalOpen = ref(false)
+const reversalPayment = ref(null)
+// The reversed payment, kept to offer booking the right one.
+const reversedNotice = ref(null)
+
 const canSave = computed(
   () => !!form.value.payment_date && Number(form.value.amount) > 0)
 
-function startRecording() {
+function startRecording(prefill = {}) {
   form.value = {
     payment_date: new Date().toISOString().slice(0, 10),
     amount: null,
     method: 'transfer',
     note: '',
+    ...prefill,
   }
   saveError.value = ''
   recording.value = true
+}
+
+// Payments are never deleted: a Zahlung Storno cancels a wrong one.
+function startReversal(e) {
+  reversalPayment.value = {
+    id: e.id,
+    amount: -Number(e.amount),
+    date: e.entry_date,
+    label: e.description,
+  }
+  reversalOpen.value = true
+}
+
+async function onReversed() {
+  const reversed = reversalPayment.value
+  const entry = entries.value.find((x) => x.id === reversed.id)
+  reversedNotice.value = {
+    invoiceNumber: entry?.invoice_number || null,
+    date: entry?.entry_date,
+    method: entry?.method || 'transfer',
+  }
+  recording.value = false
+  await loadLedger()
+  emit('changed')
+}
+
+// Same date and method as the wrong payment; only the amount is left to enter.
+function recordCorrection() {
+  const n = reversedNotice.value
+  reversedNotice.value = null
+  startRecording({ payment_date: n.date, method: n.method })
+}
+
+function openInvoice(number) {
+  model.value = false
+  router.push({ path: '/invoices', query: { q: number } })
 }
 
 async function savePayment() {
@@ -227,6 +303,7 @@ watch(() => props.modelValue, async (open) => {
   if (!open || !props.customerId) return
   recording.value = false
   saveError.value = ''
+  reversedNotice.value = null
   await loadLedger()
 }, { immediate: true })
 
@@ -267,6 +344,7 @@ function typeColor(e) {
 
 function typeLabel(e) {
   if (!e.is_reversal) return e.entry_type_display
+  if (e.entry_type === 'payment_reversal') return e.entry_type_display // „Zahlung Storno“
   return e.entry_type === 'reminder_fee' ? 'Storno Gebühr' : 'Storno'
 }
 

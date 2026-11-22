@@ -404,7 +404,8 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
                 When(entry_type=CustomerLedgerEntry.EntryType.INVOICE, then=Value(0)),
                 When(entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE, then=Value(1)),
                 When(entry_type=CustomerLedgerEntry.EntryType.PAYMENT, then=Value(2)),
-                default=Value(3),
+                When(entry_type=CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL, then=Value(3)),
+                default=Value(4),
                 output_field=IntegerField(),
             ))
             .order_by(
@@ -425,6 +426,8 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
         ):
             allocated[debit_id] += amount
             allocated[credit_id] += amount
+
+        reversed_ids: set[int] = {e.reverses_id for e in entries if e.reverses_id is not None}
 
         running = Decimal('0.00')
         data: list[dict[str, Any]] = []
@@ -451,6 +454,10 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
                 'reminder': e.reminder_id,
                 'reminder_number': e.reminder.number if e.reminder_id and e.reminder else None,
                 'is_reversal': e.is_reversal,
+                # A payment cancelled by a Zahlung Storno — and, on the Storno,
+                # the payment it cancels.
+                'is_reversed': e.pk in reversed_ids,
+                'reverses': e.reverses_id,
                 'actor': actors.get(str(e.pk)),
             })
         return Response({'balance': str(running), 'entries': data})

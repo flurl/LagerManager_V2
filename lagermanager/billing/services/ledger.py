@@ -10,7 +10,7 @@ The ledger is an open-item account (Offene-Posten-Buchhaltung):
 - LedgerAllocation records which Haben settles which Soll.  A payment booked
   for an invoice is allocated to it; a prepayment is a payment with nothing
   allocated; applying credit allocates that open rest; a Storno is allocated
-  against the invoice it cancels.
+  against the invoice it cancels, a Zahlung Storno against the payment.
 
 Entries and allocations are written from this module and nowhere else (no
 save() overrides, no signals), mirroring how allocate_number() is the only
@@ -39,6 +39,10 @@ Entry = CustomerLedgerEntry
 
 class CreditError(ValueError):
     """Raised when credit cannot be applied as requested."""
+
+
+class ReversalError(ValueError):
+    """Raised when a payment cannot be reversed as requested."""
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +145,7 @@ def invoice_charges(invoice: Invoice) -> list[CustomerLedgerEntry]:
     """
     charges = list(
         Entry.objects
-        .filter(invoice=invoice, amount__gt=0,
-                entry_type__in=[Entry.EntryType.INVOICE, Entry.EntryType.REMINDER_FEE])
+        .filter(invoice=invoice, amount__gt=0, entry_type__in=Entry.CHARGE_TYPES)
         .select_related('reminder')
     )
     charges.sort(key=lambda e: (
@@ -175,7 +178,8 @@ def _settlements_of(invoice: Invoice) -> Iterable[LedgerAllocation]:
     """Allocations of money (not of a Storno) onto the invoice's charges."""
     return (
         LedgerAllocation.objects
-        .filter(debit_entry__invoice=invoice, debit_entry__amount__gt=0)
+        .filter(debit_entry__invoice=invoice, debit_entry__amount__gt=0,
+                debit_entry__entry_type__in=Entry.CHARGE_TYPES)
         .exclude(credit_entry__entry_type__in=Entry.REVERSAL_TYPES)
     )
 
@@ -304,21 +308,57 @@ def record_payment(
     return entry
 
 
-def delete_payment(entry: CustomerLedgerEntry) -> list[Invoice]:
-    """Remove a payment booked in error, with everything it settled.
+def reverse_payment(
+    entry: CustomerLedgerEntry,
+    reason: str,
+    reversal_date: datetime.date,
+) -> CustomerLedgerEntry:
+    """Cancel a payment booked in error with a "Zahlung Storno".
 
-    Returns the invoices it had settled (and the one it referenced), with their
-    status already recalculated.  The audit log keeps the record that it existed.
+    Nothing is deleted (Radierverbot): the payment stays on the account and a
+    Soll entry of the same amount cancels it.
+
+    1. The payment's allocations are removed — every invoice or fee it settled
+       reopens, and none of its money is credit any longer.
+    2. The Zahlung Storno is booked, pointing at the payment, with the reason
+       as its note and the payment's invoice as reference.
+    3. The two are allocated against each other in full.
+
+    Every affected invoice has its status recalculated.  To correct rather
+    than just cancel, book the right payment afterwards.
     """
-    invoice_ids: set[int] = set(
-        entry.allocations_given.values_list('debit_entry__invoice_id', flat=True))
+    if entry.entry_type != Entry.EntryType.PAYMENT:
+        raise ReversalError('Nur Zahlungen können storniert werden.')
+    if entry.is_reversed:
+        raise ReversalError('Diese Zahlung wurde bereits storniert.')
+    reason = reason.strip()
+    if not reason:
+        raise ReversalError('Ein Stornierungsgrund ist erforderlich.')
+
+    invoice_ids: set[int] = {
+        pk for pk in entry.allocations_given.values_list('debit_entry__invoice_id', flat=True)
+        if pk is not None
+    }
     if entry.invoice_id is not None:
         invoice_ids.add(entry.invoice_id)
-    entry.delete()  # cascades to its allocations
-    invoices = list(Invoice.objects.filter(pk__in=invoice_ids))
-    for invoice in invoices:
+    entry.allocations_given.all().delete()
+
+    reversal = Entry.objects.create(
+        customer_id=entry.customer_id,
+        entry_type=Entry.EntryType.PAYMENT_REVERSAL,
+        entry_date=reversal_date,
+        amount=-entry.amount,
+        description=f'Zahlung Storno – {entry.description}' if entry.description
+        else 'Zahlung Storno',
+        note=reason,
+        invoice_id=entry.invoice_id,
+        reverses=entry,
+    )
+    allocate(reversal, entry, reversal.amount, reversal_date)
+
+    for invoice in Invoice.objects.filter(pk__in=invoice_ids):
         recalculate_invoice_status(invoice)
-    return invoices
+    return reversal
 
 
 def apply_credit(
@@ -363,14 +403,15 @@ def release_credit(invoice: Invoice, credit: CustomerLedgerEntry) -> Decimal:
     """Undo applying `credit` to `invoice`; the money becomes credit again.
 
     Only for money that was booked for something else — a payment booked for
-    this invoice is removed with delete_payment() instead.  Returns the amount
+    this invoice is cancelled with reverse_payment() instead.  Returns the amount
     released.
     """
     if credit.invoice_id == invoice.pk and credit.entry_type == Entry.EntryType.PAYMENT:
         raise CreditError('Diese Zahlung wurde für die Rechnung erfasst — '
-                          'bitte die Zahlung löschen.')
+                          'bitte die Zahlung stornieren.')
     allocations = LedgerAllocation.objects.filter(
-        credit_entry=credit, debit_entry__invoice=invoice, debit_entry__amount__gt=0)
+        credit_entry=credit, debit_entry__invoice=invoice, debit_entry__amount__gt=0,
+        debit_entry__entry_type__in=Entry.CHARGE_TYPES)
     released: Decimal | None = allocations.aggregate(total=Sum('amount'))['total']
     allocations.delete()
     return released or ZERO

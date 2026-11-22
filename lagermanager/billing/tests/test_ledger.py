@@ -409,18 +409,6 @@ class AllocationTests(TestCase):
         with self.assertRaises(ledger.CreditError):
             ledger.release_credit(self.invoice, payment)
 
-    def test_deleting_a_payment_reopens_what_it_settled(self) -> None:
-        """Its allocations go with it and the invoice drops back to unpaid."""
-        payment = _pay(self.customer, '120.00', invoice=self.invoice)
-        ledger.recalculate_invoice_status(self.invoice)
-        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.PAID)
-
-        ledger.delete_payment(payment)
-
-        self.assertFalse(LedgerAllocation.objects.exists())
-        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.ISSUED)
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('120.00'))
-
     def test_applied_payments_tell_payments_from_credit(self) -> None:
         """A payment booked for the invoice is a payment; a prepayment applied to it is credit."""
         _pay(self.customer, '20.00', date=datetime.date(2026, 6, 1))
@@ -434,6 +422,131 @@ class AllocationTests(TestCase):
         # Credit rows carry the day it was applied, not the day it arrived.
         self.assertEqual(rows[0].payment_date, datetime.date(2026, 6, 16))
         self.assertEqual(rows[0].get_method_display(), 'Guthaben')
+
+
+class PaymentReversalTests(TestCase):
+    """A wrong payment is cancelled by a Zahlung Storno, never deleted."""
+
+    REVERSED_ON = datetime.date(2026, 7, 5)
+
+    def setUp(self) -> None:
+        self.tax = _make_tax()
+        self.customer = _make_customer()
+        self.invoice = _make_invoice(self.customer, self.tax)  # 120.00
+        ledger.record_invoice_issued(self.invoice)
+
+    def _reverse(self, payment: CustomerLedgerEntry,
+                 reason: str = 'Falscher Betrag') -> CustomerLedgerEntry:
+        return ledger.reverse_payment(payment, reason, self.REVERSED_ON)
+
+    def test_the_storno_is_a_soll_entry_cancelling_the_payment(self) -> None:
+        """+120 Soll, linked to the payment, reason as note, same invoice reference."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+
+        reversal = self._reverse(payment)
+
+        self.assertEqual(reversal.entry_type, CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL)
+        self.assertEqual(reversal.amount, Decimal('120.00'))
+        self.assertEqual(reversal.reverses_id, payment.pk)
+        self.assertEqual(reversal.note, 'Falscher Betrag')
+        self.assertEqual(reversal.invoice_id, self.invoice.pk)
+        self.assertEqual(reversal.entry_date, self.REVERSED_ON)
+        self.assertTrue(reversal.is_reversal)
+        self.assertTrue(CustomerLedgerEntry.objects.get(pk=payment.pk).is_reversed)
+
+    def test_the_payment_stays_on_the_account(self) -> None:
+        """Radierverbot: the payment is not deleted, so the account shows both lines."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        self._reverse(payment)
+        self.assertTrue(CustomerLedgerEntry.objects.filter(pk=payment.pk).exists())
+
+    def test_the_balance_returns_to_before_the_payment(self) -> None:
+        """120 owed, paid, reversed: 120 owed again."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        self._reverse(payment)
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('120.00'))
+
+    def test_the_invoice_reopens(self) -> None:
+        """The payment's allocation to the invoice is removed; the invoice is open again."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        ledger.recalculate_invoice_status(self.invoice)
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.PAID)
+
+        self._reverse(payment)
+
+        invoice = _fresh(self.invoice)
+        self.assertEqual(invoice.status, Invoice.Status.ISSUED)
+        self.assertEqual(invoice.paid_amount, Decimal('0.00'))
+        self.assertIsNone(invoice.paid_at)
+
+    def test_payment_and_storno_settle_each_other(self) -> None:
+        """Both end with nothing open; the money is not left behind as credit."""
+        payment = _pay(self.customer, '150.00', invoice=self.invoice)  # 30 overpaid
+        reversal = self._reverse(payment)
+
+        self.assertEqual(ledger.entry_open_amount(payment), Decimal('0.00'))
+        self.assertEqual(ledger.entry_open_amount(reversal), Decimal('0.00'))
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
+
+    def test_reversing_a_prepayment_takes_back_the_credit(self) -> None:
+        """A prepayment booked in error is no longer available as credit."""
+        prepayment = _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
+        self._reverse(prepayment)
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
+
+    def test_invoices_its_credit_settled_reopen_too(self) -> None:
+        """A prepayment applied to an invoice: reversing it reopens that invoice."""
+        prepayment = _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
+        ledger.apply_credit(self.invoice, Decimal('50.00'))
+        ledger.recalculate_invoice_status(self.invoice)
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.PARTIALLY_PAID)
+
+        self._reverse(prepayment)
+
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.ISSUED)
+        self.assertEqual(_fresh(self.invoice).open_amount, Decimal('120.00'))
+
+    def test_the_correct_payment_can_be_booked_afterwards(self) -> None:
+        """Storno plus new booking: 150 booked by mistake, 120 was right — the invoice is paid."""
+        wrong = _pay(self.customer, '150.00', invoice=self.invoice)
+        self._reverse(wrong)
+        _pay(self.customer, '120.00', invoice=self.invoice, date=self.REVERSED_ON)
+        ledger.recalculate_invoice_status(self.invoice)
+
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.PAID)
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('0.00'))
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
+
+    def test_a_reason_is_required(self) -> None:
+        """Like an invoice Storno, a payment Storno needs a reason for the account."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        with self.assertRaises(ledger.ReversalError):
+            self._reverse(payment, reason='   ')
+
+    def test_a_payment_is_reversed_only_once(self) -> None:
+        """A second Storno would take the money back twice."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        self._reverse(payment)
+        with self.assertRaises(ledger.ReversalError):
+            self._reverse(CustomerLedgerEntry.objects.get(pk=payment.pk))
+
+    def test_only_payments_can_be_reversed(self) -> None:
+        """Invoices are cancelled with an invoice Storno, not with this."""
+        entry = CustomerLedgerEntry.objects.get(invoice=self.invoice)
+        with self.assertRaises(ledger.ReversalError):
+            self._reverse(entry)
+
+    def test_reversed_payments_stay_in_the_payment_list_but_not_on_the_pdf(self) -> None:
+        """The dialog shows the reversed payment (why the invoice reopened); the
+        customer-facing reminder does not list it."""
+        payment = _pay(self.customer, '50.00', invoice=self.invoice)
+        self._reverse(payment)
+
+        rows = _fresh(self.invoice).applied_payments
+        self.assertEqual([(r.entry.pk, r.is_reversed, r.amount) for r in rows],
+                         [(payment.pk, True, Decimal('0.00'))])
+        reminder = _issue_reminder(self.invoice)
+        self.assertEqual(reminder.payments, [])
 
 
 class CreditWorkedExampleTests(TestCase):
@@ -638,3 +751,20 @@ class LedgerEndpointFieldsTests(TestCase):
         self.assertEqual(by_type['payment']['open_amount'], '0.00')
         self.assertEqual(by_type['payment']['amount'], '-50.00')
         self.assertEqual(by_type['payment']['method'], 'transfer')
+
+    def test_a_reversed_payment_and_its_storno_are_marked(self) -> None:
+        """The dialog hides the Stornieren action on a reversed payment and labels
+        the Zahlung Storno, which points at the payment and sits on the Soll side."""
+        invoice = _make_invoice(self.customer, self.tax)
+        ledger.record_invoice_issued(invoice)
+        payment = _pay(self.customer, '50.00', invoice=invoice)
+        ledger.reverse_payment(payment, 'Fehlbuchung', datetime.date(2026, 7, 2))
+
+        by_type = {e['entry_type']: e for e in self._entries()}
+        self.assertTrue(by_type['payment']['is_reversed'])
+        storno = by_type['payment_reversal']
+        self.assertEqual(storno['reverses'], payment.pk)
+        self.assertEqual(storno['amount'], '50.00')
+        self.assertEqual(storno['note'], 'Fehlbuchung')
+        self.assertTrue(storno['is_reversal'])
+        self.assertEqual(storno['entry_type_display'], 'Zahlung Storno')

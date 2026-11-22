@@ -150,18 +150,23 @@ class PaymentSupplementLifecycleTests(APITestCase):
 
         self.assertEqual([s.pk for s in _supplements(self.invoice)], [first.pk])
 
+    def _reverse(self, payment_id: int) -> int:
+        response = self.client.post(
+            f'/api/payments/{payment_id}/reverse/', {'reason': 'Fehlbuchung'}, format='json')
+        return int(response.status_code)
+
     def test_it_goes_with_the_last_payment(self) -> None:
-        """Deleting (cancelling) a payment keeps it while payments remain, and
-        removes it with the last one when no Mahnung was issued — the invoice
-        then goes out without it.
+        """Reversing a payment keeps it while payments remain, and removes it
+        with the last one when no Mahnung was issued — the invoice then goes
+        out without it.
         """
         first = self._post_payment(self.invoice, '50.00')
         second = self._post_payment(self.invoice, '20.00')
 
-        self.assertEqual(self.client.delete(f'/api/payments/{first}/').status_code, 204)
+        self.assertEqual(self._reverse(first), 200)
         self.assertEqual(len(_supplements(self.invoice)), 1)
 
-        self.assertEqual(self.client.delete(f'/api/payments/{second}/').status_code, 204)
+        self.assertEqual(self._reverse(second), 200)
         self.assertEqual(_supplements(self.invoice), [])
 
     def test_releasing_applied_credit_removes_it(self) -> None:
@@ -253,17 +258,15 @@ class PaymentSupplementLifecycleTests(APITestCase):
         self.assertEqual(_supplements(self.invoice), [])
 
     def test_an_issued_reminder_keeps_it_after_the_last_payment(self) -> None:
-        """Deleting the last payment keeps the Zahlungsübersicht while an issued
-        Mahnung still needs it.
+        """Reversing the last payment keeps the Zahlungsübersicht while an
+        issued Mahnung still needs it.
         """
         payment_id = self._post_payment(self.invoice, '50.00')
         reminder = self._draft_reminder()
         issued = self.client.post(f'/api/reminders/{reminder.pk}/issue/')
         self.assertEqual(issued.status_code, 200, issued.data)
 
-        deleted = self.client.delete(f'/api/payments/{payment_id}/')
-
-        self.assertEqual(deleted.status_code, 204)
+        self.assertEqual(self._reverse(payment_id), 200)
         self.assertEqual(len(_supplements(self.invoice)), 1)
 
     def test_sync_is_idempotent_without_payments(self) -> None:
@@ -351,6 +354,20 @@ class PaymentSupplementRenderTests(APITestCase):
         self.assertIn('Offener Betrag', html)
         self.assertIn('50,00', html)
         self.assertNotIn('Guthaben (Überzahlung)', html)
+
+    def test_a_reversed_payment_is_not_listed(self) -> None:
+        """Money that was booked in error and reversed never reached us, so the
+        page neither lists it nor counts it as paid.
+        """
+        _pay(self.invoice, '50.00', payment_date=datetime.date(2026, 2, 1))
+        wrong = _pay(self.invoice, '70.00', payment_date=datetime.date(2026, 2, 10))
+        ledger.reverse_payment(wrong, 'Fehlbuchung', datetime.date(2026, 2, 11))
+
+        html = self._html()
+
+        self.assertNotIn('10.02.2026', html)
+        self.assertIn('−50,00', html)
+        self.assertIn('70,00', html)  # 120 − 50 still open
 
     def test_an_overpayment_shows_the_credit(self) -> None:
         """Paying more than is due shows the surplus as credit instead of a

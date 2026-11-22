@@ -395,7 +395,7 @@ class Invoice(models.Model):
     def _settlements(self) -> "list[LedgerAllocation]":
         """Allocations of money (not of a Storno) onto this invoice's charges.
 
-        Reads through the prefetchable path in INVOICE_SETTLEMENT_PREFETCH, so a
+        Reads through the prefetchable paths in INVOICE_SETTLEMENT_PREFETCH, so a
         list endpoint pays for it once rather than per invoice.  The charges are
         the invoice's Soll entries: the invoice itself and its reminder fees.
         Payment entries also point at the invoice, as a reference, but are Haben
@@ -403,7 +403,8 @@ class Invoice(models.Model):
         """
         return [
             allocation
-            for entry in self.ledger_entries.all() if entry.amount > 0
+            for entry in self.ledger_entries.all()
+            if entry.amount > 0 and entry.entry_type in CustomerLedgerEntry.CHARGE_TYPES
             for allocation in entry.allocations_received.all()
             if not allocation.is_reversal
         ]
@@ -425,8 +426,9 @@ class Invoice(models.Model):
         """The invoice's payment list: one row per payment or applied credit.
 
         - every payment booked for this invoice, even one that settles nothing
-          of it (paid twice, or released by a cancellation) — it must stay
-          visible to be corrected;
+          of it (paid twice, released by a cancellation, or reversed) — it
+          must stay visible to be corrected, and a reversed one to show why
+          the invoice reopened (see AppliedPayment.is_reversed);
         - every other money entry whose credit was applied to this invoice.
         """
         grouped: dict[int, list[LedgerAllocation]] = {}
@@ -613,8 +615,11 @@ class Reminder(models.Model):
 
     @property
     def payments(self) -> "list[AppliedPayment]":
-        """Payments settling the dunned invoice, for the PDF template."""
-        return self.invoice.applied_payments
+        """Payments settling the dunned invoice, for the PDF template.
+
+        A reversed payment never reached us, so the customer is not shown it.
+        """
+        return [p for p in self.invoice.applied_payments if not p.is_reversed]
 
 
 # ---------------------------------------------------------------------------
@@ -637,8 +642,10 @@ class CustomerLedgerEntry(models.Model):
     minus what has been allocated from or to it.
 
     Entries are append-only by convention — a correction is a new entry, never
-    an edit.  The one exception is deleting a payment that was booked in error.
-    services/ledger.py is the only code that creates or deletes them.
+    an edit or a deletion (the Radierverbot, § 190 Abs. 3 UGB).  A payment
+    booked in error is cancelled by a "Zahlung Storno": a Soll entry of the
+    same amount that points at it through `reverses` and is allocated against
+    it.  services/ledger.py is the only code that creates them.
     """
 
     class EntryType(models.TextChoices):
@@ -646,6 +653,7 @@ class CustomerLedgerEntry(models.Model):
         REMINDER_FEE = 'reminder_fee', 'Mahngebühr'
         PAYMENT = 'payment', 'Zahlung'
         ADJUSTMENT = 'adjustment', 'Korrektur'
+        PAYMENT_REVERSAL = 'payment_reversal', 'Zahlung Storno'
 
     class Method(models.TextChoices):
         TRANSFER = 'transfer', 'Überweisung'
@@ -655,10 +663,17 @@ class CustomerLedgerEntry(models.Model):
 
     #: Haben entries that undo a charge rather than bring in money.  They are
     #: allocated against the charge they reverse and never count as payments
-    #: or as credit available to other invoices.
+    #: or as credit available to other invoices.  (A Zahlung Storno is the
+    #: mirror image — a Soll entry undoing money — and is never a charge an
+    #: invoice can be settled by, so it needs no list of its own.)
     REVERSAL_TYPES = (EntryType.INVOICE, EntryType.REMINDER_FEE)
     #: Haben entries that are money the customer has given us.
     MONEY_TYPES = (EntryType.PAYMENT, EntryType.ADJUSTMENT)
+    #: Types whose Soll entries are an invoice's charges — what payments for
+    #: the invoice settle.  Checked together with amount > 0, because a Storno
+    #: or reversed fee has the same type on the Haben side.  A Zahlung Storno
+    #: also points at the invoice and is Soll, but is no charge of it.
+    CHARGE_TYPES = (EntryType.INVOICE, EntryType.REMINDER_FEE)
 
     customer = models.ForeignKey(
         'core.Customer', on_delete=models.PROTECT, related_name='ledger_entries')
@@ -682,12 +697,19 @@ class CustomerLedgerEntry(models.Model):
     reminder = models.ForeignKey(
         'Reminder', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='ledger_entries')
+    # For a correction: the entry it cancels.  One-to-one, so an entry can be
+    # reversed only once.  Only PAYMENT_REVERSAL uses it so far; a general
+    # correction entry would reuse the same link.
+    reverses = models.OneToOneField(
+        'self', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='reversal', verbose_name='storniert')
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     if TYPE_CHECKING:
         allocations_received: RelatedManager["LedgerAllocation"]
         allocations_given: RelatedManager["LedgerAllocation"]
+        reversal: "CustomerLedgerEntry"
 
     class Meta:
         ordering = ['entry_date', 'pk']
@@ -707,6 +729,13 @@ class CustomerLedgerEntry(models.Model):
                 condition=~models.Q(entry_type='payment') | models.Q(amount__lt=0),
                 name='ledger_payment_is_haben',
             ),
+            # A Zahlung Storno takes money back out: Soll, and always says
+            # which payment it cancels.
+            models.CheckConstraint(
+                condition=~models.Q(entry_type='payment_reversal')
+                | (models.Q(amount__gt=0) & models.Q(reverses__isnull=False)),
+                name='ledger_payment_reversal_is_soll',
+            ),
         ]
 
     def __str__(self) -> str:
@@ -722,15 +751,27 @@ class CustomerLedgerEntry(models.Model):
         - a Storno invoice's entry, which is Haben because its lines are
           negated (see services/ledger.record_invoice_issued);
         - a reminder fee credited back when an invoice is cancelled
-          (services/ledger.reverse_reminder_fees), which is the only way a fee
-          entry can come out negative.
+          (services/ledger.record_cancellation), which is the only way a fee
+          entry can come out negative;
+        - a Zahlung Storno, which cancels a payment.
         """
+        if self.entry_type == CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL:
+            return True
         if self.entry_type == CustomerLedgerEntry.EntryType.INVOICE:
             return bool(
                 self.invoice_id and self.invoice and self.invoice.is_reversal)
         if self.entry_type == CustomerLedgerEntry.EntryType.REMINDER_FEE:
             return self.amount < 0
         return False
+
+    @property
+    def is_reversed(self) -> bool:
+        """True when a later entry (a Zahlung Storno) cancels this one."""
+        try:
+            self.reversal  # noqa: B018 — the reverse one-to-one raises when absent
+        except CustomerLedgerEntry.DoesNotExist:
+            return False
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -767,8 +808,9 @@ class LedgerAllocation(models.Model):
     entry 1 → 100 − 60 − 40 = 0 (paid), entry 3 → 70 − 40 − 20 = 10 (the
     available credit), entry 4 → 0 (paid).
 
-    Deleting a payment cascades to its allocations, so whatever it settled
-    reopens; a charge is protected while anything is allocated to it.
+    Reversing a payment (Zahlung Storno) first removes its allocations, so
+    whatever it settled reopens, then allocates the Storno against it.  A
+    charge is protected while anything is allocated to it.
     """
 
     debit_entry = models.ForeignKey(
@@ -839,6 +881,11 @@ class AppliedPayment:
         return self.entry.note
 
     @property
+    def is_reversed(self) -> bool:
+        """The payment was cancelled by a Zahlung Storno and settles nothing."""
+        return self.entry.is_reversed
+
+    @property
     def received(self) -> Decimal:
         """What the customer paid, as told on the Zahlungsübersicht.
 
@@ -848,8 +895,11 @@ class AppliedPayment:
         return self.amount if self.is_credit else -self.entry.amount
 
 
-#: Prefetch path behind Invoice.paid_amount / open_amount / applied_payments.
-INVOICE_SETTLEMENT_PREFETCH = 'ledger_entries__allocations_received__credit_entry'
+#: Prefetch paths behind Invoice.paid_amount / open_amount / applied_payments.
+INVOICE_SETTLEMENT_PREFETCH: tuple[str, ...] = (
+    'ledger_entries__allocations_received__credit_entry__reversal',
+    'ledger_entries__reversal',
+)
 
 
 # ---------------------------------------------------------------------------

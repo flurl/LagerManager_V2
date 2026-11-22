@@ -153,6 +153,7 @@ Der Saldo ergibt sich automatisch:
 | Rechnung ausstellen | Soll | + Rechnungsbetrag (brutto) |
 | Mahnung mit Gebühr ausstellen | Soll | + Mahngebühr |
 | Zahlung erfassen | Haben | − Zahlbetrag |
+| Zahlung stornieren | Soll | + Zahlbetrag |
 | Rechnung stornieren | Haben | Rechnungsbetrag und Mahngebühren werden gutgeschrieben |
 
 Jede Zahlung wird den offenen Posten **zugeordnet**, die sie begleicht: eine Zahlung zu einer
@@ -161,6 +162,13 @@ Rechnung zuerst den Mahngebühren (älteste Mahnstufe zuerst), dann dem Rechnung
 
 **Anzahlung erfassen:** im Kundenkonto auf **Zahlung erfassen** klicken. Der Betrag wird im Haben
 gebucht und steht als **Guthaben** bereit, ohne einer Rechnung zugeordnet zu sein.
+
+**Falsch erfasste Zahlung korrigieren:** Zahlungen werden nie gelöscht oder geändert. Über das
+Symbol **Zahlung stornieren** (im Kundenkonto oder im Zahlungsdialog der Rechnung) wird mit einem
+Pflicht-**Stornierungsgrund** eine **Zahlung Storno** im Soll gebucht, die die Zahlung aufhebt. Beide
+Zeilen bleiben im Kundenkonto stehen; die Zahlung ist als *storniert* markiert. Was sie beglichen
+hat, ist danach wieder offen, und sie zählt nicht mehr als Guthaben. Anschließend wird die richtige
+Zahlung neu erfasst – der Dialog bietet das direkt an.
 
 > Beim Anlegen einer Adresse ohne Kunden wird automatisch ein passender Kunde erzeugt. Beim
 > WZ-Abgleich erhält jede importierte Adresse ebenfalls einen eigenen Kunden.
@@ -363,15 +371,17 @@ sobald die Summe der Zahlungen den offenen Betrag erreicht oder übersteigt.
 Über das Symbol **Zahlungen** (Geldscheine) öffnet sich ein Dialog mit:
 
 - **Rechnungsbetrag**, etwaigen **Mahngebühren**, **bereits bezahlt** und dem **offenen Betrag**,
-- einer Liste aller bisher erfassten Zahlungen (Datum, Betrag, Zahlungsart, Notiz) – einzelne
-  Zahlungen können hier auch wieder gelöscht werden,
+- einer Liste aller bisher erfassten Zahlungen (Datum, Betrag, Zahlungsart, Notiz) – eine falsch
+  erfasste Zahlung kann hier **storniert** werden (siehe [Kunden](#30-kunden)); stornierte Zahlungen
+  bleiben durchgestrichen sichtbar,
 - einem Formular zum Erfassen einer neuen Zahlung. Der Betrag ist mit dem offenen Betrag vorbelegt;
   über **Restbetrag übernehmen** lässt er sich jederzeit wieder darauf setzen.
 
 Eine Teilzahlung begleicht zuerst die **Mahngebühren**, dann den Rechnungsbetrag.
 
-Wird eine Zahlung gelöscht, wird die Rechnung entsprechend wieder geöffnet – ebenso jede andere
-Rechnung, mit der ihr Überhang schon verrechnet wurde. Zahlt ein Kunde **mehr** als die Forderung,
+Wird eine Zahlung storniert, wird die Rechnung entsprechend wieder geöffnet – ebenso jede andere
+Rechnung, mit der ihr Überhang schon verrechnet wurde. Die Zahlungsübersicht führt stornierte
+Zahlungen nicht auf. Zahlt ein Kunde **mehr** als die Forderung,
 bleibt die Rechnung bezahlt und der Überhang wird zum **Guthaben** des Kunden; in der Liste steht
 dann z. B. „120,00 € von 150,00 €".
 
@@ -659,7 +669,7 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 | Datum | Änderung |
 |-------|----------|
-| November 2026 | **Kundenkonto** wie in der Buchhaltung: Rechnungen und Mahngebühren stehen im **Soll** (positiv), Zahlungen und Stornos im **Haben** (negativ); ein positiver Saldo ist eine offene Forderung, ein negativer ein Guthaben. Jede Zahlung wird den Posten zugeordnet, die sie begleicht – Mahngebühren zuerst. Verrechnetes Guthaben lässt sich im Zahlungsdialog rückgängig machen; beim Stornieren wird bereits bezahltes Geld zu Guthaben. |
+| November 2026 | **Kundenkonto** wie in der Buchhaltung: Rechnungen und Mahngebühren stehen im **Soll** (positiv), Zahlungen und Stornos im **Haben** (negativ); ein positiver Saldo ist eine offene Forderung, ein negativer ein Guthaben. Jede Zahlung wird den Posten zugeordnet, die sie begleicht – Mahngebühren zuerst. Verrechnetes Guthaben lässt sich im Zahlungsdialog rückgängig machen; beim Stornieren wird bereits bezahltes Geld zu Guthaben. Falsch erfasste Zahlungen werden nicht mehr gelöscht, sondern mit Grund **storniert** (Zahlung Storno im Soll). |
 | November 2026 | Neu: Menü **Hilfe** – dieses Handbuch lässt sich über **Hilfe → Handbuch Fakturierung** direkt in der Anwendung lesen, in einer verstellbaren Seitenleiste oder in einem eigenen Tab, und ist dort immer auf dem aktuellen Stand. Der Punkt **Über** ist vom Menü System nach Hilfe gewandert. |
 | November 2026 | Beim Anklicken eines **Zahlenfelds** (z. B. Menge, Preis) wird der Inhalt markiert, so dass ein neuer Wert oder eine Formel ihn direkt überschreibt. |
 | November 2026 | Im Angebots- und Rechnungsdialog sind **Kunde** und **Adresse** jeweils mit ihren aufklappbaren Details eingerahmt („anzeigen & bearbeiten", Schaltflächen **Kunde bearbeiten** / **Adresse bearbeiten**); beide Dialoge sind jetzt gleich aufgebaut. Das Positionsfeld **Beschreibung** heißt nun **Rechnungstext**. |
