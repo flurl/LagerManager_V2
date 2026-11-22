@@ -396,6 +396,11 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
         # settles it on the same day.  entry_date is only a date, so insertion
         # order carries no intra-day truth worth preserving — and the backfill
         # wrote historic rows newest-first, so pk order is actively misleading.
+        # Money movements (payments, Korrekturen, Zahlung Stornos) share one
+        # rank and keep their booking order (created_at) among themselves: a
+        # payment booked after two Stornos on the same day must not jump above
+        # them.  For backfilled payments created_at follows pk, so they sort
+        # exactly as before.
         entries = (
             CustomerLedgerEntry.objects
             .filter(customer=customer)
@@ -403,15 +408,14 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
             .annotate(type_rank=Case(
                 When(entry_type=CustomerLedgerEntry.EntryType.INVOICE, then=Value(0)),
                 When(entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE, then=Value(1)),
-                When(entry_type=CustomerLedgerEntry.EntryType.PAYMENT, then=Value(2)),
-                When(entry_type=CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL, then=Value(3)),
-                default=Value(4),
+                default=Value(2),
                 output_field=IntegerField(),
             ))
             .order_by(
                 'entry_date',
                 F('invoice__number').asc(nulls_last=True),
                 'type_rank',
+                'created_at',
                 'pk',
             )
         )

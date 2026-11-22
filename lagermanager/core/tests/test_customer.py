@@ -359,6 +359,39 @@ class CustomerLedgerOrderingTests(APITestCase):
 
         self.assertEqual(self._descriptions(), ['invoice PG260610', 'payment'])
 
+    def test_money_movements_of_a_day_keep_their_booking_order(self) -> None:
+        """Two wrong payments cancelled, then the right one booked, all the same
+        day: the Zahlung Stornos come before the later payment, not after it.
+
+        Ranking by type put every payment above every Zahlung Storno of the day,
+        so the corrected payment showed up before the Stornos that preceded it
+        and the running balance went through a state that never existed.
+        """
+        from billing.models import CustomerLedgerEntry
+
+        first = self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-100.00')
+        first.description = 'payment 1'
+        first.save()
+        second = self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-50.00')
+        second.description = 'payment 2'
+        second.save()
+        for wrong in (first, second):
+            CustomerLedgerEntry.objects.create(
+                customer=self.customer,
+                entry_type=CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL,
+                entry_date=self.date,
+                amount=-wrong.amount,
+                description=f'storno {wrong.description}',
+                reverses=wrong,
+            )
+        right = self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-120.00')
+        right.description = 'payment 3'
+        right.save()
+
+        self.assertEqual(self._descriptions(), [
+            'payment 1', 'payment 2', 'storno payment 1', 'storno payment 2', 'payment 3',
+        ])
+
     def test_date_still_wins_over_everything(self) -> None:
         from billing.models import CustomerLedgerEntry
 
