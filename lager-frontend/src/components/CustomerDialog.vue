@@ -1,10 +1,12 @@
 <template>
   <v-card min-width="700">
-    <v-card-title>
+    <v-card-title class="d-flex align-center">
       {{ form.id ? 'Kunde bearbeiten' : 'Neuer Kunde' }}
       <span v-if="form.customer_number" class="text-medium-emphasis text-body-2 ml-2">
         {{ form.customer_number }}
       </span>
+      <v-spacer />
+      <v-btn icon variant="text" @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
     </v-card-title>
     <v-card-text>
       <v-alert v-if="error" type="error" density="compact" class="mb-3" closable @click:close="error = ''">
@@ -77,6 +79,9 @@
       </div>
     </v-card-text>
     <v-card-actions>
+      <v-btn v-if="form.id" prepend-icon="mdi-book-open-variant" @click="ledgerDialog = true">
+        Kundenkonto
+      </v-btn>
       <v-spacer />
       <v-btn @click="$emit('close')">Abbrechen</v-btn>
       <v-btn color="primary" :loading="saving" :disabled="!form.name?.trim()" @click="save">Speichern</v-btn>
@@ -86,12 +91,20 @@
   <v-dialog v-model="addressDialog" max-width="640">
     <AddressDialog :address="editingAddress" @saved="onAddressSaved" @close="addressDialog = false" />
   </v-dialog>
+
+  <CustomerLedgerDialog
+    v-if="form.id"
+    v-model="ledgerDialog"
+    :customer-id="form.id"
+    :customer-label="form.display_name || form.name"
+  />
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
 import api from '../api'
 import AddressDialog from './AddressDialog.vue'
+import CustomerLedgerDialog from './CustomerLedgerDialog.vue'
 import { extractErrorMessage } from '../utils/errorMessage'
 
 const props = defineProps({
@@ -105,6 +118,7 @@ const form = ref({})
 const addresses = ref([])
 const addressDialog = ref(false)
 const editingAddress = ref(null)
+const ledgerDialog = ref(false)
 
 watch(() => props.customer, (c) => {
   error.value = ''
