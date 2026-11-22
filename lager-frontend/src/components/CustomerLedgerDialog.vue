@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="model" max-width="820" scrollable>
+  <v-dialog v-model="model" max-width="1200" scrollable>
     <v-card>
       <v-card-title class="d-flex align-center pa-4">
         <v-icon class="mr-2">mdi-book-open-variant</v-icon>
@@ -100,18 +100,18 @@
               <tr>
                 <th class="text-no-wrap">Datum</th>
                 <th>Art</th>
-                <th>Beschreibung</th>
+                <th style="min-width: 280px">Beschreibung</th>
                 <th class="text-right">Soll</th>
                 <th class="text-right">Haben</th>
                 <th class="text-right">Saldo</th>
                 <th>Benutzer</th>
-                <th></th>
+                <th style="width: 1%"></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="e in entries" :key="e.id">
                 <td class="text-no-wrap">{{ fmtDate(e.entry_date) }}</td>
-                <td>
+                <td class="text-no-wrap">
                   <v-chip size="x-small" :color="typeColor(e)"
                     :prepend-icon="e.is_reversal ? 'mdi-file-undo' : undefined">
                     {{ typeLabel(e) }}
@@ -137,8 +137,8 @@
                 <td class="text-right text-no-wrap" :class="balanceClass(e.running_balance)">
                   {{ fmtEuro(e.running_balance) }}
                 </td>
-                <td class="text-caption">{{ e.actor || '—' }}</td>
-                <td class="text-right">
+                <td class="text-caption text-no-wrap">{{ e.actor || '—' }}</td>
+                <td class="text-right text-no-wrap">
                   <v-tooltip v-if="e.entry_type === 'payment' && !e.is_reversed" text="Zahlung stornieren">
                     <template #activator="{ props: tip }">
                       <v-icon v-bind="tip" size="small" color="error" @click="startReversal(e)">
