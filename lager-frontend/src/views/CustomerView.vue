@@ -61,11 +61,15 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import CustomerDialog from '../components/CustomerDialog.vue'
 import CustomerLedgerDialog from '../components/CustomerLedgerDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
 import { extractErrorMessage } from '../utils/errorMessage'
+
+const route = useRoute()
+const router = useRouter()
 
 const items = ref([])
 const loading = ref(false)
@@ -168,5 +172,22 @@ function fmtEuro(v) {
   return `${Number(v ?? 0).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 }
 
-onMounted(() => fetchItems())
+onMounted(async () => {
+  await fetchItems()
+  await openFromQuery()
+})
+
+// ?openId= opens one record straight away (e.g. linked from an offer or invoice).
+// Fetched on its own: the record may not be among the loaded list items.
+async function openFromQuery() {
+  const { openId } = route.query
+  if (!openId) return
+  router.replace({ path: '/customers' })
+  try {
+    const res = await api.get(`/customers/${openId}/`)
+    openEdit(res.data)
+  } catch {
+    // Gone or not visible: just show the list.
+  }
+}
 </script>

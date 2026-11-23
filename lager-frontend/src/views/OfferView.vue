@@ -31,6 +31,26 @@
             <template v-if="col.key === 'status'">
               <v-chip size="x-small" :color="statusColor(item.status)">{{ statusLabel(item.status) }}</v-chip>
             </template>
+            <!-- Plain text like the other cells (a click opens the document); only
+                 the icon links to the customer / address. -->
+            <template v-else-if="col.key === 'customer_display'">
+              {{ item.customer_display }}
+              <v-tooltip v-if="item.customer" text="Kunde öffnen"><template #activator="{ props }">
+                <router-link v-bind="props" :to="{ path: '/customers', query: { openId: item.customer } }"
+                  class="text-decoration-none" @click.stop>
+                  <v-icon size="x-small" color="primary" class="ml-1">mdi-account-arrow-right</v-icon>
+                </router-link>
+              </template></v-tooltip>
+            </template>
+            <template v-else-if="col.key === 'address_display'">
+              {{ item.address_display }}
+              <v-tooltip v-if="item.address" text="Adresse öffnen"><template #activator="{ props }">
+                <router-link v-bind="props" :to="{ path: '/addresses', query: { openId: item.address } }"
+                  class="text-decoration-none" @click.stop>
+                  <v-icon size="x-small" color="primary" class="ml-1">mdi-map-marker-right</v-icon>
+                </router-link>
+              </template></v-tooltip>
+            </template>
             <template v-else-if="col.key === 'gross_total'">{{ Number(item.gross_total).toFixed(2) }} €</template>
             <template v-else-if="col.key === 'actions'">
               <v-tooltip text="Vorschau"><template #activator="{ props }">
