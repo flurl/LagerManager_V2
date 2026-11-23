@@ -60,13 +60,18 @@ watch(
 </script>
 
 <style>
-.v-data-table tbody tr:nth-child(even) td {
+/* Striped rows with hover for data tables; a plain v-table opts in with
+   class="zebra-table". */
+.v-data-table tbody tr:nth-child(even) td,
+.zebra-table tbody tr:nth-child(even) td {
   background-color: rgba(0, 0, 0, 0.04);
 }
-.v-theme--dark .v-data-table tbody tr:nth-child(even) td {
+.v-theme--dark .v-data-table tbody tr:nth-child(even) td,
+.v-theme--dark .zebra-table tbody tr:nth-child(even) td {
   background-color: rgba(255, 255, 255, 0.07);
 }
-.v-data-table tbody tr:hover td {
+.v-data-table tbody tr:hover td,
+.zebra-table tbody tr:hover td {
   background-color: var(--period-primary-hover, rgba(21, 101, 192, 0.08)) !important;
 }
 </style>

@@ -27,18 +27,6 @@
         <v-alert v-else-if="error" type="error" density="compact">{{ error }}</v-alert>
 
         <template v-else>
-          <div class="d-flex align-center mb-4">
-            <span class="text-subtitle-1 mr-2">Saldo:</span>
-            <span class="text-h6" :class="balanceClass(balance)">{{ fmtEuro(balance) }}</span>
-            <!-- Saldo as on an account statement: positive = Soll (owed to us). -->
-            <v-chip v-if="Number(balance) > 0" size="small" color="error" class="ml-3">
-              Offen
-            </v-chip>
-            <v-chip v-else-if="Number(balance) < 0" size="small" color="success" class="ml-3">
-              Guthaben
-            </v-chip>
-          </div>
-
           <v-alert v-if="saveError" type="error" density="compact" class="mb-4" closable
             @click:close="saveError = ''">
             {{ saveError }}
@@ -95,7 +83,7 @@
             </div>
           </v-card>
 
-          <v-table v-if="entries.length" density="compact">
+          <v-table v-if="entries.length" density="compact" class="zebra-table ledger-table">
             <thead>
               <tr>
                 <th class="text-no-wrap">Datum</th>
@@ -103,13 +91,14 @@
                 <th style="min-width: 280px">Beschreibung</th>
                 <th class="text-right">Soll</th>
                 <th class="text-right">Haben</th>
-                <th class="text-right">Saldo</th>
-                <th>Benutzer</th>
                 <th style="width: 1%"></th>
+                <th class="text-right saldo-col">Saldo</th>
+                <th class="text-disabled">Benutzer</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="e in entries" :key="e.id">
+              <tr v-for="(e, i) in entries" :key="e.id"
+                :class="{ 'current-row': i === entries.length - 1 }">
                 <td class="text-no-wrap">{{ fmtDate(e.entry_date) }}</td>
                 <td class="text-no-wrap">
                   <v-chip size="x-small" :color="typeColor(e)"
@@ -134,10 +123,7 @@
                 <td class="text-right text-no-wrap">
                   <template v-if="Number(e.amount) < 0">{{ fmtEuro(-Number(e.amount)) }}</template>
                 </td>
-                <td class="text-right text-no-wrap" :class="balanceClass(e.running_balance)">
-                  {{ fmtEuro(e.running_balance) }}
-                </td>
-                <td class="text-caption text-no-wrap">{{ e.actor || '—' }}</td>
+                <!-- Next to Haben: the action belongs to the payment amount. -->
                 <td class="text-right text-no-wrap">
                   <v-tooltip v-if="e.entry_type === 'payment' && !e.is_reversed" text="Zahlung stornieren">
                     <template #activator="{ props: tip }">
@@ -147,6 +133,16 @@
                     </template>
                   </v-tooltip>
                 </td>
+                <td class="text-right text-no-wrap saldo-col" :class="balanceClass(e.running_balance)">
+                  {{ fmtEuro(e.running_balance) }}
+                  <!-- The last row's Saldo is the account's current balance. -->
+                  <div v-if="i === entries.length - 1 && balanceState(e.running_balance)"
+                    class="text-caption">
+                    {{ balanceState(e.running_balance) }}
+                  </div>
+                </td>
+                <!-- Audit information only: dimmed so it doesn't compete with the amounts. -->
+                <td class="text-caption text-no-wrap text-disabled">{{ e.actor || '—' }}</td>
               </tr>
             </tbody>
           </v-table>
@@ -191,7 +187,6 @@ const model = computed({
 const loading = ref(false)
 const error = ref('')
 const entries = ref([])
-const balance = ref('0.00')
 
 // Credit is never booked as a payment — it is applied from the invoice side.
 const methods = [
@@ -291,7 +286,6 @@ async function loadLedger() {
   try {
     const res = await api.get(`/customers/${props.customerId}/ledger/`)
     entries.value = res.data.entries || []
-    balance.value = res.data.balance
   } catch (err) {
     error.value = extractErrorMessage(err, 'Kundenkonto konnte nicht geladen werden.')
   } finally {
@@ -349,6 +343,13 @@ function typeLabel(e) {
 }
 
 // Positive = Soll: the customer owes us.  Negative = credit.
+function balanceState(v) {
+  const n = Number(v ?? 0)
+  if (n > 0) return 'offen'
+  if (n < 0) return 'Guthaben'
+  return ''
+}
+
 function balanceClass(v) {
   const n = Number(v ?? 0)
   if (n > 0) return 'text-error'
@@ -376,3 +377,21 @@ function fmtEuro(v) {
   return `${Number(v ?? 0).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 }
 </script>
+
+<style scoped>
+/* The running Saldo is what the account is about: set it apart from the
+   Soll/Haben columns. */
+.saldo-col {
+  font-weight: 500;
+  border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+/* The last row's Saldo is the current balance.  Set on the cells and specific
+   enough to beat the global zebra stripe; hover (!important) still wins. */
+.ledger-table tbody tr.current-row:last-child td {
+  background-color: rgba(var(--v-theme-on-surface), 0.12);
+}
+.current-row .saldo-col {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+</style>
