@@ -70,9 +70,13 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import AddressDialog from '../components/AddressDialog.vue'
 import HistoryDialog from '../components/HistoryDialog.vue'
+
+const route = useRoute()
+const router = useRouter()
 
 const items = ref([])
 const loading = ref(false)
@@ -165,5 +169,22 @@ async function runSync() {
   }
 }
 
-onMounted(() => fetchItems())
+onMounted(async () => {
+  await fetchItems()
+  await openFromQuery()
+})
+
+// ?openId= opens one record straight away (e.g. linked from an offer or invoice).
+// Fetched on its own: the record may not be among the loaded list items.
+async function openFromQuery() {
+  const { openId } = route.query
+  if (!openId) return
+  router.replace({ path: '/addresses' })
+  try {
+    const res = await api.get(`/addresses/${openId}/`)
+    openEdit(res.data)
+  } catch {
+    // Gone or not visible: just show the list.
+  }
+}
 </script>

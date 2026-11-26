@@ -7,11 +7,11 @@ from core.models import Address, Customer
 from django.core.management import call_command
 from django.test import TestCase
 
-from billing.models import CustomerLedgerEntry, Invoice, Offer, Payment
+from billing.models import CustomerLedgerEntry, Invoice, Offer
 
 
 class MergeDuplicateCustomersTests(TestCase):
-    """The state a WZ sync left after backfill_customers_and_ledger.
+    """The state a WZ sync left after the (since removed) customer backfill.
 
     The backfilled customer (no wz_source_id) still has the old documents and
     its default address; the sync's duplicate (with wz_source_id) owns the
@@ -33,13 +33,11 @@ class MergeDuplicateCustomersTests(TestCase):
         self.new_invoice = self._invoice(self.dup, 'RE2')
         self.offer = Offer.objects.create(
             customer=self.dup, address=self.address, document_date=datetime.date(2026, 10, 1))
-        self.payment = Payment.objects.create(
-            customer=self.dup, invoice=self.new_invoice, amount=Decimal('10.00'),
-            payment_date=datetime.date(2026, 10, 2), method=Payment.Method.OTHER)
         self.entry = CustomerLedgerEntry.objects.create(
             customer=self.dup, entry_type=CustomerLedgerEntry.EntryType.PAYMENT,
-            entry_date=datetime.date(2026, 10, 2), amount=Decimal('10.00'),
-            description='Zahlung', invoice=self.new_invoice, payment=self.payment)
+            entry_date=datetime.date(2026, 10, 2), amount=Decimal('-10.00'),
+            method=CustomerLedgerEntry.Method.OTHER,
+            description='Zahlung', invoice=self.new_invoice)
 
     def _invoice(self, customer: Customer, number: str) -> Invoice:
         return Invoice.objects.create(
@@ -59,7 +57,7 @@ class MergeDuplicateCustomersTests(TestCase):
         self.old.refresh_from_db()
         self.assertEqual(self.old.wz_source_id, 7)
         self.assertEqual(self.old.customer_number, 'K0001')
-        for obj in (self.address, self.new_invoice, self.offer, self.payment, self.entry):
+        for obj in (self.address, self.new_invoice, self.offer, self.entry):
             obj.refresh_from_db()
             self.assertEqual(obj.customer_id, self.old.pk, obj)
 

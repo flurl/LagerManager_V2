@@ -8,15 +8,16 @@ from deliveries.models import TaxRate
 from django.test import TestCase
 
 from billing.models import (
+    CustomerLedgerEntry,
     Invoice,
     InvoiceLine,
     InvoiceTemplate,
     InvoiceTemplateLine,
     Offer,
     OfferLine,
-    Payment,
     Reminder,
 )
+from billing.services import ledger
 
 
 def _make_tax_rate(name: str = 'Normal', percent: str = '20.00') -> TaxRate:
@@ -210,9 +211,11 @@ class InvoicePaymentStateTests(TestCase):
             invoice=self.invoice, position=1, description='Leistung',
             quantity=Decimal('1'), unit_price=Decimal('100.00'), tax_rate=self.tax,
         )
+        # Payments settle ledger entries, so the invoice needs its charge.
+        ledger.record_invoice_issued(self.invoice)
 
     def _reminder(self, level: int, fee: str, status: str) -> Reminder:
-        return Reminder.objects.create(
+        reminder = Reminder.objects.create(
             invoice=self.invoice,
             level=level,
             status=status,
@@ -221,14 +224,15 @@ class InvoicePaymentStateTests(TestCase):
             due_date=datetime.date(2026, 8, level),
             fee=Decimal(fee),
         )
+        if status != Reminder.Status.DRAFT:
+            ledger.record_reminder_issued(reminder)
+        return reminder
 
-    def _pay(self, amount: str, day: int = 1) -> Payment:
-        return Payment.objects.create(
-            customer=self.address.customer,
-            invoice=self.invoice,
-            payment_date=datetime.date(2026, 7, day),
-            amount=Decimal(amount),
-        )
+    def _pay(self, amount: str, day: int = 1) -> CustomerLedgerEntry:
+        customer = self.address.customer
+        assert customer is not None
+        return ledger.record_payment(
+            customer, datetime.date(2026, 7, day), Decimal(amount), invoice=self.invoice)
 
     def test_without_fees_or_payments(self) -> None:
         self.assertEqual(self.invoice.reminder_fee_total, Decimal('0.00'))

@@ -20,6 +20,7 @@ from emails.models import EmailLog
 from rest_framework.test import APITestCase
 
 from billing.models import DocumentAttachment, Invoice, InvoiceLine, Offer, Reminder
+from billing.services import ledger
 from billing.services.render import build_email_defaults
 
 ATTACHMENT_MEDIA_ROOT = tempfile.mkdtemp()
@@ -70,6 +71,10 @@ def _make_invoice(address: Address, status: str = 'issued') -> Invoice:
         invoice=inv, position=1, description='Dienstleistung',
         unit_price=Decimal('100.00'), quantity=Decimal('1'), tax_rate=tax,
     )
+    if status != 'draft':
+        # An issued invoice is charged to the customer's account; payments
+        # settle that charge.
+        ledger.record_invoice_issued(inv)
     return inv
 
 

@@ -24,7 +24,13 @@ from django.utils import timezone
 from emails.services.email import AttachmentSpec
 from rest_framework import serializers
 
-from billing.models import MAX_ATTACHMENT_BYTES, DocumentAttachment, Invoice, Reminder
+from billing.models import (
+    MAX_ATTACHMENT_BYTES,
+    AppliedPayment,
+    DocumentAttachment,
+    Invoice,
+    Reminder,
+)
 from billing.services.payment_supplement import PAYMENTS_KIND
 from billing.services.render import render_attachment_html, render_html_to_pdf
 
@@ -193,14 +199,19 @@ class PaymentSupplementHandler(AttachmentHandler):
     def render_html(self, attachment: DocumentAttachment) -> str:
         # Typed Any|None by the GenericForeignKey; only invoices get this kind.
         invoice: Invoice = cast('Invoice', attachment.document)
-        open_amount: Decimal = invoice.open_amount
+        # A reversed payment never reached us; the customer is not shown it.
+        payments: list[AppliedPayment] = [
+            p for p in invoice.applied_payments if not p.is_reversed]
+        paid_total: Decimal = sum((p.received for p in payments), Decimal('0.00'))
+        open_amount: Decimal = invoice.total_due - paid_total
         return render_attachment_html(attachment, PAYMENTS_TEMPLATE, {
             'invoice': invoice,
             'reminders_with_fee': [
                 reminder for reminder in invoice.reminders.order_by('level', 'pk')
                 if reminder.status != Reminder.Status.DRAFT and reminder.fee
             ],
-            'payments': list(invoice.payments.all()),
+            'payments': payments,
+            'paid_total': paid_total,
             'open_amount': max(open_amount, Decimal('0.00')),
             'credit': max(-open_amount, Decimal('0.00')),
             'as_of': timezone.localdate(),

@@ -52,7 +52,7 @@
     <tr>
       <td>{{ payment.payment_date|date:"d.m.Y" }}</td>
       <td>Zahlung – {{ payment.get_method_display }}</td>
-      <td class="num">−{{ payment.amount|floatformat:"2" }} €</td>
+      <td class="num">−{{ payment.received|floatformat:"2" }} €</td>
     </tr>
     {% endfor %}
   </tbody>
@@ -66,7 +66,7 @@
     {% if payments %}
     <tr>
       <td colspan="2" class="num">Summe der Zahlungen</td>
-      <td class="num">−{{ invoice.paid_amount|floatformat:"2" }} €</td>
+      <td class="num">−{{ paid_total|floatformat:"2" }} €</td>
     </tr>
     {% endif %}
     {% if credit %}

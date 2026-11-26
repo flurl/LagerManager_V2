@@ -7,20 +7,17 @@ right after the invoice itself, and users can neither create, edit nor delete
 it.  invoice.html no longer prints the payments itself.
 """
 import datetime
-import importlib
 from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
 
-from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Model, ProtectedError
-from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from billing.attachments import get_handler
-from billing.models import DocumentAttachment, Invoice, Payment, Reminder
+from billing.models import CustomerLedgerEntry, DocumentAttachment, Invoice, Reminder
 from billing.services import ledger
 from billing.services.payment_supplement import PAYMENTS_KIND, sync_payment_supplement
 from billing.tests.test_email_actions import _create_user, _make_address, _make_invoice
@@ -48,19 +45,18 @@ def _attachment(doc: Model, **kwargs: Any) -> DocumentAttachment:
     )
 
 
-def _pay(invoice: Invoice, amount: str, **kwargs: Any) -> Payment:
-    """Book a payment the way the API does: payment, ledger entry, resync."""
+def _pay(invoice: Invoice, amount: str, **kwargs: Any) -> CustomerLedgerEntry:
+    """Book a payment the way the API does: ledger entry, allocation, resync."""
     assert invoice.customer is not None
-    payment = Payment.objects.create(
-        customer=invoice.customer,
+    entry = ledger.record_payment(
+        invoice.customer,
+        kwargs.pop('payment_date', datetime.date(2026, 2, 1)),
+        Decimal(amount),
         invoice=invoice,
-        payment_date=kwargs.pop('payment_date', datetime.date(2026, 2, 1)),
-        amount=Decimal(amount),
         **kwargs,
     )
-    ledger.record_payment(payment)
     ledger.recalculate_invoice_status(invoice)
-    return payment
+    return entry
 
 
 def _fake_pdf(html: str) -> bytes:
@@ -154,33 +150,53 @@ class PaymentSupplementLifecycleTests(APITestCase):
 
         self.assertEqual([s.pk for s in _supplements(self.invoice)], [first.pk])
 
+    def _reverse(self, payment_id: int) -> int:
+        response = self.client.post(
+            f'/api/payments/{payment_id}/reverse/', {'reason': 'Fehlbuchung'}, format='json')
+        return int(response.status_code)
+
     def test_it_goes_with_the_last_payment(self) -> None:
-        """Deleting (cancelling) a payment keeps it while payments remain, and
-        removes it with the last one when no Mahnung was issued — the invoice
-        then goes out without it.
+        """Reversing a payment keeps it while payments remain, and removes it
+        with the last one when no Mahnung was issued — the invoice then goes
+        out without it.
         """
         first = self._post_payment(self.invoice, '50.00')
         second = self._post_payment(self.invoice, '20.00')
 
-        self.assertEqual(self.client.delete(f'/api/payments/{first}/').status_code, 204)
+        self.assertEqual(self._reverse(first), 200)
         self.assertEqual(len(_supplements(self.invoice)), 1)
 
-        self.assertEqual(self.client.delete(f'/api/payments/{second}/').status_code, 204)
+        self.assertEqual(self._reverse(second), 200)
         self.assertEqual(_supplements(self.invoice), [])
 
-    def test_moving_a_payment_moves_it(self) -> None:
-        """Rebooking a payment onto another invoice of the customer removes the
-        Zahlungsübersicht from the old invoice and creates one on the new.
+    def test_releasing_applied_credit_removes_it(self) -> None:
+        """Undoing the only credit application leaves nothing to list, so the
+        Zahlungsübersicht goes — as it does with the last deleted payment.
         """
-        other = _make_invoice(self.address, status='issued')
-        payment_id = self._post_payment(self.invoice, '50.00')
+        assert self.invoice.customer is not None
+        prepayment = ledger.record_payment(
+            self.invoice.customer, datetime.date(2026, 1, 20), Decimal('30.00'))
+        self.client.post(f'/api/invoices/{self.invoice.pk}/apply-credit/', {}, format='json')
+        self.assertEqual(len(_supplements(self.invoice)), 1)
 
-        response = self.client.patch(
-            f'/api/payments/{payment_id}/', {'invoice': other.pk})
+        response = self.client.post(
+            f'/api/invoices/{self.invoice.pk}/release-credit/',
+            {'entry': prepayment.pk}, format='json')
 
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(_supplements(self.invoice), [])
-        self.assertEqual(len(_supplements(other)), 1)
+
+    def test_cancelling_releases_the_payments_and_removes_it(self) -> None:
+        """Cancelling hands the paid money back as credit; with no payment and
+        no issued Mahnung left, the cancelled invoice needs no Zahlungsübersicht.
+        """
+        self._post_payment(self.invoice, '50.00')
+
+        response = self.client.post(
+            f'/api/invoices/{self.invoice.pk}/cancel/', {'reason': 'Fehler'}, format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(_supplements(self.invoice), [])
 
     def test_mark_paid_creates_it(self) -> None:
         """The mark-paid shortcut books a payment, so it creates one too."""
@@ -190,15 +206,12 @@ class PaymentSupplementLifecycleTests(APITestCase):
         self.assertEqual(len(_supplements(self.invoice)), 1)
 
     def test_applying_credit_creates_it(self) -> None:
-        """Offsetting a prepayment against the invoice books a credit payment,
-        which the Zahlungsübersicht lists like any other.
+        """Offsetting a prepayment against the invoice allocates it, and the
+        Zahlungsübersicht lists it like any other payment.
         """
         assert self.invoice.customer is not None
-        prepayment = Payment.objects.create(
-            customer=self.invoice.customer, payment_date=datetime.date(2026, 1, 20),
-            amount=Decimal('30.00'))
-        ledger.record_payment(prepayment)
-        ledger.record_invoice_issued(self.invoice)
+        ledger.record_payment(
+            self.invoice.customer, datetime.date(2026, 1, 20), Decimal('30.00'))
 
         response = self.client.post(
             f'/api/invoices/{self.invoice.pk}/apply-credit/', {}, format='json')
@@ -245,17 +258,15 @@ class PaymentSupplementLifecycleTests(APITestCase):
         self.assertEqual(_supplements(self.invoice), [])
 
     def test_an_issued_reminder_keeps_it_after_the_last_payment(self) -> None:
-        """Deleting the last payment keeps the Zahlungsübersicht while an issued
-        Mahnung still needs it.
+        """Reversing the last payment keeps the Zahlungsübersicht while an
+        issued Mahnung still needs it.
         """
         payment_id = self._post_payment(self.invoice, '50.00')
         reminder = self._draft_reminder()
         issued = self.client.post(f'/api/reminders/{reminder.pk}/issue/')
         self.assertEqual(issued.status_code, 200, issued.data)
 
-        deleted = self.client.delete(f'/api/payments/{payment_id}/')
-
-        self.assertEqual(deleted.status_code, 204)
+        self.assertEqual(self._reverse(payment_id), 200)
         self.assertEqual(len(_supplements(self.invoice)), 1)
 
     def test_sync_is_idempotent_without_payments(self) -> None:
@@ -329,7 +340,7 @@ class PaymentSupplementRenderTests(APITestCase):
         """
         _pay(self.invoice, '50.00', payment_date=datetime.date(2026, 2, 1))
         _pay(self.invoice, '20.00', payment_date=datetime.date(2026, 2, 10),
-             method=Payment.Method.CASH)
+             method=CustomerLedgerEntry.Method.CASH)
 
         html = self._html()
 
@@ -343,6 +354,20 @@ class PaymentSupplementRenderTests(APITestCase):
         self.assertIn('Offener Betrag', html)
         self.assertIn('50,00', html)
         self.assertNotIn('Guthaben (Überzahlung)', html)
+
+    def test_a_reversed_payment_is_not_listed(self) -> None:
+        """Money that was booked in error and reversed never reached us, so the
+        page neither lists it nor counts it as paid.
+        """
+        _pay(self.invoice, '50.00', payment_date=datetime.date(2026, 2, 1))
+        wrong = _pay(self.invoice, '70.00', payment_date=datetime.date(2026, 2, 10))
+        ledger.reverse_payment(wrong, 'Fehlbuchung', datetime.date(2026, 2, 11))
+
+        html = self._html()
+
+        self.assertNotIn('10.02.2026', html)
+        self.assertIn('−50,00', html)
+        self.assertIn('70,00', html)  # 120 − 50 still open
 
     def test_an_overpayment_shows_the_credit(self) -> None:
         """Paying more than is due shows the surplus as credit instead of a
@@ -451,41 +476,3 @@ class PaymentSupplementSendTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         merge.assert_called_once_with(
             [b'%PDF-doc', b'%PDF-payments', b'%PDF-correction', b'%PDF-supplement'])
-
-
-class PaymentSupplementBackfillTests(TestCase):
-    def setUp(self) -> None:
-        self.migration = importlib.import_module(
-            'billing.migrations.0013_backfill_payment_supplements')
-        self.address = _make_address()
-
-    def test_backfills_invoices_with_payments_or_reminders_only_once(self) -> None:
-        """The data migration gives every invoice with payments or an issued
-        Mahnung exactly one Zahlungsübersicht.  It skips invoices with neither
-        (a draft Mahnung does not count) and ones that already have it, and
-        ignores prepayments without an invoice.
-        """
-        paid = _make_invoice(self.address, status='issued')
-        already = _make_invoice(self.address, status='issued')
-        unpaid = _make_invoice(self.address, status='issued')
-        reminded = _make_invoice(self.address, status='issued')
-        drafted = _make_invoice(self.address, status='issued')
-        for dunned, status in ((reminded, 'issued'), (drafted, 'draft')):
-            Reminder.objects.create(
-                invoice=dunned, level=1, status=status,
-                reminder_date=datetime.date(2026, 2, 1),
-                due_date=datetime.date(2026, 2, 14))
-        assert self.address.customer is not None
-        for invoice in (paid, already, None):
-            Payment.objects.create(
-                customer=self.address.customer, invoice=invoice,
-                payment_date=datetime.date(2026, 2, 1), amount=Decimal('10.00'))
-        sync_payment_supplement(already)
-
-        self.migration.create_payment_supplements(apps, None)
-
-        self.assertEqual(len(_supplements(paid)), 1)
-        self.assertEqual(len(_supplements(already)), 1)
-        self.assertEqual(_supplements(unpaid), [])
-        self.assertEqual(len(_supplements(reminded)), 1)
-        self.assertEqual(_supplements(drafted), [])

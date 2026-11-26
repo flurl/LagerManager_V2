@@ -194,31 +194,16 @@ finished its migrations (`docker compose -f docker-compose.prod.yml logs -f back
 shows gunicorn booting). The commands are idempotent, so an accidental second
 run does no harm.
 
-| Feature | Command |
-|---------|---------|
-| Customers & partial payments | `backfill_customers_and_ledger` |
-
-```bash
-docker compose -f docker-compose.prod.yml exec backend \
-    python manage.py backfill_customers_and_ledger --dry-run   # report only
-docker compose -f docker-compose.prod.yml exec backend \
-    python manage.py backfill_customers_and_ledger
-```
-
-**`backfill_customers_and_ledger`** gives groups that already manage invoices
-the new customer, payment and ledger permissions (without it those views
-answer 403 for everyone but superusers), creates a customer for every address,
-links existing offers and invoices to it, books the ledger charges for issued
-invoices and reminder fees, and turns invoices marked *paid* into payment
-records. It is a command rather than a data migration because it needs
-`Invoice.gross_total`, a Python property that historical models lack.
+None is pending at the moment. (`backfill_customers_and_ledger`, the step for
+customers and partial payments, ran in September 2026 and has been removed; it
+is in the git history.)
 
 **`merge_duplicate_customers`** repairs what the WZ address sync did before it
 learnt to reuse the backfill's customers: it created a second customer for
 every Wiffzack address and moved the address over to it, leaving the old
 documents and ledger on the original. The command keeps the original customer
 (its number is on the invoices issued so far), moves addresses, offers,
-invoices, payments and ledger entries from the duplicate to it and deletes the
+invoices and ledger entries (payments included) from the duplicate to it and deletes the
 duplicate. Run it once on a database where that happened, `--dry-run` first: it
 lists every document issued under a duplicate, whose printed customer number
 changes with the merge.
@@ -270,7 +255,7 @@ of features production doesn't have yet must be run in the preview too, after
 `create` and after every `update --reset-db`:
 
 ```bash
-docker compose -p lm-preview-<slug> exec backend python manage.py backfill_customers_and_ledger
+docker compose -p lm-preview-<slug> exec backend python manage.py <command>
 ```
 
 The branch must contain preview support (merged master from this feature on);

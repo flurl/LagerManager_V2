@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from collections import defaultdict
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -357,8 +358,6 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
             blockers.append('Rechnungen')
         if customer.offers.exists():
             blockers.append('Angebote')
-        if customer.payments.exists():
-            blockers.append('Zahlungen')
         if customer.ledger_entries.exists():
             blockers.append('Kontobewegungen')
         if blockers:
@@ -387,7 +386,7 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
         the dialog can show who booked what without duplicating the actor on the
         ledger model itself.
         """
-        from billing.models import CustomerLedgerEntry
+        from billing.models import CustomerLedgerEntry, LedgerAllocation
 
         customer: Customer = self.get_object()
         # Ordered by content rather than by insertion: entry_date, then the
@@ -397,6 +396,11 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
         # settles it on the same day.  entry_date is only a date, so insertion
         # order carries no intra-day truth worth preserving — and the backfill
         # wrote historic rows newest-first, so pk order is actively misleading.
+        # Money movements (payments, Korrekturen, Zahlung Stornos) share one
+        # rank and keep their booking order (created_at) among themselves: a
+        # payment booked after two Stornos on the same day must not jump above
+        # them.  For backfilled payments created_at follows pk, so they sort
+        # exactly as before.
         entries = (
             CustomerLedgerEntry.objects
             .filter(customer=customer)
@@ -404,18 +408,30 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
             .annotate(type_rank=Case(
                 When(entry_type=CustomerLedgerEntry.EntryType.INVOICE, then=Value(0)),
                 When(entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE, then=Value(1)),
-                When(entry_type=CustomerLedgerEntry.EntryType.PAYMENT, then=Value(2)),
-                default=Value(3),
+                default=Value(2),
                 output_field=IntegerField(),
             ))
             .order_by(
                 'entry_date',
                 F('invoice__number').asc(nulls_last=True),
                 'type_rank',
+                'created_at',
                 'pk',
             )
         )
         actors = _create_actors(CustomerLedgerEntry, [e.pk for e in entries])
+
+        # What of each entry is allocated, from either side, in one query.
+        allocated: dict[int, Decimal] = defaultdict(Decimal)
+        for debit_id, credit_id, amount in (
+            LedgerAllocation.objects
+            .filter(debit_entry__customer=customer)
+            .values_list('debit_entry_id', 'credit_entry_id', 'amount')
+        ):
+            allocated[debit_id] += amount
+            allocated[credit_id] += amount
+
+        reversed_ids: set[int] = {e.reverses_id for e in entries if e.reverses_id is not None}
 
         running = Decimal('0.00')
         data: list[dict[str, Any]] = []
@@ -427,8 +443,14 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
                 'entry_type': e.entry_type,
                 'entry_type_display': e.get_entry_type_display(),
                 'description': e.description,
+                # Signed: positive = Soll (charge), negative = Haben (payment).
                 'amount': str(e.amount),
                 'running_balance': str(running),
+                # Not yet settled / not yet used, as a positive amount.
+                'open_amount': str(abs(e.amount) - allocated[e.pk]),
+                'method': e.method,
+                'method_display': e.get_method_display(),
+                'note': e.note,
                 'invoice': e.invoice_id,
                 'invoice_number': e.invoice.number if e.invoice_id and e.invoice else None,
                 # A reminder-fee movement links to the Mahnung that charged it,
@@ -436,6 +458,10 @@ class CustomerViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Customer]):
                 'reminder': e.reminder_id,
                 'reminder_number': e.reminder.number if e.reminder_id and e.reminder else None,
                 'is_reversal': e.is_reversal,
+                # A payment cancelled by a Zahlung Storno — and, on the Storno,
+                # the payment it cancels.
+                'is_reversed': e.pk in reversed_ids,
+                'reverses': e.reverses_id,
                 'actor': actors.get(str(e.pk)),
             })
         return Response({'balance': str(running), 'entries': data})

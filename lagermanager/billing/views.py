@@ -35,16 +35,18 @@ from .attachments.send import (
     merged_selection_ids,
 )
 from .models import (
+    INVOICE_SETTLEMENT_PREFETCH,
     BillingArticle,
+    CustomerLedgerEntry,
     DocumentAttachment,
     Invoice,
     InvoiceLine,
     InvoiceTemplate,
     InvoiceTemplateLine,
+    LedgerAllocation,
     NumberSequence,
     Offer,
     OfferLine,
-    Payment,
     Reminder,
 )
 from .permissions import DocumentAttachmentPermission
@@ -60,6 +62,7 @@ from .serializers import (
     OfferSerializer,
     PaymentSerializer,
     ReminderSerializer,
+    serialize_applied_payment,
 )
 from .services import ledger
 from .services.numbering import allocate_article_number, allocate_number
@@ -760,16 +763,16 @@ def _clone_lines_to_template(src: Invoice, dst: InvoiceTemplate) -> None:
 
 def _apply_available_credit(
     invoice: Invoice,
-    payment_date: datetime.date,
+    allocation_date: datetime.date,
     *,
     amount: Decimal | None = None,
     strict: bool = False,
 ) -> Decimal:
-    """Offset the customer's unused credit against an open invoice.
+    """Settle an open invoice from the customer's unused credit.
 
     Credit is always used when there is any — the customer's money should not sit
     idle next to their own open invoice — so this is not optional at issue time.
-    It stays reversible: deleting the resulting payment returns the credit.
+    It stays reversible: releasing the credit in the payment dialog undoes it.
 
     With amount=None it takes as much as both the credit and the open amount
     allow, and having nothing to apply is simply a no-op.  strict=True lets a
@@ -777,22 +780,14 @@ def _apply_available_credit(
     """
     if invoice.customer_id is None or invoice.customer is None:
         return Decimal('0.00')
-    usable = min(ledger.available_credit(invoice.customer), invoice.open_amount)
-    to_apply = usable if amount is None else amount
-    if to_apply <= 0:
-        if strict:
-            raise ledger.CreditError('Es ist kein verrechenbares Guthaben vorhanden.')
-        return Decimal('0.00')
     try:
-        ledger.apply_credit(invoice, to_apply, payment_date)
+        applied = ledger.apply_credit(invoice, amount, allocation_date)
     except ledger.CreditError:
         if strict:
             raise
         return Decimal('0.00')
-    invoice.refresh_from_db()
     ledger.recalculate_invoice_status(invoice)
-    invoice.refresh_from_db()
-    return to_apply
+    return applied
 
 
 class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistoryMixin,
@@ -803,9 +798,10 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
         return (
             Invoice.objects
             .select_related('address', 'customer', 'source_offer', 'reverses')
-            # payments/reminders back the open_amount & status properties — without
-            # them the list endpoint would issue two extra queries per invoice.
-            .prefetch_related('lines__tax_rate', 'reversed_by', 'payments', 'reminders')
+            # Allocations/reminders back the open_amount & status properties —
+            # without them the list endpoint would issue extra queries per invoice.
+            .prefetch_related('lines__tax_rate', 'reversed_by', 'reminders',
+                              *INVOICE_SETTLEMENT_PREFETCH)
             # Count over the GenericRelation — one join, so the paperclip
             # badge in the list view costs no extra query per row.  The explicit
             # order_by restates Meta.ordering, which annotate()'s GROUP BY would
@@ -916,7 +912,8 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
         invoice: Invoice = self.get_object()
         invoice_ct = ContentType.objects.get_for_model(Invoice)
         line_ct = ContentType.objects.get_for_model(InvoiceLine)
-        payment_ct = ContentType.objects.get_for_model(Payment)
+        entry_ct = ContentType.objects.get_for_model(CustomerLedgerEntry)
+        allocation_ct = ContentType.objects.get_for_model(LedgerAllocation)
 
         parent_entries = (
             LogEntry.objects
@@ -924,17 +921,43 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
             .select_related('actor')
         )
         line_entries = _line_log_entries(invoice, line_ct, 'invoice')
-        payment_entries = _child_log_entries(
-            invoice, payment_ct, 'invoice',
-            {str(pk) for pk in invoice.payments.values_list('pk', flat=True)},
-        )
+        # Payments booked for this invoice, and every allocation onto its
+        # charges — which is how applied credit shows up.
+        payment_types = (CustomerLedgerEntry.EntryType.PAYMENT,
+                         CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL)
+        payment_pks: set[str] = {
+            str(pk) for pk in invoice.ledger_entries
+            .filter(entry_type__in=payment_types)
+            .values_list('pk', flat=True)}
+        payment_entries = [
+            e for e in _child_log_entries(invoice, entry_ct, 'invoice', payment_pks)
+            # A deleted payment is no longer in payment_pks; its log still
+            # names the type, as [old, new] like every change.
+            if e.object_pk in payment_pks
+            or any(t in e.changes_dict.get('entry_type', []) for t in payment_types)
+        ]
+        charge_pks: list[str] = [
+            str(pk) for pk in invoice.ledger_entries
+            .filter(amount__gt=0, entry_type__in=CustomerLedgerEntry.CHARGE_TYPES)
+            .values_list('pk', flat=True)]
+        allocation_entries: list[LogEntry] = []
+        if charge_pks:
+            allocation_entries = list(
+                LogEntry.objects
+                .filter(content_type=allocation_ct)
+                .filter(Q(changes__debit_entry__0__in=charge_pks)
+                        | Q(changes__debit_entry__1__in=charge_pks))
+                .select_related('actor')
+            )
 
         data = sorted(
             [_serialize_log_entry(e, 'document') for e in parent_entries if e.changes] +
             [_serialize_log_entry(e, 'line')
              for e in line_entries if e.changes] +
             [_serialize_log_entry(e, 'payment')
-             for e in payment_entries if e.changes],
+             for e in payment_entries if e.changes] +
+            [_serialize_log_entry(e, 'payment')
+             for e in allocation_entries if e.changes],
             key=lambda x: x['timestamp'],
             reverse=True,
         )
@@ -1066,13 +1089,14 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
             reverse.recipient_text = invoice.recipient_text
             reverse.status = Invoice.Status.ISSUED
             reverse.save(update_fields=['number', 'recipient_text', 'status'])
-            # The Storno reverses the invoice amount on the customer's account;
-            # fees dunned on top of it have to be credited back explicitly.
-            ledger.record_invoice_issued(reverse)
-            ledger.reverse_reminder_fees(invoice)
+            # The Storno settles the invoice amount, reversed fees settle the
+            # fees, and money already paid becomes the customer's credit.
+            ledger.record_cancellation(invoice, reverse)
             # Mark the original as cancelled.
             invoice.status = Invoice.Status.CANCELLED
             invoice.save(update_fields=['status'])
+            # Drops the Zahlungsübersicht if the released payments were all it had.
+            ledger.recalculate_invoice_status(invoice)
             # Optionally create a new draft copy of the original invoice.
             draft: Invoice | None = None
             if create_draft:
@@ -1111,8 +1135,7 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
             'total_due': str(invoice.total_due),
             'paid_amount': str(invoice.paid_amount),
             'open_amount': str(invoice.open_amount),
-            'payments': PaymentSerializer(
-                invoice.payments.select_related('customer', 'invoice'), many=True).data,
+            'payments': [serialize_applied_payment(row) for row in invoice.applied_payments],
         })
 
     @action(detail=True, methods=['post'], url_path='mark-paid')
@@ -1152,20 +1175,47 @@ class InvoiceViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHistor
             )
 
         with transaction.atomic():
-            payment = Payment.objects.create(
+            ledger.record_payment(
                 # customer_id is checked above, so this is never None here.
-                # Invoice.customer is nullable at DB level only, for the
-                # backfill command.
+                # Invoice.customer is nullable at DB level only, for rows from
+                # before customers existed.
                 customer=cast('Customer', invoice.customer),
-                invoice=invoice,
                 payment_date=paid_at,
                 amount=open_amount,
-                method=Payment.Method.TRANSFER,
+                method=CustomerLedgerEntry.Method.TRANSFER,
+                invoice=invoice,
             )
-            ledger.record_payment(payment)
-            invoice.refresh_from_db()
             ledger.recalculate_invoice_status(invoice)
         return Response(InvoiceSerializer(invoice).data)
+
+    @action(detail=True, methods=['post'], url_path='release-credit')
+    def release_credit(self, request: Request, pk: str | None = None) -> Response:
+        """Undo applying credit to this invoice; the money is credit again.
+
+        Body: {"entry": <ledger entry id>} — the id of an `is_credit` row of the
+        payment list.  A payment booked for this invoice is deleted through
+        DELETE /payments/{id}/ instead.
+        """
+        invoice: Invoice = self.get_object()
+        entry_id: Any = _payload(request).get('entry')
+        if invoice.customer_id is None:
+            return Response({'detail': 'Die Rechnung hat keinen Kunden.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            entry: CustomerLedgerEntry = CustomerLedgerEntry.objects.get(
+                pk=int(entry_id), customer_id=invoice.customer_id)
+        except (CustomerLedgerEntry.DoesNotExist, TypeError, ValueError):
+            return Response({'detail': 'Buchung nicht gefunden.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            with transaction.atomic():
+                released = ledger.release_credit(invoice, entry)
+                ledger.recalculate_invoice_status(invoice)
+        except ledger.CreditError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        data = InvoiceSerializer(invoice).data
+        data['released_credit'] = str(released)
+        return Response(data)
 
     # ---- Duplicate ----------------------------------------------------------
 
@@ -1354,9 +1404,7 @@ class ReminderViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHisto
             # The fee is owed from now on: charge it and re-check the invoice,
             # whose open amount the fee has just increased.
             ledger.record_reminder_issued(reminder)
-            invoice = reminder.invoice
-            invoice.refresh_from_db()
-            ledger.recalculate_invoice_status(invoice)
+            ledger.recalculate_invoice_status(reminder.invoice)
         return Response(ReminderSerializer(reminder).data)
 
     @action(detail=True, methods=['get'], url_path='preview')
@@ -1379,18 +1427,24 @@ class ReminderViewSet(DocumentEmailMixin, DocumentAttachmentMixin, AuditLogHisto
 # Payment
 # ---------------------------------------------------------------------------
 
-class PaymentViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Payment]):
-    """Zahlungen — partial payments against an invoice, or standalone prepayments.
+class PaymentViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[CustomerLedgerEntry]):
+    """Zahlungen — the PAYMENT entries of the customer ledger.
 
-    Every write also books (or removes) the matching ledger entry and re-checks
-    the invoice's status, so the customer's balance and the invoice's open
-    amount can never drift apart from the payments themselves.
+    Booked (optionally for an invoice, which they then settle), never edited or
+    deleted: a wrong payment is cancelled with POST {id}/reverse/ (a Zahlung
+    Storno) and the right one booked again.  Every write goes through
+    services/ledger, which keeps allocations and invoice status in step.
     """
 
     permission_classes = [IsAuthenticated, DjangoModelPermissionsWithView]
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self) -> Any:
-        qs = Payment.objects.select_related('customer', 'invoice')
+        qs = (
+            CustomerLedgerEntry.objects
+            .filter(entry_type=CustomerLedgerEntry.EntryType.PAYMENT)
+            .select_related('customer', 'invoice')
+        )
         invoice_id_str: str | None = self.request.query_params.get('invoice_id')
         if invoice_id_str:
             try:
@@ -1405,44 +1459,51 @@ class PaymentViewSet(AuditLogHistoryMixin, viewsets.ModelViewSet[Payment]):
                 pass
         unallocated: str | None = self.request.query_params.get('unallocated')
         if unallocated is not None and unallocated.lower() in ('1', 'true', 'yes'):
-            qs = qs.filter(invoice__isnull=True)
+            qs = qs.filter(allocations_given__isnull=True)
         return qs
 
-    def get_serializer_class(self) -> type[BaseSerializer[Payment]]:
+    def get_serializer_class(self) -> type[BaseSerializer[CustomerLedgerEntry]]:
         return PaymentSerializer
 
-    def perform_create(self, serializer: BaseSerializer[Payment]) -> None:
+    def perform_create(self, serializer: BaseSerializer[CustomerLedgerEntry]) -> None:
+        data: dict[str, Any] = cast('dict[str, Any]', serializer.validated_data)
+        invoice: Invoice | None = data.get('invoice')
         with transaction.atomic():
-            payment: Payment = serializer.save()
-            ledger.record_payment(payment)
-            self._resync_invoice(payment.invoice)
+            serializer.instance = ledger.record_payment(
+                customer=data['customer'],
+                payment_date=data['entry_date'],
+                amount=data['amount'],
+                method=data.get('method', CustomerLedgerEntry.Method.TRANSFER),
+                note=data.get('note', ''),
+                invoice=invoice,
+            )
+            if invoice is not None:
+                ledger.recalculate_invoice_status(invoice)
 
-    def perform_update(self, serializer: BaseSerializer[Payment]) -> None:
-        previous_invoice: Invoice | None = (
-            serializer.instance.invoice if serializer.instance else None
-        )
-        with transaction.atomic():
-            payment: Payment = serializer.save()
-            # Re-book rather than patch: the entry mirrors amount, date and
-            # invoice, and any of them may have changed.
-            ledger.discard_payment_entries(payment)
-            ledger.record_payment(payment)
-            self._resync_invoice(payment.invoice)
-            if previous_invoice is not None and previous_invoice.pk != payment.invoice_id:
-                self._resync_invoice(previous_invoice)
+    @action(detail=True, methods=['post'], url_path='reverse')
+    def reverse(self, request: Request, pk: str | None = None) -> Response:
+        """Cancel this payment with a Zahlung Storno.
 
-    def perform_destroy(self, instance: Payment) -> None:
-        invoice: Invoice | None = instance.invoice
-        with transaction.atomic():
-            # Drop the ledger entry too, or the balance would keep counting money
-            # that is no longer recorded.  The audit log preserves that both existed.
-            ledger.discard_payment_entries(instance)
-            instance.delete()
-            self._resync_invoice(invoice)
-
-    @staticmethod
-    def _resync_invoice(invoice: Invoice | None) -> None:
-        if invoice is None:
-            return
-        invoice.refresh_from_db()
-        ledger.recalculate_invoice_status(invoice)
+        Body: {"reason": "…" (required), "date": "YYYY-MM-DD" (optional, today)}.
+        Answers with the payment, now marked is_reversed.
+        """
+        payment: CustomerLedgerEntry = self.get_object()
+        body = _payload(request)
+        reason: str = str(body.get('reason') or '')
+        date_str: str | None = body.get('date')
+        reversal_date: datetime.date
+        if date_str:
+            try:
+                reversal_date = datetime.date.fromisoformat(date_str)
+            except ValueError:
+                return Response({'detail': 'Ungültiges Datum.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+        else:
+            reversal_date = timezone.localdate()
+        try:
+            with transaction.atomic():
+                ledger.reverse_payment(payment, reason, reversal_date)
+        except ledger.ReversalError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payment = self.get_queryset().get(pk=payment.pk)
+        return Response(PaymentSerializer(payment).data)

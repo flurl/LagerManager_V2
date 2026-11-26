@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db import models
 
 if TYPE_CHECKING:
-    from billing.models import CustomerLedgerEntry, Invoice, Offer, Payment
+    from billing.models import CustomerLedgerEntry, Invoice, Offer
     from django.db.models.fields.related_descriptors import RelatedManager
 
 
@@ -62,7 +62,6 @@ class Customer(models.Model):
         addresses: RelatedManager["Address"]
         offers: RelatedManager["Offer"]
         invoices: RelatedManager["Invoice"]
-        payments: RelatedManager["Payment"]
         ledger_entries: RelatedManager["CustomerLedgerEntry"]
 
     class Meta:

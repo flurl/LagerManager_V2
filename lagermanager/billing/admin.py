@@ -11,10 +11,10 @@ from .models import (
     InvoiceLine,
     InvoiceTemplate,
     InvoiceTemplateLine,
+    LedgerAllocation,
     NumberSequence,
     Offer,
     OfferLine,
-    Payment,
     Reminder,
 )
 
@@ -28,8 +28,8 @@ admin.site.register(InvoiceLine)
 admin.site.register(InvoiceTemplate)
 admin.site.register(InvoiceTemplateLine)
 admin.site.register(Reminder)
-admin.site.register(Payment)
 admin.site.register(CustomerLedgerEntry)
+admin.site.register(LedgerAllocation)
 
 
 @admin.register(DocumentAttachment)

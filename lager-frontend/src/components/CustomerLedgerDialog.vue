@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="model" max-width="820" scrollable>
+  <v-dialog v-model="model" max-width="1200" scrollable>
     <v-card>
       <v-card-title class="d-flex align-center pa-4">
         <v-icon class="mr-2">mdi-book-open-variant</v-icon>
@@ -12,7 +12,7 @@
           variant="tonal"
           prepend-icon="mdi-cash-plus"
           class="mr-2"
-          @click="startRecording"
+          @click="startRecording()"
         >
           Zahlung erfassen
         </v-btn>
@@ -27,20 +27,29 @@
         <v-alert v-else-if="error" type="error" density="compact">{{ error }}</v-alert>
 
         <template v-else>
-          <div class="d-flex align-center mb-4">
-            <span class="text-subtitle-1 mr-2">Saldo:</span>
-            <span class="text-h6" :class="balanceClass(balance)">{{ fmtEuro(balance) }}</span>
-            <v-chip v-if="Number(balance) > 0" size="small" color="success" class="ml-3">
-              Guthaben
-            </v-chip>
-            <v-chip v-else-if="Number(balance) < 0" size="small" color="error" class="ml-3">
-              Offen
-            </v-chip>
-          </div>
-
           <v-alert v-if="saveError" type="error" density="compact" class="mb-4" closable
             @click:close="saveError = ''">
             {{ saveError }}
+          </v-alert>
+
+          <!-- After a Storno: book the right payment.  A payment for an invoice
+               belongs in that invoice's payment dialog, which settles it. -->
+          <v-alert v-if="reversedNotice" type="info" variant="tonal" density="compact" class="mb-4"
+            closable @click:close="reversedNotice = null">
+            <div class="d-flex align-center flex-wrap ga-2">
+              <span v-if="reversedNotice.invoiceNumber">
+                Zahlung storniert. Die richtige Zahlung im Zahlungsdialog der Rechnung
+                <a href="#" @click.prevent="openInvoice(reversedNotice.invoiceNumber)">
+                  {{ reversedNotice.invoiceNumber }}</a> erfassen.
+              </span>
+              <template v-else>
+                <span>Zahlung storniert.</span>
+                <v-spacer />
+                <v-btn size="small" color="info" variant="flat" @click="recordCorrection">
+                  Richtige Zahlung erfassen
+                </v-btn>
+              </template>
+            </div>
           </v-alert>
 
           <!-- Standalone payment: no invoice, so it simply becomes credit. -->
@@ -64,7 +73,7 @@
               </v-col>
             </v-row>
             <div class="text-caption text-medium-emphasis mt-2">
-              Der Betrag erhöht den Saldo und steht als Guthaben zur Verfügung. Über
+              Der Betrag wird im Haben gebucht und steht als Guthaben zur Verfügung. Über
               „… verrechnen“ im Zahlungsdialog einer Rechnung kann er später zugeordnet werden.
             </div>
             <div class="d-flex justify-end mt-2">
@@ -74,21 +83,24 @@
             </div>
           </v-card>
 
-          <v-table v-if="entries.length" density="compact">
+          <v-table v-if="entries.length" density="compact" class="zebra-table ledger-table">
             <thead>
               <tr>
                 <th class="text-no-wrap">Datum</th>
                 <th>Art</th>
-                <th>Beschreibung</th>
-                <th class="text-right">Betrag</th>
-                <th class="text-right">Saldo</th>
-                <th>Benutzer</th>
+                <th style="min-width: 280px">Beschreibung</th>
+                <th class="text-right">Soll</th>
+                <th class="text-right">Haben</th>
+                <th style="width: 1%"></th>
+                <th class="text-right saldo-col">Saldo</th>
+                <th class="text-disabled">Benutzer</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="e in entries" :key="e.id">
+              <tr v-for="(e, i) in entries" :key="e.id"
+                :class="{ 'current-row': i === entries.length - 1 }">
                 <td class="text-no-wrap">{{ fmtDate(e.entry_date) }}</td>
-                <td>
+                <td class="text-no-wrap">
                   <v-chip size="x-small" :color="typeColor(e)"
                     :prepend-icon="e.is_reversal ? 'mdi-file-undo' : undefined">
                     {{ typeLabel(e) }}
@@ -99,10 +111,38 @@
                     {{ e.description }}
                   </a>
                   <template v-else>{{ e.description }}</template>
+                  <span v-if="e.method_display" class="text-medium-emphasis">
+                    · {{ e.method_display }}</span>
+                  <span v-if="e.note" class="text-medium-emphasis"> · {{ e.note }}</span>
+                  <div v-if="e.is_reversed" class="text-deep-orange">storniert</div>
+                  <div v-else-if="openLabel(e)" class="text-medium-emphasis">{{ openLabel(e) }}</div>
                 </td>
-                <td class="text-right" :class="balanceClass(e.amount)">{{ fmtEuro(e.amount) }}</td>
-                <td class="text-right">{{ fmtEuro(e.running_balance) }}</td>
-                <td class="text-caption">{{ e.actor || '—' }}</td>
+                <td class="text-right text-no-wrap">
+                  <template v-if="Number(e.amount) > 0">{{ fmtEuro(e.amount) }}</template>
+                </td>
+                <td class="text-right text-no-wrap">
+                  <template v-if="Number(e.amount) < 0">{{ fmtEuro(-Number(e.amount)) }}</template>
+                </td>
+                <!-- Next to Haben: the action belongs to the payment amount. -->
+                <td class="text-right text-no-wrap">
+                  <v-tooltip v-if="e.entry_type === 'payment' && !e.is_reversed" text="Zahlung stornieren">
+                    <template #activator="{ props: tip }">
+                      <v-icon v-bind="tip" size="small" color="error" @click="startReversal(e)">
+                        mdi-cash-remove
+                      </v-icon>
+                    </template>
+                  </v-tooltip>
+                </td>
+                <td class="text-right text-no-wrap saldo-col" :class="balanceClass(e.running_balance)">
+                  {{ fmtEuro(e.running_balance) }}
+                  <!-- The last row's Saldo is the account's current balance. -->
+                  <div v-if="i === entries.length - 1 && balanceState(e.running_balance)"
+                    class="text-caption">
+                    {{ balanceState(e.running_balance) }}
+                  </div>
+                </td>
+                <!-- Audit information only: dimmed so it doesn't compete with the amounts. -->
+                <td class="text-caption text-no-wrap text-disabled">{{ e.actor || '—' }}</td>
               </tr>
             </tbody>
           </v-table>
@@ -116,6 +156,8 @@
         <v-spacer />
         <v-btn @click="model = false">Schließen</v-btn>
       </v-card-actions>
+
+      <PaymentReversalDialog v-model="reversalOpen" :payment="reversalPayment" @reversed="onReversed" />
     </v-card>
   </v-dialog>
 </template>
@@ -125,6 +167,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 import NumberInput from './NumberInput.vue'
+import PaymentReversalDialog from './PaymentReversalDialog.vue'
 import { extractErrorMessage } from '../utils/errorMessage'
 
 const props = defineProps({
@@ -144,7 +187,6 @@ const model = computed({
 const loading = ref(false)
 const error = ref('')
 const entries = ref([])
-const balance = ref('0.00')
 
 // Credit is never booked as a payment — it is applied from the invoice side.
 const methods = [
@@ -159,18 +201,60 @@ const saving = ref(false)
 const saveError = ref('')
 const form = ref({ payment_date: '', amount: null, method: 'transfer', note: '' })
 
+const reversalOpen = ref(false)
+const reversalPayment = ref(null)
+// The reversed payment, kept to offer booking the right one.
+const reversedNotice = ref(null)
+
 const canSave = computed(
   () => !!form.value.payment_date && Number(form.value.amount) > 0)
 
-function startRecording() {
+function startRecording(prefill = {}) {
   form.value = {
     payment_date: new Date().toISOString().slice(0, 10),
     amount: null,
     method: 'transfer',
     note: '',
+    ...prefill,
   }
   saveError.value = ''
   recording.value = true
+}
+
+// Payments are never deleted: a Zahlung Storno cancels a wrong one.
+function startReversal(e) {
+  reversalPayment.value = {
+    id: e.id,
+    amount: -Number(e.amount),
+    date: e.entry_date,
+    label: e.description,
+  }
+  reversalOpen.value = true
+}
+
+async function onReversed() {
+  const reversed = reversalPayment.value
+  const entry = entries.value.find((x) => x.id === reversed.id)
+  reversedNotice.value = {
+    invoiceNumber: entry?.invoice_number || null,
+    date: entry?.entry_date,
+    method: entry?.method || 'transfer',
+  }
+  recording.value = false
+  await loadLedger()
+  emit('changed')
+}
+
+// Same date and method as the wrong payment; only the amount is left to enter.
+function recordCorrection() {
+  const n = reversedNotice.value
+  reversedNotice.value = null
+  startRecording({ payment_date: n.date, method: n.method })
+}
+
+function openInvoice(number) {
+  model.value = false
+  router.push({ path: '/invoices', query: { q: number } })
 }
 
 async function savePayment() {
@@ -178,7 +262,7 @@ async function savePayment() {
   saving.value = true
   saveError.value = ''
   try {
-    // No invoice: the payment raises the balance and becomes available credit.
+    // No invoice: the payment is Haben, settles nothing yet and is credit.
     await api.post('/payments/', {
       customer: props.customerId,
       payment_date: form.value.payment_date,
@@ -202,7 +286,6 @@ async function loadLedger() {
   try {
     const res = await api.get(`/customers/${props.customerId}/ledger/`)
     entries.value = res.data.entries || []
-    balance.value = res.data.balance
   } catch (err) {
     error.value = extractErrorMessage(err, 'Kundenkonto konnte nicht geladen werden.')
   } finally {
@@ -214,6 +297,7 @@ watch(() => props.modelValue, async (open) => {
   if (!open || !props.customerId) return
   recording.value = false
   saveError.value = ''
+  reversedNotice.value = null
   await loadLedger()
 }, { immediate: true })
 
@@ -254,14 +338,34 @@ function typeColor(e) {
 
 function typeLabel(e) {
   if (!e.is_reversal) return e.entry_type_display
+  if (e.entry_type === 'payment_reversal') return e.entry_type_display // „Zahlung Storno“
   return e.entry_type === 'reminder_fee' ? 'Storno Gebühr' : 'Storno'
+}
+
+// Positive = Soll: the customer owes us.  Negative = credit.
+function balanceState(v) {
+  const n = Number(v ?? 0)
+  if (n > 0) return 'offen'
+  if (n < 0) return 'Guthaben'
+  return ''
 }
 
 function balanceClass(v) {
   const n = Number(v ?? 0)
-  if (n < 0) return 'text-error'
-  if (n > 0) return 'text-success'
+  if (n > 0) return 'text-error'
+  if (n < 0) return 'text-success'
   return ''
+}
+
+// What of an entry is not yet settled (a charge) or not yet used (money in).
+// Stornos are always settled against what they cancel, so they never show one.
+function openLabel(e) {
+  const open = Number(e.open_amount ?? 0)
+  if (open <= 0 || e.is_reversal) return ''
+  if (Number(e.amount) > 0) {
+    return open === Number(e.amount) ? 'offen' : `davon offen: ${fmtEuro(open)}`
+  }
+  return `nicht zugeordnet: ${fmtEuro(open)}`
 }
 
 function fmtDate(d) {
@@ -273,3 +377,21 @@ function fmtEuro(v) {
   return `${Number(v ?? 0).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 }
 </script>
+
+<style scoped>
+/* The running Saldo is what the account is about: set it apart from the
+   Soll/Haben columns. */
+.saldo-col {
+  font-weight: 500;
+  border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+/* The last row's Saldo is the current balance.  Set on the cells and specific
+   enough to beat the global zebra stripe; hover (!important) still wins. */
+.ledger-table tbody tr.current-row:last-child td {
+  background-color: rgba(var(--v-theme-on-surface), 0.12);
+}
+.current-row .saldo-col {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+</style>

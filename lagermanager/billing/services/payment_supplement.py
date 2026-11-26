@@ -16,7 +16,13 @@ from contextvars import ContextVar
 
 from django.contrib.contenttypes.models import ContentType
 
-from billing.models import DocumentAttachment, Invoice, Reminder
+from billing.models import (
+    CustomerLedgerEntry,
+    DocumentAttachment,
+    Invoice,
+    LedgerAllocation,
+    Reminder,
+)
 
 PAYMENTS_KIND = 'payments'
 
@@ -42,10 +48,14 @@ def _allow_system_delete() -> Generator[None, None, None]:
 
 def needs_payment_supplement(invoice: Invoice) -> bool:
     """True once the invoice has a payment or a reminder that was issued."""
-    return (
-        invoice.payments.exists()
-        or invoice.reminders.exclude(status=Reminder.Status.DRAFT).exists()
+    has_payment = (
+        LedgerAllocation.objects
+        .filter(debit_entry__invoice=invoice, debit_entry__amount__gt=0,
+                debit_entry__entry_type__in=CustomerLedgerEntry.CHARGE_TYPES)
+        .exclude(credit_entry__entry_type__in=CustomerLedgerEntry.REVERSAL_TYPES)
+        .exists()
     )
+    return has_payment or invoice.reminders.exclude(status=Reminder.Status.DRAFT).exists()
 
 
 def sync_payment_supplement(invoice: Invoice) -> DocumentAttachment | None:

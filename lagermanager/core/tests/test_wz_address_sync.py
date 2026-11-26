@@ -199,7 +199,7 @@ class SyncCreatesCustomersTests(TestCase):
 
 
 class SyncAfterBackfillTests(TestCase):
-    """The sync must reuse customers that backfill_customers_and_ledger created.
+    """The sync must reuse customers the (since removed) backfill command created.
 
     Regression: the backfill gave every address a customer without a
     wz_source_id, and the sync, which looked customers up by wz_source_id only,

@@ -139,22 +139,36 @@ Jeder Kunde kann **mehrere Adressen** haben (z. B. Rechnungs- und Lieferadresse)
 Menü **Stammdaten → Kunden**:
 
 - Jeder Kunde erhält automatisch eine **Kundennummer** (K0001, K0002, …), die auch auf der Rechnung erscheint.
-- Die Spalte **Saldo** zeigt den Kontostand: **rot/negativ** = der Kunde schuldet Geld,
-  **grün/positiv** = der Kunde hat ein **Guthaben**.
-- Das Symbol **Kundenkonto** (Buch) listet alle Bewegungen mit Datum, Betrag, laufendem Saldo und
-  Benutzer auf. Ein Klick auf eine Bewegung öffnet die gefilterte Rechnungs- bzw. Mahnungsliste.
+- Die Spalte **Saldo** zeigt den Kontostand wie in der Buchhaltung: **rot/positiv** = der Kunde
+  schuldet Geld (Soll), **grün/negativ** = der Kunde hat ein **Guthaben** (Haben).
+- Das Symbol **Kundenkonto** (Buch) listet alle Bewegungen mit Datum, **Soll**, **Haben**, laufendem
+  Saldo und Benutzer auf. Ein Klick auf eine Bewegung öffnet die gefilterte Rechnungs- bzw.
+  Mahnungsliste. Unter der Beschreibung steht, was noch **offen** ist (bei Rechnungen und
+  Mahngebühren) bzw. was von einer Zahlung noch **nicht zugeordnet** ist – das ist das Guthaben.
 
 Der Saldo ergibt sich automatisch:
 
-| Vorgang | Wirkung auf den Saldo |
-|---------|------------------------|
-| Rechnung ausstellen | − Rechnungsbetrag (brutto) |
-| Mahnung mit Gebühr ausstellen | − Mahngebühr |
-| Zahlung erfassen | + Zahlbetrag |
-| Rechnung stornieren | Rechnungsbetrag und Mahngebühren werden gutgeschrieben |
+| Vorgang | Buchung | Wirkung auf den Saldo |
+|---------|---------|------------------------|
+| Rechnung ausstellen | Soll | + Rechnungsbetrag (brutto) |
+| Mahnung mit Gebühr ausstellen | Soll | + Mahngebühr |
+| Zahlung erfassen | Haben | − Zahlbetrag |
+| Zahlung stornieren | Soll | + Zahlbetrag |
+| Rechnung stornieren | Haben | Rechnungsbetrag und Mahngebühren werden gutgeschrieben |
 
-**Anzahlung erfassen:** im Kundenkonto auf **Zahlung erfassen** klicken. Der Betrag erhöht den Saldo
-und steht als **Guthaben** bereit, ohne einer Rechnung zugeordnet zu sein.
+Jede Zahlung wird den offenen Posten **zugeordnet**, die sie begleicht: eine Zahlung zu einer
+Rechnung zuerst den Mahngebühren (älteste Mahnstufe zuerst), dann dem Rechnungsbetrag – so sieht es
+§ 1416 ABGB vor, wenn nichts anderes vereinbart ist. Was übrig bleibt, ist Guthaben.
+
+**Anzahlung erfassen:** im Kundenkonto auf **Zahlung erfassen** klicken. Der Betrag wird im Haben
+gebucht und steht als **Guthaben** bereit, ohne einer Rechnung zugeordnet zu sein.
+
+**Falsch erfasste Zahlung korrigieren:** Zahlungen werden nie gelöscht oder geändert. Über das
+Symbol **Zahlung stornieren** (im Kundenkonto oder im Zahlungsdialog der Rechnung) wird mit einem
+Pflicht-**Stornierungsgrund** eine **Zahlung Storno** im Soll gebucht, die die Zahlung aufhebt. Beide
+Zeilen bleiben im Kundenkonto stehen; die Zahlung ist als *storniert* markiert. Was sie beglichen
+hat, ist danach wieder offen, und sie zählt nicht mehr als Guthaben. Anschließend wird die richtige
+Zahlung neu erfasst – der Dialog bietet das direkt an.
 
 > Beim Anlegen einer Adresse ohne Kunden wird automatisch ein passender Kunde erzeugt. Beim
 > WZ-Abgleich erhält jede importierte Adresse ebenfalls einen eigenen Kunden.
@@ -343,8 +357,11 @@ Das **Rechnungsdatum** wird dabei automatisch auf das heutige Datum gesetzt. Im 
 ![Dialog „Rechnung ausstellen" mit Fälligkeitsdatum](img/fakturierung/18-rechnung-ausstellen.png)
 
 Hat der Kunde ein **Guthaben**, wird es beim Ausstellen automatisch verrechnet. Der Dialog zeigt vorher, wie viel verrechnet wird und was zu zahlen
-bleibt. Die Verrechnung erscheint unter [Zahlungen](#64-zahlungen-erfassen-auch-teilzahlungen) als
-Eintrag mit der Zahlungsart **Guthaben** und kann dort wieder gelöscht werden.
+bleibt. Verrechnet wird das älteste noch freie Geld zuerst. Die Verrechnung erscheint unter
+[Zahlungen](#64-zahlungen-erfassen-auch-teilzahlungen) als Eintrag mit der Zahlungsart
+**Guthaben** und kann dort über das Pfeil-Symbol **rückgängig gemacht** werden – das Geld bleibt dabei
+beim Kunden und ist wieder Guthaben. Der Saldo ändert sich durch eine Verrechnung nicht: das Geld
+wurde schon beim Erfassen der Zahlung gebucht und wird nur der Rechnung zugeordnet.
 
 ### 6.4 Zahlungen erfassen (auch Teilzahlungen)
 
@@ -354,13 +371,19 @@ sobald die Summe der Zahlungen den offenen Betrag erreicht oder übersteigt.
 Über das Symbol **Zahlungen** (Geldscheine) öffnet sich ein Dialog mit:
 
 - **Rechnungsbetrag**, etwaigen **Mahngebühren**, **bereits bezahlt** und dem **offenen Betrag**,
-- einer Liste aller bisher erfassten Zahlungen (Datum, Betrag, Zahlungsart, Notiz) – einzelne
-  Zahlungen können hier auch wieder gelöscht werden,
+- einer Liste aller bisher erfassten Zahlungen (Datum, Betrag, Zahlungsart, Notiz) – eine falsch
+  erfasste Zahlung kann hier **storniert** werden (siehe [Kunden](#30-kunden)); stornierte Zahlungen
+  bleiben durchgestrichen sichtbar,
 - einem Formular zum Erfassen einer neuen Zahlung. Der Betrag ist mit dem offenen Betrag vorbelegt;
   über **Restbetrag übernehmen** lässt er sich jederzeit wieder darauf setzen.
 
-Wird eine Zahlung gelöscht, wird die Rechnung entsprechend wieder geöffnet. Zahlt ein Kunde **mehr**
-als die Forderung, bleibt die Rechnung bezahlt und der Überhang wird zum **Guthaben** des Kunden.
+Eine Teilzahlung begleicht zuerst die **Mahngebühren**, dann den Rechnungsbetrag.
+
+Wird eine Zahlung storniert, wird die Rechnung entsprechend wieder geöffnet – ebenso jede andere
+Rechnung, mit der ihr Überhang schon verrechnet wurde. Die Zahlungsübersicht führt stornierte
+Zahlungen nicht auf. Zahlt ein Kunde **mehr** als die Forderung,
+bleibt die Rechnung bezahlt und der Überhang wird zum **Guthaben** des Kunden; in der Liste steht
+dann z. B. „120,00 € von 150,00 €".
 
 Die Spalte **Offen** in der Rechnungsliste zeigt den noch offenen Betrag inklusive Mahngebühren.
 
@@ -385,6 +408,9 @@ Eine ausgestellte Rechnung kann nicht gelöscht, aber **storniert** werden:
 4. **Stornieren**.
 
 Es entsteht eine **Stornorechnung**, die mit dem Bezug zur Originalrechnung (↩) verknüpft wird.
+Sie gleicht die Originalrechnung im Kundenkonto aus. Wurde auf die Rechnung schon etwas bezahlt,
+wird dieses Geld dem Kunden als **Guthaben** zurückgegeben und kann mit einer anderen Rechnung
+verrechnet werden.
 
 ![Dialog „Rechnung stornieren"](img/fakturierung/17-rechnung-stornieren.png)
 
@@ -643,6 +669,7 @@ Kurze Übersicht der Änderungen an der Fakturierung seit der letzten größeren
 
 | Datum | Änderung |
 |-------|----------|
+| November 2026 | **Kundenkonto** wie in der Buchhaltung: Rechnungen und Mahngebühren stehen im **Soll** (positiv), Zahlungen und Stornos im **Haben** (negativ); ein positiver Saldo ist eine offene Forderung, ein negativer ein Guthaben. Jede Zahlung wird den Posten zugeordnet, die sie begleicht – Mahngebühren zuerst. Verrechnetes Guthaben lässt sich im Zahlungsdialog rückgängig machen; beim Stornieren wird bereits bezahltes Geld zu Guthaben. Falsch erfasste Zahlungen werden nicht mehr gelöscht, sondern mit Grund **storniert** (Zahlung Storno im Soll). |
 | November 2026 | Neu: Menü **Hilfe** – dieses Handbuch lässt sich über **Hilfe → Handbuch Fakturierung** direkt in der Anwendung lesen, in einer verstellbaren Seitenleiste oder in einem eigenen Tab, und ist dort immer auf dem aktuellen Stand. Der Punkt **Über** ist vom Menü System nach Hilfe gewandert. |
 | November 2026 | Beim Anklicken eines **Zahlenfelds** (z. B. Menge, Preis) wird der Inhalt markiert, so dass ein neuer Wert oder eine Formel ihn direkt überschreibt. |
 | November 2026 | Im Angebots- und Rechnungsdialog sind **Kunde** und **Adresse** jeweils mit ihren aufklappbaren Details eingerahmt („anzeigen & bearbeiten", Schaltflächen **Kunde bearbeiten** / **Adresse bearbeiten**); beide Dialoge sind jetzt gleich aufgebaut. Das Positionsfeld **Beschreibung** heißt nun **Rechnungstext**. |

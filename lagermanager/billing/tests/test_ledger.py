@@ -1,6 +1,11 @@
-"""Tests for the customer ledger — balances, charges, credit."""
+"""Tests for the customer ledger — balances, charges, allocations, credit.
+
+Sign convention throughout: positive = Soll (the customer owes), negative =
+Haben (money in, Storno).  A positive balance is what the customer owes.
+"""
 import datetime
 from decimal import Decimal
+from typing import Any
 
 from core.models import Address, Customer
 from core.services.customers import ensure_customer_for_address
@@ -11,7 +16,7 @@ from billing.models import (
     CustomerLedgerEntry,
     Invoice,
     InvoiceLine,
-    Payment,
+    LedgerAllocation,
     Reminder,
 )
 from billing.services import ledger
@@ -35,6 +40,8 @@ def _make_invoice(
     unit_price: str = '100.00',
     status: str = Invoice.Status.ISSUED,
     number: str = 'RE260601-00001',
+    quantity: str = '1',
+    reverses: Invoice | None = None,
 ) -> Invoice:
     invoice = Invoice.objects.create(
         customer=customer,
@@ -43,16 +50,46 @@ def _make_invoice(
         document_date=datetime.date(2026, 6, 15),
         due_date=datetime.date(2026, 6, 29),
         status=status,
+        reverses=reverses,
     )
     InvoiceLine.objects.create(
         invoice=invoice,
         position=1,
         description='Leistung',
-        quantity=Decimal('1'),
+        quantity=Decimal(quantity),
         unit_price=Decimal(unit_price),
         tax_rate=tax,
     )
     return invoice
+
+
+def _make_storno(invoice: Invoice, tax: TaxRate, unit_price: str = '100.00') -> Invoice:
+    assert invoice.customer is not None
+    return _make_invoice(invoice.customer, tax, unit_price=unit_price,
+                         number='RE260601-00099', quantity='-1', reverses=invoice)
+
+
+def _issue_reminder(invoice: Invoice, fee: str = '12.00', level: int = 1) -> Reminder:
+    reminder = Reminder.objects.create(
+        invoice=invoice,
+        level=level,
+        number=f'MA26070{level}',
+        status=Reminder.Status.ISSUED,
+        reminder_date=datetime.date(2026, 7, level),
+        due_date=datetime.date(2026, 7, 15),
+        fee=Decimal(fee),
+    )
+    ledger.record_reminder_issued(reminder)
+    return reminder
+
+
+def _pay(customer: Customer, amount: str, *, invoice: Invoice | None = None,
+         date: datetime.date = datetime.date(2026, 7, 1)) -> CustomerLedgerEntry:
+    return ledger.record_payment(customer, date, Decimal(amount), invoice=invoice)
+
+
+def _fresh(invoice: Invoice) -> Invoice:
+    return Invoice.objects.get(pk=invoice.pk)
 
 
 class CustomerBalanceTests(TestCase):
@@ -61,42 +98,33 @@ class CustomerBalanceTests(TestCase):
         self.customer = _make_customer()
 
     def test_fresh_customer_starts_at_zero(self) -> None:
+        """A customer without movements has neither a balance nor credit."""
         self.assertEqual(ledger.customer_balance(self.customer), Decimal('0.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
 
     def test_issued_invoice_charges_the_customer(self) -> None:
+        """An issued invoice is Soll: the balance rises by its gross total."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-120.00'))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('120.00'))
 
-    def test_payment_raises_the_balance(self) -> None:
+    def test_payment_lowers_the_balance(self) -> None:
+        """A payment is Haben and brings the balance back to 0."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        payment = Payment.objects.create(
-            customer=self.customer,
-            invoice=invoice,
-            payment_date=datetime.date(2026, 7, 1),
-            amount=Decimal('120.00'),
-        )
-        ledger.record_payment(payment)
+        entry = _pay(self.customer, '120.00', invoice=invoice)
+        self.assertEqual(entry.amount, Decimal('-120.00'))
         self.assertEqual(ledger.customer_balance(self.customer), Decimal('0.00'))
 
-    def test_issued_reminder_fee_lowers_the_balance(self) -> None:
+    def test_issued_reminder_fee_raises_the_balance(self) -> None:
+        """A reminder fee is a further Soll entry on top of the invoice."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        reminder = Reminder.objects.create(
-            invoice=invoice,
-            level=1,
-            number='MA260701',
-            status=Reminder.Status.ISSUED,
-            reminder_date=datetime.date(2026, 7, 1),
-            due_date=datetime.date(2026, 7, 15),
-            fee=Decimal('12.00'),
-        )
-        ledger.record_reminder_issued(reminder)
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-132.00'))
+        _issue_reminder(invoice)
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('132.00'))
 
     def test_reminder_without_fee_books_nothing(self) -> None:
+        """No fee, no movement — a zero entry would only clutter the account."""
         invoice = _make_invoice(self.customer, self.tax)
         reminder = Reminder.objects.create(
             invoice=invoice,
@@ -107,48 +135,25 @@ class CustomerBalanceTests(TestCase):
         )
         self.assertIsNone(ledger.record_reminder_issued(reminder))
 
-    def test_storno_restores_the_balance(self) -> None:
-        """A reversal invoice has negated lines, so its charge is positive."""
+    def test_cancellation_restores_the_balance(self) -> None:
+        """The Storno has negated lines, so its entry is Haben and cancels the charge."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        storno = Invoice.objects.create(
-            customer=self.customer,
-            address=self.customer.default_address,
-            number='RE260601-00002',
-            document_date=datetime.date(2026, 6, 20),
-            due_date=datetime.date(2026, 6, 20),
-            reverses=invoice,
-            status=Invoice.Status.ISSUED,
-        )
-        InvoiceLine.objects.create(
-            invoice=storno,
-            position=1,
-            description='Leistung',
-            quantity=Decimal('-1'),
-            unit_price=Decimal('100.00'),
-            tax_rate=self.tax,
-        )
-        ledger.record_invoice_issued(storno)
+        ledger.record_cancellation(invoice, _make_storno(invoice, self.tax))
         self.assertEqual(ledger.customer_balance(self.customer), Decimal('0.00'))
 
-    def test_reverse_reminder_fees_credits_them_back(self) -> None:
+    def test_cancellation_credits_the_reminder_fees_back(self) -> None:
+        """The Storno only covers the invoice amount; fees are reversed separately."""
         invoice = _make_invoice(self.customer, self.tax)
-        reminder = Reminder.objects.create(
-            invoice=invoice,
-            level=1,
-            number='MA260701',
-            status=Reminder.Status.ISSUED,
-            reminder_date=datetime.date(2026, 7, 1),
-            due_date=datetime.date(2026, 7, 15),
-            fee=Decimal('12.00'),
-        )
-        ledger.record_reminder_issued(reminder)
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-12.00'))
+        ledger.record_invoice_issued(invoice)
+        _issue_reminder(invoice)
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('132.00'))
 
-        ledger.reverse_reminder_fees(invoice)
+        ledger.record_cancellation(invoice, _make_storno(invoice, self.tax))
         self.assertEqual(ledger.customer_balance(self.customer), Decimal('0.00'))
 
     def test_draft_reminder_fee_is_not_reversed(self) -> None:
+        """A draft's fee was never charged, so cancelling must not credit it back."""
         invoice = _make_invoice(self.customer, self.tax)
         Reminder.objects.create(
             invoice=invoice,
@@ -157,7 +162,9 @@ class CustomerBalanceTests(TestCase):
             due_date=datetime.date(2026, 7, 15),
             fee=Decimal('12.00'),
         )
-        self.assertEqual(ledger.reverse_reminder_fees(invoice), [])
+        ledger.record_cancellation(invoice, _make_storno(invoice, self.tax))
+        self.assertFalse(CustomerLedgerEntry.objects.filter(
+            entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE).exists())
 
 
 class AvailableCreditTests(TestCase):
@@ -166,18 +173,15 @@ class AvailableCreditTests(TestCase):
         self.customer = _make_customer()
 
     def test_credit_is_zero_while_the_customer_owes_money(self) -> None:
+        """An open invoice alone gives no credit."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-120.00'))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('120.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
 
     def test_prepayment_becomes_credit(self) -> None:
-        payment = Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 6, 1),
-            amount=Decimal('50.00'),
-        )
-        ledger.record_payment(payment)
+        """A payment without an invoice is unallocated, so all of it is credit."""
+        _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('50.00'))
 
 
@@ -185,50 +189,60 @@ class ApplyCreditTests(TestCase):
     def setUp(self) -> None:
         self.tax = _make_tax()
         self.customer = _make_customer()
-        prepayment = Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 6, 1),
-            amount=Decimal('50.00'),
-        )
-        ledger.record_payment(prepayment)
+        _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
 
     def test_applying_credit_does_not_double_count_it(self) -> None:
-        """The credit is already on the ledger; earmarking it must not re-book it."""
+        """The credit is already on the ledger; applying it only allocates it."""
         invoice = _make_invoice(self.customer, self.tax, unit_price='100.00')
         ledger.record_invoice_issued(invoice)
-        # 50 credit − 120 invoice
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-70.00'))
+        # 120 invoice − 50 credit
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('70.00'))
 
         ledger.apply_credit(invoice, Decimal('50.00'), datetime.date(2026, 6, 15))
-        invoice.refresh_from_db()
+        invoice = _fresh(invoice)
 
         # The balance is unchanged — the money was already counted …
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-70.00'))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('70.00'))
         # … but the invoice is now partly settled.
         self.assertEqual(invoice.paid_amount, Decimal('50.00'))
         self.assertEqual(invoice.open_amount, Decimal('70.00'))
 
-    def test_credit_payment_books_no_ledger_entry(self) -> None:
+    def test_applying_credit_books_an_allocation_not_an_entry(self) -> None:
+        """No new ledger movement; one allocation from the prepayment to the invoice."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        payment = ledger.apply_credit(invoice, Decimal('50.00'))
-        self.assertFalse(payment.affects_balance)
-        self.assertFalse(
-            CustomerLedgerEntry.objects.filter(payment=payment).exists())
+        entries_before = CustomerLedgerEntry.objects.count()
+
+        ledger.apply_credit(invoice, Decimal('50.00'))
+
+        self.assertEqual(CustomerLedgerEntry.objects.count(), entries_before)
+        allocation = LedgerAllocation.objects.get()
+        self.assertEqual(allocation.amount, Decimal('50.00'))
+        self.assertEqual(allocation.debit_entry.invoice_id, invoice.pk)
+
+    def test_without_an_amount_it_applies_as_much_as_possible(self) -> None:
+        """amount=None takes the smaller of credit and open amount."""
+        invoice = _make_invoice(self.customer, self.tax, unit_price='20.00')
+        ledger.record_invoice_issued(invoice)  # 24.00 gross
+        self.assertEqual(ledger.apply_credit(invoice), Decimal('24.00'))
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('26.00'))
 
     def test_more_than_available_credit_is_rejected(self) -> None:
+        """Only 50 are available; asking for 80 must fail, not over-allocate."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
         with self.assertRaises(ledger.CreditError):
             ledger.apply_credit(invoice, Decimal('80.00'))
 
     def test_more_than_the_open_amount_is_rejected(self) -> None:
+        """Credit beyond what the invoice still owes is refused."""
         invoice = _make_invoice(self.customer, self.tax, unit_price='20.00')
         ledger.record_invoice_issued(invoice)  # 24.00 gross
         with self.assertRaises(ledger.CreditError):
             ledger.apply_credit(invoice, Decimal('50.00'))
 
     def test_zero_or_negative_is_rejected(self) -> None:
+        """An explicit zero amount is an error, not a silent no-op."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
         with self.assertRaises(ledger.CreditError):
@@ -236,34 +250,24 @@ class ApplyCreditTests(TestCase):
 
 
 class AvailableCreditEdgeCaseTests(TestCase):
-    """available_credit is unconsumed money, not simply a positive balance."""
+    """available_credit is unallocated money, not simply a negative balance."""
 
     def setUp(self) -> None:
         self.tax = _make_tax()
         self.customer = _make_customer()
 
     def test_prepayment_stays_available_while_an_invoice_is_outstanding(self) -> None:
-        prepayment = Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 6, 1),
-            amount=Decimal('50.00'),
-        )
-        ledger.record_payment(prepayment)
+        """The customer owes overall, yet the prepayment is still unallocated."""
+        _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
 
-        # The customer owes money overall …
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-70.00'))
-        # … but the prepayment is still unused and can be earmarked.
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('70.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('50.00'))
 
     def test_credit_cannot_be_applied_twice(self) -> None:
-        prepayment = Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 6, 1),
-            amount=Decimal('50.00'),
-        )
-        ledger.record_payment(prepayment)
+        """Once allocated, the same money is not available for a second invoice."""
+        _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
 
@@ -276,76 +280,279 @@ class AvailableCreditEdgeCaseTests(TestCase):
             ledger.apply_credit(second, Decimal('50.00'))
 
     def test_overpayment_stays_available(self) -> None:
+        """Only 120 can be allocated to the invoice; the other 30 stay credit."""
         invoice = _make_invoice(self.customer, self.tax)  # 120.00 gross
         ledger.record_invoice_issued(invoice)
-        payment = Payment.objects.create(
-            customer=self.customer,
-            invoice=invoice,
-            payment_date=datetime.date(2026, 7, 1),
-            amount=Decimal('150.00'),
-        )
-        ledger.record_payment(payment)
+        _pay(self.customer, '150.00', invoice=invoice)
 
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('30.00'))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-30.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('30.00'))
+        self.assertEqual(_fresh(invoice).paid_amount, Decimal('120.00'))
 
     def test_a_fully_paid_invoice_consumes_its_payment(self) -> None:
+        """A payment of exactly the invoice total leaves no credit."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        payment = Payment.objects.create(
-            customer=self.customer,
-            invoice=invoice,
-            payment_date=datetime.date(2026, 7, 1),
-            amount=Decimal('120.00'),
-        )
-        ledger.record_payment(payment)
+        _pay(self.customer, '120.00', invoice=invoice)
         self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
 
     def test_cancelling_a_paid_invoice_frees_the_money_again(self) -> None:
+        """The Storno hands the money back: the payment is released to credit."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        payment = Payment.objects.create(
-            customer=self.customer,
-            invoice=invoice,
-            payment_date=datetime.date(2026, 7, 1),
-            amount=Decimal('120.00'),
-        )
-        ledger.record_payment(payment)
+        _pay(self.customer, '120.00', invoice=invoice)
         self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
 
-        invoice.status = Invoice.Status.CANCELLED
-        invoice.save(update_fields=['status'])
+        ledger.record_cancellation(invoice, _make_storno(invoice, self.tax))
+
         self.assertEqual(ledger.available_credit(self.customer), Decimal('120.00'))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-120.00'))
+        self.assertEqual(_fresh(invoice).paid_amount, Decimal('0.00'))
 
     def test_reminder_fee_is_consumed_by_a_payment_covering_it(self) -> None:
+        """Invoice plus fee paid in one amount: nothing owed, nothing left over."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
-        reminder = Reminder.objects.create(
-            invoice=invoice,
-            level=1,
-            number='MA260701',
-            status=Reminder.Status.ISSUED,
-            reminder_date=datetime.date(2026, 7, 1),
-            due_date=datetime.date(2026, 7, 15),
-            fee=Decimal('12.00'),
-        )
-        ledger.record_reminder_issued(reminder)
-        payment = Payment.objects.create(
-            customer=self.customer,
-            invoice=invoice,
-            payment_date=datetime.date(2026, 7, 20),
-            amount=Decimal('132.00'),
-        )
-        ledger.record_payment(payment)
+        _issue_reminder(invoice)
+        _pay(self.customer, '132.00', invoice=invoice, date=datetime.date(2026, 7, 20))
 
         self.assertEqual(ledger.customer_balance(self.customer), Decimal('0.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
 
 
+class AllocationTests(TestCase):
+    """Which money settles which charge."""
+
+    def setUp(self) -> None:
+        self.tax = _make_tax()
+        self.customer = _make_customer()
+        self.invoice = _make_invoice(self.customer, self.tax)  # 120.00
+        entry = ledger.record_invoice_issued(self.invoice)
+        assert entry is not None
+        self.invoice_entry: CustomerLedgerEntry = entry
+
+    def _open(self, entry: CustomerLedgerEntry) -> Decimal:
+        return ledger.entry_open_amount(CustomerLedgerEntry.objects.get(pk=entry.pk))
+
+    def test_a_partial_payment_settles_the_fees_first(self) -> None:
+        """§1416 ABGB: costs before principal — 50 settle the 12 fee, then 38 of the invoice."""
+        _issue_reminder(self.invoice)
+        fee_entry = CustomerLedgerEntry.objects.get(
+            entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE)
+
+        _pay(self.customer, '50.00', invoice=self.invoice)
+
+        self.assertEqual(self._open(fee_entry), Decimal('0.00'))
+        self.assertEqual(self._open(self.invoice_entry), Decimal('82.00'))
+        self.assertEqual(_fresh(self.invoice).paid_amount, Decimal('50.00'))
+
+    def test_older_dunning_levels_are_settled_first(self) -> None:
+        """With two fees, the level-1 fee is settled before the level-2 fee."""
+        _issue_reminder(self.invoice, fee='5.00', level=1)
+        _issue_reminder(self.invoice, fee='10.00', level=2)
+        _pay(self.customer, '8.00', invoice=self.invoice)
+
+        level1 = CustomerLedgerEntry.objects.get(reminder__level=1)
+        level2 = CustomerLedgerEntry.objects.get(reminder__level=2)
+        self.assertEqual(self._open(level1), Decimal('0.00'))
+        self.assertEqual(self._open(level2), Decimal('7.00'))
+
+    def test_credit_is_applied_from_the_oldest_payment_first(self) -> None:
+        """FIFO: 50 credit from a 30 and a 40 prepayment take all of the 30 first."""
+        older = _pay(self.customer, '30.00', date=datetime.date(2026, 6, 1))
+        newer = _pay(self.customer, '40.00', date=datetime.date(2026, 6, 5))
+
+        ledger.apply_credit(self.invoice, Decimal('50.00'))
+
+        self.assertEqual(self._open(older), Decimal('0.00'))
+        self.assertEqual(self._open(newer), Decimal('20.00'))
+
+    def test_allocations_never_exceed_either_side(self) -> None:
+        """A 200 payment on a 120 invoice allocates 120, not 200."""
+        payment = _pay(self.customer, '200.00', invoice=self.invoice)
+        self.assertEqual(LedgerAllocation.objects.get().amount, Decimal('120.00'))
+        self.assertEqual(self._open(payment), Decimal('80.00'))
+
+    def test_entries_of_different_customers_cannot_be_allocated(self) -> None:
+        """Money of one customer must never settle another customer's invoice."""
+        other = _make_customer(vorname='Erika')
+        payment = _pay(other, '50.00')
+        with self.assertRaises(ledger.CreditError):
+            ledger.allocate(self.invoice_entry, payment, Decimal('50.00'),
+                            datetime.date(2026, 7, 1))
+
+    def test_cancellation_settles_the_invoice_with_the_storno(self) -> None:
+        """After the Storno both entries are fully allocated against each other."""
+        storno = _make_storno(self.invoice, self.tax)
+        ledger.record_cancellation(self.invoice, storno)
+        storno_entry = CustomerLedgerEntry.objects.get(invoice=storno)
+
+        self.assertEqual(self._open(self.invoice_entry), Decimal('0.00'))
+        self.assertEqual(self._open(storno_entry), Decimal('0.00'))
+        # A Storno is not a payment.
+        self.assertEqual(_fresh(self.invoice).paid_amount, Decimal('0.00'))
+
+    def test_released_credit_is_available_again(self) -> None:
+        """Releasing applied credit removes the allocation and reopens the invoice."""
+        prepayment = _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
+        ledger.apply_credit(self.invoice, Decimal('50.00'))
+
+        released = ledger.release_credit(self.invoice, prepayment)
+
+        self.assertEqual(released, Decimal('50.00'))
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('50.00'))
+        self.assertEqual(_fresh(self.invoice).paid_amount, Decimal('0.00'))
+
+    def test_a_payment_booked_for_the_invoice_is_not_released(self) -> None:
+        """That payment is deleted instead — releasing it would leave a stray credit."""
+        payment = _pay(self.customer, '50.00', invoice=self.invoice)
+        with self.assertRaises(ledger.CreditError):
+            ledger.release_credit(self.invoice, payment)
+
+    def test_applied_payments_tell_payments_from_credit(self) -> None:
+        """A payment booked for the invoice is a payment; a prepayment applied to it is credit."""
+        _pay(self.customer, '20.00', date=datetime.date(2026, 6, 1))
+        ledger.apply_credit(self.invoice, Decimal('20.00'), datetime.date(2026, 6, 16))
+        _pay(self.customer, '30.00', invoice=self.invoice, date=datetime.date(2026, 7, 1))
+
+        rows = _fresh(self.invoice).applied_payments
+
+        self.assertEqual([(r.amount, r.is_credit) for r in rows],
+                         [(Decimal('20.00'), True), (Decimal('30.00'), False)])
+        # Credit rows carry the day it was applied, not the day it arrived.
+        self.assertEqual(rows[0].payment_date, datetime.date(2026, 6, 16))
+        self.assertEqual(rows[0].get_method_display(), 'Guthaben')
+
+
+class PaymentReversalTests(TestCase):
+    """A wrong payment is cancelled by a Zahlung Storno, never deleted."""
+
+    REVERSED_ON = datetime.date(2026, 7, 5)
+
+    def setUp(self) -> None:
+        self.tax = _make_tax()
+        self.customer = _make_customer()
+        self.invoice = _make_invoice(self.customer, self.tax)  # 120.00
+        ledger.record_invoice_issued(self.invoice)
+
+    def _reverse(self, payment: CustomerLedgerEntry,
+                 reason: str = 'Falscher Betrag') -> CustomerLedgerEntry:
+        return ledger.reverse_payment(payment, reason, self.REVERSED_ON)
+
+    def test_the_storno_is_a_soll_entry_cancelling_the_payment(self) -> None:
+        """+120 Soll, linked to the payment, reason as note, same invoice reference."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+
+        reversal = self._reverse(payment)
+
+        self.assertEqual(reversal.entry_type, CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL)
+        self.assertEqual(reversal.amount, Decimal('120.00'))
+        self.assertEqual(reversal.reverses_id, payment.pk)
+        self.assertEqual(reversal.note, 'Falscher Betrag')
+        self.assertEqual(reversal.invoice_id, self.invoice.pk)
+        self.assertEqual(reversal.entry_date, self.REVERSED_ON)
+        self.assertTrue(reversal.is_reversal)
+        self.assertTrue(CustomerLedgerEntry.objects.get(pk=payment.pk).is_reversed)
+
+    def test_the_payment_stays_on_the_account(self) -> None:
+        """Radierverbot: the payment is not deleted, so the account shows both lines."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        self._reverse(payment)
+        self.assertTrue(CustomerLedgerEntry.objects.filter(pk=payment.pk).exists())
+
+    def test_the_balance_returns_to_before_the_payment(self) -> None:
+        """120 owed, paid, reversed: 120 owed again."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        self._reverse(payment)
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('120.00'))
+
+    def test_the_invoice_reopens(self) -> None:
+        """The payment's allocation to the invoice is removed; the invoice is open again."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        ledger.recalculate_invoice_status(self.invoice)
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.PAID)
+
+        self._reverse(payment)
+
+        invoice = _fresh(self.invoice)
+        self.assertEqual(invoice.status, Invoice.Status.ISSUED)
+        self.assertEqual(invoice.paid_amount, Decimal('0.00'))
+        self.assertIsNone(invoice.paid_at)
+
+    def test_payment_and_storno_settle_each_other(self) -> None:
+        """Both end with nothing open; the money is not left behind as credit."""
+        payment = _pay(self.customer, '150.00', invoice=self.invoice)  # 30 overpaid
+        reversal = self._reverse(payment)
+
+        self.assertEqual(ledger.entry_open_amount(payment), Decimal('0.00'))
+        self.assertEqual(ledger.entry_open_amount(reversal), Decimal('0.00'))
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
+
+    def test_reversing_a_prepayment_takes_back_the_credit(self) -> None:
+        """A prepayment booked in error is no longer available as credit."""
+        prepayment = _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
+        self._reverse(prepayment)
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
+
+    def test_invoices_its_credit_settled_reopen_too(self) -> None:
+        """A prepayment applied to an invoice: reversing it reopens that invoice."""
+        prepayment = _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
+        ledger.apply_credit(self.invoice, Decimal('50.00'))
+        ledger.recalculate_invoice_status(self.invoice)
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.PARTIALLY_PAID)
+
+        self._reverse(prepayment)
+
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.ISSUED)
+        self.assertEqual(_fresh(self.invoice).open_amount, Decimal('120.00'))
+
+    def test_the_correct_payment_can_be_booked_afterwards(self) -> None:
+        """Storno plus new booking: 150 booked by mistake, 120 was right — the invoice is paid."""
+        wrong = _pay(self.customer, '150.00', invoice=self.invoice)
+        self._reverse(wrong)
+        _pay(self.customer, '120.00', invoice=self.invoice, date=self.REVERSED_ON)
+        ledger.recalculate_invoice_status(self.invoice)
+
+        self.assertEqual(_fresh(self.invoice).status, Invoice.Status.PAID)
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('0.00'))
+        self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
+
+    def test_a_reason_is_required(self) -> None:
+        """Like an invoice Storno, a payment Storno needs a reason for the account."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        with self.assertRaises(ledger.ReversalError):
+            self._reverse(payment, reason='   ')
+
+    def test_a_payment_is_reversed_only_once(self) -> None:
+        """A second Storno would take the money back twice."""
+        payment = _pay(self.customer, '120.00', invoice=self.invoice)
+        self._reverse(payment)
+        with self.assertRaises(ledger.ReversalError):
+            self._reverse(CustomerLedgerEntry.objects.get(pk=payment.pk))
+
+    def test_only_payments_can_be_reversed(self) -> None:
+        """Invoices are cancelled with an invoice Storno, not with this."""
+        entry = CustomerLedgerEntry.objects.get(invoice=self.invoice)
+        with self.assertRaises(ledger.ReversalError):
+            self._reverse(entry)
+
+    def test_reversed_payments_stay_in_the_payment_list_but_not_on_the_pdf(self) -> None:
+        """The dialog shows the reversed payment (why the invoice reopened); the
+        customer-facing reminder does not list it."""
+        payment = _pay(self.customer, '50.00', invoice=self.invoice)
+        self._reverse(payment)
+
+        rows = _fresh(self.invoice).applied_payments
+        self.assertEqual([(r.entry.pk, r.is_reversed, r.amount) for r in rows],
+                         [(payment.pk, True, Decimal('0.00'))])
+        reminder = _issue_reminder(self.invoice)
+        self.assertEqual(reminder.payments, [])
+
+
 class CreditWorkedExampleTests(TestCase):
     """The worked example in docs/fakturierung-handbuch.md, section 6.3.
 
-    Balance +10, issue an invoice of 5, settle it from the credit.  Pinned as a
+    Credit of 10, issue an invoice of 5, settle it from the credit.  Pinned as a
     test so the documented figures cannot drift away from the behaviour.
     """
 
@@ -355,32 +562,27 @@ class CreditWorkedExampleTests(TestCase):
         self.tax = TaxRate.objects.create(name='Ohne', percent=Decimal('0.00'))
 
     def test_worked_example(self) -> None:
-        prepayment = Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 9, 1),
-            amount=Decimal('10.00'),
-        )
-        ledger.record_payment(prepayment)
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('10.00'))
+        """Balance −10 → −5 after the invoice; applying credit leaves it at −5, invoice paid."""
+        _pay(self.customer, '10.00', date=datetime.date(2026, 9, 1))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-10.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('10.00'))
 
         invoice = _make_invoice(self.customer, self.tax, unit_price='5.00')
         ledger.record_invoice_issued(invoice)
-        # Issuing the invoice is what moves the balance — 10 − 5.
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('5.00'))
+        # Issuing the invoice is what moves the balance — −10 + 5.
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-5.00'))
         # The prepayment is untouched so far, so all of it is still applicable.
         self.assertEqual(ledger.available_credit(self.customer), Decimal('10.00'))
 
         ledger.apply_credit(invoice, Decimal('5.00'), datetime.date(2026, 9, 16))
-        invoice.refresh_from_db()
         ledger.recalculate_invoice_status(invoice)
-        invoice.refresh_from_db()
+        invoice = _fresh(invoice)
 
-        # Applying the credit books no further movement: the balance stays +5.
-        # Booking one would leave 0.00 and deduct the prepayment twice.
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('5.00'))
+        # Applying the credit books no further movement: the balance stays −5.
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-5.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('5.00'))
         self.assertEqual(invoice.status, Invoice.Status.PAID)
+        self.assertEqual(invoice.paid_at, datetime.date(2026, 9, 16))
         self.assertEqual(invoice.open_amount, Decimal('0.00'))
         # Exactly two movements: the prepayment and the invoice.
         self.assertEqual(
@@ -400,12 +602,7 @@ class SaldoVersusCreditOrderingTests(TestCase):
         self.tax = TaxRate.objects.create(name='Ohne', percent=Decimal('0.00'))
 
     def _prepay(self) -> None:
-        payment = Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 9, 1),
-            amount=Decimal('50.00'),
-        )
-        ledger.record_payment(payment)
+        _pay(self.customer, '50.00', date=datetime.date(2026, 9, 1))
 
     def _issue_invoice(self) -> Invoice:
         invoice = _make_invoice(self.customer, self.tax, unit_price='120.00')
@@ -413,36 +610,33 @@ class SaldoVersusCreditOrderingTests(TestCase):
         return invoice
 
     def test_credit_before_the_invoice_is_offset_immediately(self) -> None:
+        """Mirrors InvoiceViewSet.issue(): the prepayment is applied right away."""
         self._prepay()
         invoice = self._issue_invoice()
-        # Mirrors what InvoiceViewSet.issue() does after recording the charge.
         ledger.apply_credit(invoice, Decimal('50.00'), invoice.document_date)
-        invoice.refresh_from_db()
 
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-70.00'))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('70.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
-        self.assertEqual(invoice.open_amount, Decimal('70.00'))
+        self.assertEqual(_fresh(invoice).open_amount, Decimal('70.00'))
 
     def test_credit_after_the_invoice_stays_unassigned(self) -> None:
+        """Same saldo, but the money is not assigned to the invoice yet."""
         invoice = self._issue_invoice()
         self._prepay()
-        invoice.refresh_from_db()
 
-        # Same saldo as the other ordering …
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-70.00'))
-        # … but the money is not assigned to the invoice yet.
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('70.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('50.00'))
-        self.assertEqual(invoice.open_amount, Decimal('120.00'))
+        self.assertEqual(_fresh(invoice).open_amount, Decimal('120.00'))
 
     def test_offsetting_afterwards_reaches_the_same_state(self) -> None:
+        """Applying the credit later ends where the other ordering started."""
         invoice = self._issue_invoice()
         self._prepay()
         ledger.apply_credit(invoice, Decimal('50.00'), datetime.date(2026, 9, 20))
-        invoice.refresh_from_db()
 
-        self.assertEqual(ledger.customer_balance(self.customer), Decimal('-70.00'))
+        self.assertEqual(ledger.customer_balance(self.customer), Decimal('70.00'))
         self.assertEqual(ledger.available_credit(self.customer), Decimal('0.00'))
-        self.assertEqual(invoice.open_amount, Decimal('70.00'))
+        self.assertEqual(_fresh(invoice).open_amount, Decimal('70.00'))
 
 
 class IsReversalTests(TestCase):
@@ -454,75 +648,43 @@ class IsReversalTests(TestCase):
         self.invoice = _make_invoice(self.customer, self.tax)
 
     def test_a_normal_invoice_charge_is_not_a_reversal(self) -> None:
+        """An ordinary invoice entry is a plain charge."""
         entry = ledger.record_invoice_issued(self.invoice)
+        assert entry is not None
         self.assertFalse(entry.is_reversal)
 
     def test_a_storno_charge_is_a_reversal(self) -> None:
-        storno = Invoice.objects.create(
-            customer=self.customer,
-            address=self.customer.default_address,
-            number='RE260601-00002',
-            document_date=datetime.date(2026, 6, 20),
-            due_date=datetime.date(2026, 6, 20),
-            reverses=self.invoice,
-            status=Invoice.Status.ISSUED,
-        )
-        InvoiceLine.objects.create(
-            invoice=storno, position=1, description='Leistung',
-            quantity=Decimal('-1'), unit_price=Decimal('100.00'), tax_rate=self.tax,
-        )
-        entry = ledger.record_invoice_issued(storno)
+        """The Storno invoice's entry is flagged as a reversal."""
+        entry = ledger.record_invoice_issued(_make_storno(self.invoice, self.tax))
+        assert entry is not None
         self.assertTrue(entry.is_reversal)
 
     def test_a_charged_reminder_fee_is_not_a_reversal(self) -> None:
-        reminder = Reminder.objects.create(
-            invoice=self.invoice, level=1, number='MA1',
-            status=Reminder.Status.ISSUED,
-            reminder_date=datetime.date(2026, 7, 1),
-            due_date=datetime.date(2026, 7, 15),
-            fee=Decimal('12.00'),
-        )
-        entry = ledger.record_reminder_issued(reminder)
+        """A fee charged by a reminder is Soll, not a reversal."""
+        _issue_reminder(self.invoice)
+        entry = CustomerLedgerEntry.objects.get()
         self.assertFalse(entry.is_reversal)
 
     def test_a_credited_back_reminder_fee_is_a_reversal(self) -> None:
-        Reminder.objects.create(
-            invoice=self.invoice, level=1, number='MA1',
-            status=Reminder.Status.ISSUED,
-            reminder_date=datetime.date(2026, 7, 1),
-            due_date=datetime.date(2026, 7, 15),
-            fee=Decimal('12.00'),
-        )
-        entries = ledger.reverse_reminder_fees(self.invoice)
-        self.assertTrue(all(e.is_reversal for e in entries))
+        """The Haben fee entry written on cancellation is a reversal."""
+        _issue_reminder(self.invoice)
+        ledger.record_cancellation(self.invoice, _make_storno(self.invoice, self.tax))
+        entry = CustomerLedgerEntry.objects.get(
+            entry_type=CustomerLedgerEntry.EntryType.REMINDER_FEE, amount__lt=0)
+        self.assertTrue(entry.is_reversal)
 
     def test_a_payment_is_never_a_reversal(self) -> None:
-        payment = Payment.objects.create(
-            customer=self.customer, invoice=self.invoice,
-            payment_date=datetime.date(2026, 7, 1), amount=Decimal('120.00'),
-        )
-        entry = ledger.record_payment(payment)
+        """Money in is never shown as a reversal, even though it is Haben."""
+        entry = _pay(self.customer, '120.00', invoice=self.invoice)
         self.assertFalse(entry.is_reversal)
 
     def test_the_ledger_endpoint_reports_it(self) -> None:
+        """The endpoint exposes is_reversal so the dialog can label the Storno."""
         from django.contrib.auth.models import User
         from rest_framework.test import APIClient
 
         ledger.record_invoice_issued(self.invoice)
-        storno = Invoice.objects.create(
-            customer=self.customer,
-            address=self.customer.default_address,
-            number='RE260601-00002',
-            document_date=datetime.date(2026, 6, 20),
-            due_date=datetime.date(2026, 6, 20),
-            reverses=self.invoice,
-            status=Invoice.Status.ISSUED,
-        )
-        InvoiceLine.objects.create(
-            invoice=storno, position=1, description='Leistung',
-            quantity=Decimal('-1'), unit_price=Decimal('100.00'), tax_rate=self.tax,
-        )
-        ledger.record_invoice_issued(storno)
+        ledger.record_invoice_issued(_make_storno(self.invoice, self.tax))
 
         client = APIClient()
         client.force_authenticate(
@@ -533,8 +695,8 @@ class IsReversalTests(TestCase):
         self.assertEqual([e['is_reversal'] for e in entries], [False, True])
 
 
-class LedgerEntryLinkFieldsTests(TestCase):
-    """The dialog links by document number, so the endpoint must expose both."""
+class LedgerEndpointFieldsTests(TestCase):
+    """The ledger dialog links by document number and shows open amounts."""
 
     def setUp(self) -> None:
         from django.contrib.auth.models import User
@@ -546,11 +708,13 @@ class LedgerEntryLinkFieldsTests(TestCase):
         self.client.force_authenticate(
             user=User.objects.create_superuser('t', 't@example.com', 'p'))
 
-    def _entries(self) -> list[dict]:
-        return self.client.get(
+    def _entries(self) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = self.client.get(
             f'/api/customers/{self.customer.pk}/ledger/').json()['entries']
+        return entries
 
     def test_an_invoice_charge_carries_its_invoice_number(self) -> None:
+        """Invoice entries link to the invoice and to no reminder."""
         invoice = _make_invoice(self.customer, self.tax)
         ledger.record_invoice_issued(invoice)
 
@@ -560,30 +724,47 @@ class LedgerEntryLinkFieldsTests(TestCase):
         self.assertIsNone(entry['reminder_number'])
 
     def test_a_reminder_fee_carries_its_reminder_number(self) -> None:
+        """A fee links to the Mahnung that charged it and to its invoice."""
         invoice = _make_invoice(self.customer, self.tax)
-        reminder = Reminder.objects.create(
-            invoice=invoice, level=1, number='MA260701',
-            status=Reminder.Status.ISSUED,
-            reminder_date=datetime.date(2026, 7, 1),
-            due_date=datetime.date(2026, 7, 15),
-            fee=Decimal('12.00'),
-        )
-        ledger.record_reminder_issued(reminder)
+        _issue_reminder(invoice)
 
         entry = next(e for e in self._entries() if e['entry_type'] == 'reminder_fee')
-        # Links to the Mahnung that charged the fee …
         self.assertEqual(entry['reminder_number'], 'MA260701')
-        # … while still knowing which invoice it belongs to.
         self.assertEqual(entry['invoice_number'], 'RE260601-00001')
 
     def test_a_standalone_payment_has_nothing_to_link_to(self) -> None:
-        payment = Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 6, 1),
-            amount=Decimal('50.00'),
-        )
-        ledger.record_payment(payment)
+        """A prepayment has neither invoice nor reminder number."""
+        _pay(self.customer, '50.00', date=datetime.date(2026, 6, 1))
 
         entry = self._entries()[0]
         self.assertIsNone(entry['invoice_number'])
         self.assertIsNone(entry['reminder_number'])
+
+    def test_open_amounts_show_what_is_not_yet_settled(self) -> None:
+        """120 invoice, 50 paid: the invoice has 70 open, the payment nothing left."""
+        invoice = _make_invoice(self.customer, self.tax)
+        ledger.record_invoice_issued(invoice)
+        _pay(self.customer, '50.00', invoice=invoice)
+
+        by_type = {e['entry_type']: e for e in self._entries()}
+        self.assertEqual(by_type['invoice']['open_amount'], '70.00')
+        self.assertEqual(by_type['payment']['open_amount'], '0.00')
+        self.assertEqual(by_type['payment']['amount'], '-50.00')
+        self.assertEqual(by_type['payment']['method'], 'transfer')
+
+    def test_a_reversed_payment_and_its_storno_are_marked(self) -> None:
+        """The dialog hides the Stornieren action on a reversed payment and labels
+        the Zahlung Storno, which points at the payment and sits on the Soll side."""
+        invoice = _make_invoice(self.customer, self.tax)
+        ledger.record_invoice_issued(invoice)
+        payment = _pay(self.customer, '50.00', invoice=invoice)
+        ledger.reverse_payment(payment, 'Fehlbuchung', datetime.date(2026, 7, 2))
+
+        by_type = {e['entry_type']: e for e in self._entries()}
+        self.assertTrue(by_type['payment']['is_reversed'])
+        storno = by_type['payment_reversal']
+        self.assertEqual(storno['reverses'], payment.pk)
+        self.assertEqual(storno['amount'], '50.00')
+        self.assertEqual(storno['note'], 'Fehlbuchung')
+        self.assertTrue(storno['is_reversal'])
+        self.assertEqual(storno['entry_type_display'], 'Zahlung Storno')

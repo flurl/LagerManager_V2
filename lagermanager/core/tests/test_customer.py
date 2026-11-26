@@ -242,27 +242,28 @@ class CustomerLedgerEndpointTests(APITestCase):
         self.customer = ensure_customer_for_address(address)
 
     def test_running_balance(self) -> None:
+        """120 charged, 50 paid: the running balance reads 120, then 70 owed."""
         from billing.models import CustomerLedgerEntry
 
         CustomerLedgerEntry.objects.create(
             customer=self.customer,
             entry_type=CustomerLedgerEntry.EntryType.INVOICE,
             entry_date=datetime.date(2026, 6, 15),
-            amount=Decimal('-120.00'),
+            amount=Decimal('120.00'),
             description='Rechnung RE1',
         )
         CustomerLedgerEntry.objects.create(
             customer=self.customer,
             entry_type=CustomerLedgerEntry.EntryType.PAYMENT,
             entry_date=datetime.date(2026, 7, 1),
-            amount=Decimal('50.00'),
+            amount=Decimal('-50.00'),
             description='Zahlung',
         )
         resp = self.client.get(f'/api/customers/{self.customer.pk}/ledger/')
         data = resp.json()
-        self.assertEqual(data['balance'], '-70.00')
+        self.assertEqual(data['balance'], '70.00')
         self.assertEqual(
-            [e['running_balance'] for e in data['entries']], ['-120.00', '-70.00'])
+            [e['running_balance'] for e in data['entries']], ['120.00', '70.00'])
         self.assertEqual(data['entries'][0]['entry_type_display'], 'Rechnung')
 
 
@@ -314,9 +315,9 @@ class CustomerLedgerOrderingTests(APITestCase):
         third = self._invoice('PG260613')
         storno = self._invoice('PG260612')
         original = self._invoice('PG260610')
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-60.00', invoice=third)
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '120.00', invoice=storno)
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-120.00', invoice=original)
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '60.00', invoice=third)
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-120.00', invoice=storno)
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '120.00', invoice=original)
 
         self.assertEqual(self._descriptions(), [
             'invoice PG260610', 'invoice PG260612', 'invoice PG260613',
@@ -327,13 +328,13 @@ class CustomerLedgerOrderingTests(APITestCase):
 
         storno = self._invoice('PG260612')
         original = self._invoice('PG260610')
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '120.00', invoice=storno)
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-120.00', invoice=original)
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-120.00', invoice=storno)
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '120.00', invoice=original)
 
         resp = self.client.get(f'/api/customers/{self.customer.pk}/ledger/')
         data = resp.json()
         self.assertEqual(
-            [e['running_balance'] for e in data['entries']], ['-120.00', '0.00'])
+            [e['running_balance'] for e in data['entries']], ['120.00', '0.00'])
         self.assertEqual(data['balance'], '0.00')
 
     def test_a_charge_comes_before_the_payment_that_settles_it(self) -> None:
@@ -341,9 +342,9 @@ class CustomerLedgerOrderingTests(APITestCase):
 
         invoice = self._invoice('PG260610')
         # Payment booked first, same date and same invoice.
-        self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '120.00', invoice=invoice)
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-120.00', invoice=invoice)
-        self._entry(CustomerLedgerEntry.EntryType.REMINDER_FEE, '-12.00', invoice=invoice)
+        self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-120.00', invoice=invoice)
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '120.00', invoice=invoice)
+        self._entry(CustomerLedgerEntry.EntryType.REMINDER_FEE, '12.00', invoice=invoice)
 
         self.assertEqual(self._descriptions(), [
             'invoice PG260610', 'reminder_fee PG260610', 'payment PG260610',
@@ -352,20 +353,53 @@ class CustomerLedgerOrderingTests(APITestCase):
     def test_entries_without_an_invoice_come_last_within_the_day(self) -> None:
         from billing.models import CustomerLedgerEntry
 
-        self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '50.00')
+        self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-50.00')
         invoice = self._invoice('PG260610')
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-120.00', invoice=invoice)
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '120.00', invoice=invoice)
 
         self.assertEqual(self._descriptions(), ['invoice PG260610', 'payment'])
+
+    def test_money_movements_of_a_day_keep_their_booking_order(self) -> None:
+        """Two wrong payments cancelled, then the right one booked, all the same
+        day: the Zahlung Stornos come before the later payment, not after it.
+
+        Ranking by type put every payment above every Zahlung Storno of the day,
+        so the corrected payment showed up before the Stornos that preceded it
+        and the running balance went through a state that never existed.
+        """
+        from billing.models import CustomerLedgerEntry
+
+        first = self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-100.00')
+        first.description = 'payment 1'
+        first.save()
+        second = self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-50.00')
+        second.description = 'payment 2'
+        second.save()
+        for wrong in (first, second):
+            CustomerLedgerEntry.objects.create(
+                customer=self.customer,
+                entry_type=CustomerLedgerEntry.EntryType.PAYMENT_REVERSAL,
+                entry_date=self.date,
+                amount=-wrong.amount,
+                description=f'storno {wrong.description}',
+                reverses=wrong,
+            )
+        right = self._entry(CustomerLedgerEntry.EntryType.PAYMENT, '-120.00')
+        right.description = 'payment 3'
+        right.save()
+
+        self.assertEqual(self._descriptions(), [
+            'payment 1', 'payment 2', 'storno payment 1', 'storno payment 2', 'payment 3',
+        ])
 
     def test_date_still_wins_over_everything(self) -> None:
         from billing.models import CustomerLedgerEntry
 
         later = self._invoice('PG260601')
         earlier = self._invoice('PG260699')
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-10.00',
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '10.00',
                     invoice=later, date=datetime.date(2026, 7, 1))
-        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '-20.00',
+        self._entry(CustomerLedgerEntry.EntryType.INVOICE, '20.00',
                     invoice=earlier, date=datetime.date(2026, 6, 1))
 
         self.assertEqual(self._descriptions(),
@@ -399,16 +433,13 @@ class CustomerDeleteTests(APITestCase):
         self.assertIn('Rechnungen', resp.json()['detail'])
 
     def test_a_customer_with_a_payment_is_refused(self) -> None:
-        from billing.models import Payment
+        """A payment is a ledger entry, so it blocks deletion as a Kontobewegung."""
+        from billing.services import ledger
 
-        Payment.objects.create(
-            customer=self.customer,
-            payment_date=datetime.date(2026, 6, 15),
-            amount=Decimal('50.00'),
-        )
+        ledger.record_payment(self.customer, datetime.date(2026, 6, 15), Decimal('50.00'))
         resp = self.client.delete(f'/api/customers/{self.customer.pk}/')
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('Zahlungen', resp.json()['detail'])
+        self.assertIn('Kontobewegungen', resp.json()['detail'])
 
 
 class AddressPostalLabelTests(TestCase):
